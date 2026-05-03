@@ -95,8 +95,9 @@ CREATE UNIQUE INDEX members_auth_user_id_idx ON members(auth_user_id) WHERE auth
 ALTER TABLE papers ADD COLUMN companion_url TEXT;
 
 -- 3. Helper: resolve current member id from auth.uid()
+-- SET search_path is required Postgres hardening for SECURITY DEFINER functions.
 CREATE FUNCTION current_member_id() RETURNS INT
-LANGUAGE SQL STABLE SECURITY DEFINER AS $$
+LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = 'public' AS $$
   SELECT id FROM members WHERE auth_user_id = auth.uid()
 $$;
 
@@ -139,6 +140,11 @@ CREATE POLICY attendance_insert_own ON meeting_attendance FOR INSERT TO authenti
 CREATE POLICY attendance_update_own ON meeting_attendance FOR UPDATE TO authenticated
   USING (member_id = current_member_id())
   WITH CHECK (member_id = current_member_id());
+
+-- 9. Column-level access on members: restrict authenticated reads to safe columns.
+-- Service-role queries (slash commands, server actions using service key) bypass GRANTs.
+REVOKE SELECT ON members FROM authenticated;
+GRANT SELECT (id, name, role) ON members TO authenticated;
 
 COMMIT;
 ```
