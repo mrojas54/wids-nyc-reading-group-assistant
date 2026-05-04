@@ -24,7 +24,8 @@ export async function requestMagicLink(
     await logServerAction("requestMagicLink", "no_action", `unknown email: ${cleaned}`);
     return {
       ok: false,
-      message: "We don't have you on the roster — ask the operator to add you.",
+      message:
+        "We don't have you on the roster — contact Michelle at mirojas1524@gmail.com to be added.",
     };
   }
 
