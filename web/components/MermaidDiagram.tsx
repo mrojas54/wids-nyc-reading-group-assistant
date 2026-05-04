@@ -18,8 +18,8 @@ export function MermaidDiagram({ source }: { source: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // One-time initialization. mermaid.initialize mutates global state — only run once per mount.
   useEffect(() => {
-    let cancelled = false;
     (async () => {
       const mermaid = (await import("mermaid")).default;
       mermaid.initialize({
@@ -28,6 +28,15 @@ export function MermaidDiagram({ source }: { source: string }) {
         theme: "base",
         themeVariables: THEME_VARIABLES,
       });
+    })();
+  }, []);
+
+  // Render whenever source changes.
+  useEffect(() => {
+    let cancelled = false;
+    setErr(null);
+    (async () => {
+      const mermaid = (await import("mermaid")).default;
       try {
         const id = `m-${Math.random().toString(36).slice(2)}`;
         const { svg } = await mermaid.render(id, source);
