@@ -574,6 +574,7 @@ html, body {
   background: var(--accent-active);
   border-color: var(--accent-active);
 }
+/* dimming comes from .rsvp-picker[aria-busy] above; .rsvp-btn[disabled] only adjusts cursor */
 .rsvp-btn[disabled] { cursor: not-allowed; }
 .rsvp-collapsed {
   margin: 0;

@@ -21,7 +21,7 @@ This is the next slice of the WiDS member app, layered on the dashboard merged i
 ### Data layer
 
 - **`myRsvp(sb, meetingId)`** — already exists at [`web/lib/queries.ts:79`](../../web/lib/queries.ts). Returns `RsvpStatus | null`. Reused as-is. No new query.
-- **Migration `008_meeting_attendance_grants.sql`** — adds the missing table-level grants for `authenticated`. RLS policies on `meeting_attendance` exist (002), but no `GRANT` was issued, so PostgREST returns `42501 permission denied` even when policies match. Same latent failure mode as Phase 4 / migration 007. Apply via Supabase MCP `apply_migration`, commit the file as a source-of-truth checkpoint.
+- **Migration `008_meeting_attendance_grants.sql`** — pins the table-level grants for `authenticated` in source. **Correction (post-implementation):** the original framing claimed this was the same latent P0 as Phase 4 / migration 007. That was wrong — `meeting_attendance` already had `INSERT/SELECT/UPDATE` for `authenticated` via Supabase's default-privileges on `public.*` (002 never `REVOKE`d them, unlike `members`). The migration is idempotent and not strictly required for `setRsvp` to work; we retain it as a source-of-truth checkpoint so we don't rely on Supabase defaults for tables we extend later. See `migrations/008_meeting_attendance_grants.sql` for the corrected header comment. Applied via Supabase MCP `apply_migration`.
 
   ```sql
   GRANT SELECT, INSERT, UPDATE ON meeting_attendance TO authenticated;
@@ -117,5 +117,5 @@ No new tokens introduced. If a needed semantic alias is missing, add it to `glob
 
 - **Magenta-as-selection** matches the design system's defined role for magenta (selected state / active accent). Pre-click, the three buttons read as equally weighted real options — which they are. Post-click, the magenta fill is the answer.
 - **Collapse-with-change?** keeps the dashboard quiet for the common case (member has decided, doesn't need to see the other two options every visit). The `change?` affordance is enough to recover.
-- **Migration 008** is the cheapest way to prevent a repeat of the phase-4 P0. Cataloguing the grants per table as we extend the member-app surface is more reliable than spotting it during hand-test.
+- **Migration 008** turned out to be redundant with Supabase's default-privileges (see the correction above), but pinning the grants in source remains the right posture as the member-app surface grows — relying on Supabase defaults for tables we add later is the cheapest way to repeat the phase-4 P0.
 - **`myRsvp` reuse** avoids duplicating a query that already exists with the right return type.

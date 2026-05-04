@@ -23,6 +23,10 @@ export function RsvpButtons({
   meetingId: number;
   current: RsvpStatus | null;
 }) {
+  // `current` is a one-time seed: after mount the component owns `saved`, and
+  // `revalidatePath` + the next server render is how server truth re-enters.
+  // Multi-tab edits to the same meeting will look stale until navigation —
+  // accept that until it actually matters.
   const seed: RsvpChoice | null = isChoice(current) ? current : null;
   const [saved, setSaved] = useState<RsvpChoice | null>(seed);
   const [editing, setEditing] = useState<boolean>(saved === null);
