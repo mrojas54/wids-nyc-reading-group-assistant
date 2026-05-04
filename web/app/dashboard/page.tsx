@@ -2,6 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   myAvailabilitySubmitted,
   myHistory,
+  myRsvp,
   myStats,
   nextMeeting,
 } from "@/lib/queries";
@@ -31,6 +32,9 @@ export default async function DashboardPage() {
     ? await myAvailabilitySubmitted(sb, prepMeeting.id)
     : true;
 
+  const rsvp =
+    meeting?.status === "scheduled" ? await myRsvp(sb, meeting.id) : null;
+
   const stats = await myStats(sb, submitted);
   const history = await myHistory(sb, 10);
 
@@ -50,7 +54,7 @@ export default async function DashboardPage() {
           <h1>Dashboard</h1>
         </header>
 
-        <NextMeetingCard meeting={meeting} />
+        <NextMeetingCard meeting={meeting} myRsvp={rsvp} />
 
         {prepMeeting && !submitted && (
           <AvailabilityBanner meetingType={prepMeeting.type} />
