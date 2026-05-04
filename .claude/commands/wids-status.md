@@ -87,15 +87,18 @@ Next action:
 
 ## Step 4 — Infer next action
 
-Logic:
+Logic (first match wins, in order):
+
 - If `admin_status='prep'`: "Wait for availability responses via portal at `${PORTAL_URL}/availability`. `/wids-schedule-admin` when ready."
 - If `admin_status='scheduled'` AND `admin_scheduled` in future: "Admin meeting on <date>. Then run `/wids-pick-leader`."
-- If `admin_status='done'` AND `rg.leader_id IS NULL`: "Run `/wids-pick-leader`."
-- If `rg.leader_id` set AND `rg.paper_id IS NULL`: "Leader: run `/wids-find-paper`."
-- If `rg.paper_id` set AND `rg.scheduled_at IS NULL`: "Run `/wids-meeting-start reading_group` then `/wids-schedule-reading-group`."
+- If `rg.leader_id IS NULL`: "Run `/wids-pick-leader`." *(catches any post-admin or admin-less state where the leader still hasn't been chosen)*
+- If `rg.paper_id IS NULL`: "Leader: run `/wids-find-paper`."
+- If `rg.scheduled_at IS NULL`: "Run `/wids-meeting-start reading_group` then `/wids-schedule-reading-group`."
 - If `rg.scheduled_at` set AND no guide PDFs in Drive: "Leader: run `/wids-make-guide`."
 - If guide PDFs exist AND `packets_sent_at IS NULL`: "Leader: run `/wids-send-packets`."
 - Otherwise: "Reading group on <date>. See you there."
+
+Earlier bullets short-circuit later ones — e.g. if `admin_status='prep'` the first bullet fires regardless of leader/paper state, which is correct because the operator shouldn't pick a leader until the admin meeting has happened.
 
 ## Step 5 — Audit log
 ```sql
