@@ -6,7 +6,7 @@
 
 ## Goal
 
-Render a public, readable companion page for any paper at `/papers/<id>`. The companion gives a section-by-section walkthrough with a short summary, a Mermaid diagram, and a code illustration per section. A "Open notebook in Colab" CTA appears when the corresponding notebook file exists.
+Render a public, readable companion page for any paper at `/papers/<id>`. The companion opens with two reader-aid blocks — a section index (jump-list) and a vocabulary glossary — followed by a section-by-section walkthrough with a short summary, a Mermaid diagram, and a code illustration per section. A "Open notebook in Colab" CTA appears when the corresponding notebook file exists.
 
 The page must:
 - Read content from a JSON file under `web/content/papers/`. No DB call on the request path.
@@ -54,6 +54,11 @@ export type PaperSection = {
   code: string;        // python source
 };
 
+export type VocabularyEntry = {
+  term: string;        // 1–4 words
+  definition: string;  // single sentence, paper-context-specific
+};
+
 export type PaperContent = {
   paper_id: number;
   title: string;
@@ -61,12 +66,15 @@ export type PaperContent = {
   arxiv_url?: string;
   notebook_path: string;     // e.g. "/notebooks/42.ipynb" — relative to /public
   generated_at: string;       // ISO timestamp
+  vocabulary?: VocabularyEntry[]; // ordered as introduced; omit/empty to hide block
   sections: PaperSection[];
 };
 
 export async function readPaperContent(id: string): Promise<PaperContent | null>;
 export async function listPaperContentIds(): Promise<string[]>;
 ```
+
+`vocabulary` is optional. If absent or empty, the Vocabulary block is not rendered. Phase 6's test fixture hand-authors a small vocabulary; Phase 7's slash command will need a new subagent stage to extract entries from the paper.
 
 `readPaperContent` returns `null` on any read failure (missing file, bad JSON). Caller decides what to do — the page calls `notFound()`. `listPaperContentIds` returns `[]` if the directory doesn't exist (clean state on a fresh checkout).
 
@@ -99,11 +107,15 @@ Token literals are duplicated here because Mermaid renders SVG strings outside t
 
 Server component. Props: `{ content: PaperContent; colabUrl: string | null }`.
 
-Renders:
-1. Title block — `content.title` (h1), `content.authors.join(", ")`, optional arXiv link.
-2. Optional Colab `<Button>` (uses the existing `Button` primitive). Hidden when `colabUrl` is `null`.
-3. For each section: numbered h2, summary paragraph, `<MermaidDiagram>`, code block. Code block uses `<pre><code>` with `bg-paper-100`, `font-mono`, `text-sm`, `overflow-x-auto`, `rounded`, `p-3`. No syntax highlighting.
-4. Footer: "Generated `<date>`. The paper itself is the source of truth."
+Renders, in order:
+1. **Title block** — `content.title` (h1), `content.authors.join(", ")`, optional arXiv link.
+2. **Optional Colab `<Button>`** (uses the existing `Button` primitive). Hidden when `colabUrl` is `null`.
+3. **Section index** (always rendered if `sections.length > 0`). H2 "In this companion." Numbered list of section titles, each an `<a href={`#section-${i + 1}`}>`. Plain in-flow block, scrolls with the page (no sticky behavior).
+4. **Vocabulary block** (rendered only if `vocabulary?.length > 0`). H2 "Vocabulary." Definition list (`<dl>` with paired `<dt>`/`<dd>`). Terms styled with sage-700, definitions in paper-700. Order matches the JSON array (as-introduced, not alphabetical).
+5. **Sections.** For each section at index `i`: `<section id={`section-${i + 1}`}>` containing numbered h2, summary paragraph, `<MermaidDiagram>`, code block. Code block uses `<pre><code>` with `bg-paper-100`, `font-mono`, `text-sm`, `overflow-x-auto`, `rounded`, `p-3`. No syntax highlighting.
+6. **Footer** — "Generated `<date>`. The paper itself is the source of truth."
+
+Section anchors use index-based ids (`section-1`, `section-2`) rather than slugified titles. Indexes are stable across regenerations; titles can change between Phase 7 runs and break inbound links.
 
 No per-section Colab anchor links in this phase — Phase 7 hasn't pinned cell ids yet. We'll revisit when notebooks exist.
 
@@ -175,9 +187,11 @@ app/papers/layout.tsx renders branded shell
 app/papers/[id]/page.tsx
    ├── readPaperContent("test") → web/content/papers/test.json
    ├── fs.access("public/notebooks/test.ipynb") → may throw → colabUrl = null
-   └── PaperCompanion renders sections
+   └── PaperCompanion renders header → Colab CTA → TOC → Vocabulary → sections → footer
         ↓
-   Each section: server-rendered text/code
+   Each section: server-rendered text/code, wrapped in <section id="section-N">
+   TOC: anchor links to #section-N (plain in-flow, no JS)
+   Vocabulary: <dl> from content.vocabulary (skipped if absent/empty)
         ↓
    MermaidDiagram (client) hydrates → dynamic-imports mermaid → renders SVG
 ```
@@ -194,6 +208,8 @@ The plan was written before the design bundle landed. These adaptations match Ph
 | Colab button always visible | Hidden when notebook file is missing (Q3b) | Don't promise a working link before Phase 7 lands |
 | Per-section "Run cell N in Colab" anchor links | Omitted in this phase | Cell ids aren't pinned until Phase 7 |
 | No layout file for `/papers` | Added `app/papers/layout.tsx` (Q1b) | Anonymous readers need branded shell, not app chrome |
+| No table of contents | Section index block at top with anchor jumps | Reader-aid; lets people skim structure before committing |
+| No glossary | Optional Vocabulary block with `vocabulary?: VocabularyEntry[]` JSON field | Reader-aid; explicit authoring beats heuristic extraction |
 
 ## Error handling
 
@@ -213,7 +229,9 @@ The plan was written before the design bundle landed. These adaptations match Ph
    - Brandmark renders top-left, "Sign in" link top-right.
    - Title "Attention Is All You Need (test fixture)" + author line + arXiv link visible.
    - No Colab button (no `public/notebooks/test.ipynb` exists).
-   - Two sections render with summary + sage-toned Mermaid diagram + code block.
+   - "In this companion." index block lists the section titles. Click an entry — page jumps to that section.
+   - "Vocabulary." block renders with at least 3 term/definition pairs from the test fixture. Order matches the JSON.
+   - Two sections render with summary + sage-toned Mermaid diagram + code block. Each section has an `id` matching the index anchor.
    - Footer shows "Generated `<date>`".
    - No console errors.
 4. Visit `http://localhost:3000/papers/999`. Confirm: 404 page.
@@ -227,6 +245,8 @@ The plan was written before the design bundle landed. These adaptations match Ph
 ## Out of scope
 
 - Notebook generation (`.ipynb` files) — Phase 7's `/wids-make-companion` slash command.
+- Vocabulary generation. Phase 6 ships the JSON shape (`vocabulary?: VocabularyEntry[]`) and the rendering. Extracting terms from a paper PDF is Phase 7's job — needs a new subagent stage when that command is built. The test fixture hand-authors entries.
+- Sticky/active-section TOC behavior, scroll-spy highlighting, smooth-scroll JS. Plain anchor links only.
 - Code syntax highlighting — paper-100 background is enough for v1; revisit if Phase 7 output looks dead.
 - View-counting, comments, or any social/feedback layer.
 - Paper index/search page (`/papers` with no id) — Phase 6 ships individual pages only.
