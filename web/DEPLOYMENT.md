@@ -32,11 +32,11 @@ In the project settings, add these for **Production** and **Preview**:
 
 ## 4. Enable Deployment Protection
 
-Settings → **Deployment Protection** → **Vercel Authentication: ON** for Production. This password-protects the production URL so members can't sign in until cutover. Removed at cutover (member-app plan task 9.3).
+Settings → **Deployment Protection** → **Vercel Authentication: ON** for Production. This requires a Vercel login to view the production URL, so members can't sign in until cutover. Removed at cutover (member-app plan task 9.3).
 
 ## 5. Trigger the first deploy and finalize `NEXT_PUBLIC_SITE_URL`
 
-1. Push your branch (or click **Deploy** in the Vercel dashboard).
+1. Push to `main` (or click **Deploy** in the Vercel dashboard).
 2. Watch the build logs. First build takes ~2 minutes. When it succeeds, note the assigned URL (e.g., `https://wids-nyc.vercel.app`).
 3. Settings → **Environment Variables** → edit `NEXT_PUBLIC_SITE_URL`. Set it to the Vercel URL from step 2 (no trailing slash).
 4. Trigger a redeploy: Deployments → click the latest deploy → **Redeploy**.
@@ -53,8 +53,8 @@ Supabase dashboard → **Authentication** → **URL Configuration** → **Redire
 
 Visit `<vercel-url>/`. You should:
 
-1. Hit the Vercel password gate first (because of section 4).
-2. After the password, see the WiDS sign-in page.
+1. Hit the Vercel Authentication wall first (because of section 4).
+2. After the auth, see the WiDS sign-in page.
 
 ## 8. Common issues
 
@@ -63,4 +63,4 @@ Visit `<vercel-url>/`. You should:
 | Magic link click returns 404                  | Forgot section 6 (Supabase callback URL).                        |
 | Build fails: "no Next.js project found"       | Root Directory not set to `web` (section 2 step 3).              |
 | Magic link redirects to localhost             | `NEXT_PUBLIC_SITE_URL` still empty or set to localhost.          |
-| Vercel password gate not appearing            | Deployment Protection not enabled (section 4).                   |
+| Vercel Authentication wall not appearing      | Deployment Protection not enabled (section 4).                   |
