@@ -25,9 +25,15 @@ Before running `/wids-bootstrap`, the operator must:
 - Create a new project (note the project URL and `service_role` key).
 - Apply the migrations in order:
   - `migrations/001_initial_schema.sql` — base tables. Paste into SQL Editor and run, or use Supabase MCP `apply_migration`.
-  - `migrations/002_member_app.sql` — auth linkage, RLS policies, `companion_url` column, `current_member_id()` helper. Paste into SQL Editor and run, or use Supabase MCP `apply_migration`.
+  - `migrations/002_member_app.sql` — auth linkage, RLS policies for portal tables, `companion_url` column, `current_member_id()` helper.
+  - `migrations/003_rls_policies.sql` — RLS policies for `topics`, `paper_topics`, `paper_suggestions`, `volunteers`. Browser (anon-key + session) reads via these.
+  - `migrations/004_function_grants.sql` — restricts `current_member_id()` RPC to authenticated callers only.
+  - `migrations/005_revoke_rls_auto_enable.sql` — hides the `rls_auto_enable()` event-trigger function from PostgREST.
 - Verify 10 base tables exist: `members, topics, papers, paper_topics, meetings, volunteers, availability, meeting_attendance, paper_suggestions, command_log`.
 - Verify migration 002 added `members.auth_user_id`, `papers.companion_url`, the `current_member_id()` function, and 10 RLS policies.
+
+#### Note: `ensure_rls` event trigger
+This project's database has a custom event trigger named `ensure_rls` (function: `public.rls_auto_enable()`, owner: `postgres`) that auto-runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every new table created in the `public` schema. It was added out-of-band (not in any migration in this repo) and is intentionally kept as a defense-in-depth guardrail. **Implication for new tables:** RLS will be on automatically — your migration must add policies, or the table will be invisible to the browser (anon/authenticated). `command_log` is the one accepted exception (service-role-only, no browser access needed).
 
 ### 2. Google Drive root folder
 - Create a folder in your Drive named `WiDS NYC AI Reading Group`.
