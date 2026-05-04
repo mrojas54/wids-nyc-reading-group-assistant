@@ -10,11 +10,11 @@ Mirrors `/wids-schedule-admin` but with a venue prompt because reading groups ar
 
 ```sql
 SELECT id, leader_id, paper_id FROM meetings
-WHERE type='reading_group' AND status='prep' AND form_url IS NOT NULL
+WHERE type='reading_group' AND status='prep'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
-If no row: halt: "No reading_group in prep with form_url. Run `/wids-meeting-start reading_group`."
+If no row: halt: "No reading_group in prep. Run `/wids-meeting-start reading_group`."
 
 If `leader_id IS NULL` or `paper_id IS NULL`: halt: "Pick leader and paper first."
 
@@ -75,5 +75,5 @@ VALUES ('slash_command', '/wids-schedule-reading-group', 'success',
 
 ## Failure handling
 
-- No availability rows → halt: "No availability collected yet. The `process-form` scheduled task ingests responses daily — make sure the operator has uploaded the responses CSV to `<drive_root>/cycles/<cycle_label>/rg-form-responses.csv`."
+- No availability rows → halt: "No availability collected yet. Members submit via the portal at `${PORTAL_URL}/availability`. Wait for responses or run `availability-chase` to nudge non-responders."
 - Calendar event creation fails → no DB update; log failure with the error message.

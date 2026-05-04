@@ -27,14 +27,19 @@ Use Calendar MCP `list_events` filtered by date range and title prefix to find t
 For each event:
 - For each attendee (member email match):
   - Map their `responseStatus` (`accepted` | `declined` | `tentative` | `needsAction`) to our enum (`attending` | `declined` | `tentative` | `no_response`).
-  - UPDATE `meeting_attendance` for that (meeting_id, member_id) pair, also setting `responded_at = now()` if status changed from `no_response`.
+  - Capture the Calendar response timestamp (`<calendar_response_at>`) — Google Calendar exposes this on the attendee record; if unavailable, fall back to event `updated`.
+  - UPSERT `meeting_attendance` with the **last-write-wins tiebreaker** below.
+
+**Tiebreaker rule (added with migration 002):** Only overwrite `rsvp_status` if the calendar event's response timestamp is **strictly later than** `meeting_attendance.responded_at`. If `responded_at IS NULL`, the calendar value always wins. This preserves portal RSVPs from being clobbered by stale calendar data.
 
 ```sql
-UPDATE meeting_attendance
-SET rsvp_status = '<mapped_status>',
-    responded_at = COALESCE(responded_at, now())
-WHERE meeting_id = <meeting_id> AND member_id = <member_id>
-  AND rsvp_status != '<mapped_status>';
+INSERT INTO meeting_attendance (meeting_id, member_id, rsvp_status, responded_at)
+VALUES (<meeting_id>, <member_id>, '<mapped_status>', <calendar_response_at>)
+ON CONFLICT (meeting_id, member_id) DO UPDATE
+  SET rsvp_status = EXCLUDED.rsvp_status,
+      responded_at = EXCLUDED.responded_at
+  WHERE meeting_attendance.responded_at IS NULL
+     OR meeting_attendance.responded_at < EXCLUDED.responded_at;
 ```
 
 ## Step 4 — Sync rescheduling

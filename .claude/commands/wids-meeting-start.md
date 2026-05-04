@@ -37,45 +37,21 @@ VALUES ('reading_group', 'prep', <admin_id>);
 COMMIT;
 ```
 
-### Step A2 — Generate the Form questions
+### Step A2 — Email members about the new availability request
 
-Output to operator (V1 has the operator manually create the Google Form — auto-creation via Forms API is V2):
+As of migration 002, availability is collected via the portal at `${PORTAL_URL}/availability`. The portal automatically surfaces any meeting in `status='prep'` to members — no Form to create.
 
-```
-Create a Google Form with these questions:
+Send a notification email so members know to visit the portal. Use Gmail MCP. Recipients: `SELECT email FROM members WHERE active=true`. Subject: "WiDS NYC AI Reading Group — next-cycle planning (please submit availability by <today + 7 days>)". Body: brief intro + `${PORTAL_URL}/availability` + close-by date.
 
-1. Your name (short answer, required) — must match members table
-2. Your email (short answer, required)
-3. Availability for next ADMIN meeting (date-time picker, multi-select, required):
-   List ~6 candidate evening slots in the next 2 weeks (e.g. Tue/Wed/Thu 6:30-8:00 PM ET).
-4. Far-out availability hint for the next READING GROUP (~6 weeks away) (date picker, multi-select, optional):
-   List ~6 weekend or evening slots ~5-7 weeks out.
-5. Will you volunteer to lead the next reading group? (Yes/No, required)
-6. Suggest a paper for next reading group (optional, paragraph) — title + arXiv URL if you have one.
+> **Note on volunteers and paper suggestions:** The pre-portal Google Form also collected volunteer interest and paper suggestions for the next reading group. In the portal world these are gathered live during the admin meeting itself; the operator records them post-meeting via `INSERT`s into `volunteers` and `paper_suggestions`. Future portal pages may take over this collection.
 
-Once created, paste the Form URL.
-```
-
-### Step A3 — Store form URL
-
-```sql
-UPDATE meetings SET form_url = '<pasted_url>' WHERE id = <admin_id>;
-```
-
-### Step A4 — Email the form to active members
-
-Use Gmail MCP. Recipients: `SELECT email FROM members WHERE active=true`. Subject: "WiDS NYC AI Reading Group — next-cycle planning form (please fill by <today + 7 days>)". Body: brief intro + form URL + close-by date.
-
-Remind operator to periodically export the form's responses CSV and upload to:
-`<drive_root>/cycles/<cycle_label>/admin-form-responses.csv` — the `process-form` scheduled task picks them up daily.
-
-### Step A5 — Audit log
+### Step A3 — Audit log
 
 ```sql
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-meeting-start',
         'success',
-        'Started admin cycle: admin=<admin_id>, reading_group=<rg_id>, form sent to N members');
+        'Started admin cycle: admin=<admin_id>, reading_group=<rg_id>, portal link sent to N members');
 ```
 
 ## Branch: type='reading_group'
@@ -91,40 +67,21 @@ ORDER BY m.created_at DESC LIMIT 1;
 
 If no row found, halt: "No reading_group in prep status. Run `/wids-meeting-start admin` first." If `leader_id IS NULL` or `paper_id IS NULL`, halt: "Reading group has no leader/paper yet. Run `/wids-pick-leader` and `/wids-find-paper` before scheduling."
 
-### Step R2 — Generate the Form questions
+### Step R2 — Email members about the new availability request
 
-```
-Create a Google Form with these questions:
+The portal at `${PORTAL_URL}/availability` already surfaces this reading_group meeting (any meeting in `status='prep'`). Members visit, see the candidate windows from the admin discussion, and submit availability directly.
 
-1. Your name (short answer, required)
-2. Your email (short answer, required)
-3. Final availability for the upcoming READING GROUP (date-time picker, multi-select, required):
-   List the candidate windows from the admin meeting's discussion.
-4. Venue suggestions (paragraph, optional) — coffee shops, lounges, etc.
+Send a notification email. Same shape as Step A2 but with subject "WiDS NYC AI Reading Group — final scheduling for <month> reading group". Body: brief intro + `${PORTAL_URL}/availability` + close-by date.
 
-Once created, paste the Form URL.
-```
+> **Venue suggestions** — previously a free-text Form field — are now solicited at the admin meeting itself or in email reply. The operator pastes the chosen venue when prompted by `/wids-schedule-reading-group`.
 
-### Step R3 — Store form URL on reading_group row
-
-```sql
-UPDATE meetings SET form_url = '<pasted_url>' WHERE id = <rg_id>;
-```
-
-### Step R4 — Email form to active members
-
-Same as A4 but with subject "WiDS NYC AI Reading Group — final scheduling for <month> reading group".
-
-Remind operator to export responses to:
-`<drive_root>/cycles/<cycle_label>/rg-form-responses.csv`
-
-### Step R5 — Audit log
+### Step R3 — Audit log
 
 ```sql
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-meeting-start',
         'success',
-        'Started reading_group scheduling: rg=<rg_id>, form sent to N members');
+        'Started reading_group scheduling: rg=<rg_id>, portal link sent to N members');
 ```
 
 ## Failure handling

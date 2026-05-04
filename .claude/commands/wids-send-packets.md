@@ -10,7 +10,7 @@ Run by the leader after `/wids-make-guide`. Creates a Gmail draft for the leader
 
 ```sql
 SELECT m.id, m.scheduled_at, m.location, m.drive_folder_url,
-       p.title, p.url, leader.name AS leader_name, leader.email AS leader_email
+       p.title, p.url, p.companion_url, leader.name AS leader_name, leader.email AS leader_email
 FROM meetings m
 JOIN papers p ON p.id = m.paper_id
 JOIN members leader ON leader.id = m.leader_id
@@ -47,9 +47,15 @@ This month's paper:
 Attached is the discussion guide. Please skim it before we meet. Don't worry
 about understanding every detail — the guide flags what's worth focusing on.
 
+<if companion_url IS NOT NULL>
+Read the paper companion: ${PORTAL_URL}<companion_url>
+</if>
+
 See you there,
 <leader_name>
 ```
+
+If `papers.companion_url IS NULL`, omit the companion line entirely (don't render an empty placeholder).
 
 ## Step 5 — Create Gmail draft
 
