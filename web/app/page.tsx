@@ -67,8 +67,9 @@ export default function SignInPage() {
         <div className="footer-note">
           New to the group?
           <br />
-          Email <a href="mailto:hello@widsnyc.org">hello@widsnyc.org</a> to be added to
-          the roster.
+          Contact Michelle at{" "}
+          <a href="mailto:mirojas1524@gmail.com">mirojas1524@gmail.com</a> to be added
+          to the roster.
         </div>
       </main>
     </div>
