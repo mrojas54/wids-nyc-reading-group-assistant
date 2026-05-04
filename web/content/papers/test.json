@@ -2,7 +2,7 @@
   "paper_id": 9999,
   "title": "Attention Is All You Need (test fixture)",
   "authors": ["Vaswani et al."],
-  "arxiv_url": "https://arxiv.org/abs/1706.03762",
+  "paper_url": "https://arxiv.org/abs/1706.03762",
   "notebook_path": "/notebooks/9999.ipynb",
   "generated_at": "2026-05-04T07:00:00Z",
   "vocabulary": [
