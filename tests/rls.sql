@@ -21,6 +21,10 @@
 --   - We capture IDs via \gset BEFORE switching to the authenticated role,
 --     because the column-level GRANT on members blocks WHERE email = ... for
 --     non-service callers.
+--   - psql does NOT substitute :vars inside dollar-quoted blocks. We mirror
+--     each :var into a custom GUC (`SET LOCAL app.<name> = :<name>`) and
+--     read it inside DO $$ ... $$ blocks via current_setting('app.<name>').
+--     Top-level :var references (outside DO blocks) work normally.
 --   - Wraps all changes in a transaction and ROLLBACKs at the end so the test
 --     leaves no permanent rows.
 
@@ -47,6 +51,11 @@ SELECT id AS bob_id   FROM members WHERE email = 'bob@test'   \gset
 SELECT id AS prep_id  FROM meetings WHERE type = 'admin' AND status = 'prep'
   ORDER BY id DESC LIMIT 1 \gset
 
+-- Mirror IDs into custom GUCs so DO blocks can read them (see header notes).
+SET LOCAL app.alice_id = :alice_id;
+SET LOCAL app.bob_id   = :bob_id;
+SET LOCAL app.prep_id  = :prep_id;
+
 -- ====================================================================
 -- Test 1: Alice can insert and read her own availability
 -- ====================================================================
@@ -66,11 +75,14 @@ END $$;
 -- Test 2: Alice cannot insert availability as Bob
 -- ====================================================================
 DO $$
-DECLARE ok BOOL := false;
+DECLARE
+  v_prep_id int := current_setting('app.prep_id')::int;
+  v_bob_id  int := current_setting('app.bob_id')::int;
+  ok BOOL := false;
 BEGIN
   BEGIN
     INSERT INTO availability (meeting_id, member_id, range_start, range_end)
-    VALUES (:prep_id, :bob_id, now(), now() + interval '1 hour');
+    VALUES (v_prep_id, v_bob_id, now(), now() + interval '1 hour');
   EXCEPTION WHEN insufficient_privilege OR check_violation OR others THEN
     ok := true;
   END;
@@ -108,6 +120,11 @@ INSERT INTO volunteers (meeting_id, member_id) VALUES (:rg_id, :alice_id);
 INSERT INTO command_log (source, name, status)
   VALUES ('server_action', 'rls-test', 'success');
 
+-- Mirror new IDs into GUCs (see header notes; needed inside DO blocks below).
+SET LOCAL app.topic_id = :topic_id;
+SET LOCAL app.paper_id = :paper_id;
+SET LOCAL app.rg_id    = :rg_id;
+
 -- Switch to alice for tests 4-9.
 SET LOCAL request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
 SET LOCAL ROLE authenticated;
@@ -124,9 +141,13 @@ END $$;
 -- ====================================================================
 -- Test 5: alice can read paper_topics
 -- ====================================================================
-DO $$ BEGIN
+DO $$
+DECLARE
+  v_paper_id int := current_setting('app.paper_id')::int;
+  v_topic_id int := current_setting('app.topic_id')::int;
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM paper_topics
-                 WHERE paper_id = :paper_id AND topic_id = :topic_id) THEN
+                 WHERE paper_id = v_paper_id AND topic_id = v_topic_id) THEN
     RAISE EXCEPTION 'FAIL test 5: alice cannot read paper_topics';
   END IF;
 END $$;
@@ -134,8 +155,11 @@ END $$;
 -- ====================================================================
 -- Test 6: alice can read paper_suggestions (open SELECT)
 -- ====================================================================
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = :rg_id) THEN
+DO $$
+DECLARE
+  v_rg_id int := current_setting('app.rg_id')::int;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = v_rg_id) THEN
     RAISE EXCEPTION 'FAIL test 6: alice cannot read paper_suggestions';
   END IF;
 END $$;
@@ -144,11 +168,15 @@ END $$;
 -- Test 7: alice cannot insert a paper_suggestion as bob
 -- ====================================================================
 DO $$
-DECLARE ok BOOL := false;
+DECLARE
+  v_rg_id    int := current_setting('app.rg_id')::int;
+  v_paper_id int := current_setting('app.paper_id')::int;
+  v_bob_id   int := current_setting('app.bob_id')::int;
+  ok BOOL := false;
 BEGIN
   BEGIN
     INSERT INTO paper_suggestions (meeting_id, paper_id, suggested_by, source)
-    VALUES (:rg_id, :paper_id, :bob_id, 'member');
+    VALUES (v_rg_id, v_paper_id, v_bob_id, 'member');
   EXCEPTION WHEN insufficient_privilege OR check_violation OR others THEN
     ok := true;
   END;
@@ -160,9 +188,13 @@ END $$;
 -- ====================================================================
 -- Test 8: alice can read volunteers (open SELECT)
 -- ====================================================================
-DO $$ BEGIN
+DO $$
+DECLARE
+  v_rg_id    int := current_setting('app.rg_id')::int;
+  v_alice_id int := current_setting('app.alice_id')::int;
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM volunteers
-                 WHERE meeting_id = :rg_id AND member_id = :alice_id) THEN
+                 WHERE meeting_id = v_rg_id AND member_id = v_alice_id) THEN
     RAISE EXCEPTION 'FAIL test 8: alice cannot read volunteers';
   END IF;
 END $$;
@@ -171,10 +203,13 @@ END $$;
 -- Test 9: alice cannot insert a volunteer row as bob
 -- ====================================================================
 DO $$
-DECLARE ok BOOL := false;
+DECLARE
+  v_rg_id  int := current_setting('app.rg_id')::int;
+  v_bob_id int := current_setting('app.bob_id')::int;
+  ok BOOL := false;
 BEGIN
   BEGIN
-    INSERT INTO volunteers (meeting_id, member_id) VALUES (:rg_id, :bob_id);
+    INSERT INTO volunteers (meeting_id, member_id) VALUES (v_rg_id, v_bob_id);
   EXCEPTION WHEN insufficient_privilege OR check_violation OR others THEN
     ok := true;
   END;
@@ -190,12 +225,16 @@ RESET ROLE;
 SET LOCAL request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
 SET LOCAL ROLE authenticated;
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = :rg_id) THEN
+DO $$
+DECLARE
+  v_rg_id    int := current_setting('app.rg_id')::int;
+  v_alice_id int := current_setting('app.alice_id')::int;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = v_rg_id) THEN
     RAISE EXCEPTION 'FAIL test 10a: bob cannot see alice''s paper_suggestion';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM volunteers
-                 WHERE meeting_id = :rg_id AND member_id = :alice_id) THEN
+                 WHERE meeting_id = v_rg_id AND member_id = v_alice_id) THEN
     RAISE EXCEPTION 'FAIL test 10b: bob cannot see alice''s volunteer row';
   END IF;
 END $$;
