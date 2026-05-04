@@ -2288,7 +2288,7 @@ Connect the GitHub repo. **Set Root Directory to `web`**. Framework preset: Next
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from Supabase project settings |
 | `SUPABASE_SERVICE_ROLE_KEY` | from Supabase project settings (mark as Sensitive) |
 | `NEXT_PUBLIC_SITE_URL` | the Vercel URL (e.g. `https://wids-nyc.vercel.app`) |
-| `NEXT_PUBLIC_GITHUB_REPO` | `<owner>/wids_reading_group_assisstant` |
+| `NEXT_PUBLIC_GITHUB_REPO` | `mrojas54/wids-nyc-reading-group-assistant` |
 
 - [ ] **Step 3: Enable Vercel Deployment Protection**
 
