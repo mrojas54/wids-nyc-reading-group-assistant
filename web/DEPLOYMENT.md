@@ -69,6 +69,15 @@ Visit `<vercel-url>/`. You should:
 
 Each entry records a runbook execution. Newest entries go at the top of the section (under this paragraph). Use the template below.
 
+### 2026-05-04 — c6023fd — all green
+- Step 1 RLS: PASS (after fixing a pre-existing `tests/rls.sql` bug — `:vars` were not interpolated inside `DO $$ ... $$` blocks; mirrored captured IDs into custom GUCs and read via `current_setting()` inside DO blocks; committed separately as `d8a49bf`)
+- Step 2 sign-in: PASS (dashboard rendered empty-state without RSVP picker)
+- Step 3 availability: PASS (data saved correctly; the confirm UI is an inline card, not a modal — runbook calls it "confirm-modal" and should be updated)
+- Step 4 companion: PASS (sections, Mermaid diagrams, Colab notebook all render; found unrelated bug — `/papers/2` link labeled "arXiv ↗" but the URL is a DOI on MDPI, spawned as a separate task)
+- Step 6 RSVP: PASS (picker rendered when `status='scheduled'`; three sequential transitions Attending → Tentative → Can't make it, all updated the same DB row in place via UPSERT)
+- Step 7 revert: PASS (1 attendance row cleared; meeting #6 returned to `(prep, NULL)` matching starting state)
+- Notes: flip and revert executed via Supabase MCP in the parent conversation for session convenience; the script's `flip-rsvp` and `revert-rsvp` idempotency was independently verified earlier in the same session against the same prod DB. Sign-in worked despite a `NEXT_PUBLIC_SITE_URL`-related redirect quirk: the magic-link's `redirect_to` came back as the bare site URL (no `/auth/callback`), but `@supabase/ssr` picked up the auth tokens at the root anyway. Worth investigating the `NEXT_PUBLIC_SITE_URL` env var on Vercel separately. Two follow-ups deferred: spec/runbook update for the flip-rsvp status guard added during Phase A code-quality review, and the arXiv-vs-DOI label fix.
+
 ### Template
 
 ```
