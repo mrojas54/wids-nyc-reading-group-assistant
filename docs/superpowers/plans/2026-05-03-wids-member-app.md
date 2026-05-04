@@ -1457,6 +1457,30 @@ git commit -m "feat: availability page with day-toggle submission"
 
 ---
 
+### ⚠ Pending hand-test (deferred from Task 4.2 Step 4)
+
+PR for Phase 4 was opened before the full sign-in → submit → verify roundtrip
+because Supabase rate-limited magic-link sends during the test session
+(`command_log` confirmed `email rate limit exceeded`). Build + lint + typecheck
+all pass, and the `/availability` route compiles and is correctly guarded by
+middleware (307 → `/` when unauthenticated).
+
+**Before starting Phase 5, complete the deferred hand-test:**
+
+1. Sign in (rate limit should clear within ~15 min)
+2. From dashboard, click the availability banner → lands on `/availability`
+3. Verify calendar grid renders with sage/magenta tokens, 30-day window
+4. Select 5 days → click **Submit** → expect redirect to `/dashboard?submitted=1`
+5. Visit `/availability` again → same 5 days are pre-selected
+6. Toggle one day → click **Update** → confirm card appears → **Yes, replace** saves
+7. Verify in Supabase (`availability` table): rows for your `member_id` with
+   `range_start` at 18:00 ET and `range_end` at 21:00 ET on the chosen days
+8. Verify `command_log`: `submitAvailability` rows with `status='success'`
+
+If anything breaks, file a follow-up and patch before merging Phase 5.
+
+---
+
 ## Phase 5 — RSVP Control
 
 ### Task 5.1: Add RSVP server action

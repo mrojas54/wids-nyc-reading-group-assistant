@@ -645,6 +645,121 @@ html, body {
 .history-link:hover { border-bottom-color: var(--color-sage-500); }
 .history-more { align-self: flex-start; }
 
+/* ---------- Availability page ---------- */
+
+.availability {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.availability-head h1 {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: var(--tr-tight);
+  line-height: var(--lh-tight);
+  color: var(--fg-1);
+}
+.availability-head p {
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--color-paper-600);
+  line-height: 1.5;
+}
+
+.availability-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.availability-count {
+  font-size: 13px;
+  color: var(--color-paper-600);
+}
+.availability-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-sage-700);
+  text-decoration: none;
+  align-self: flex-start;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  transition: border-color var(--duration-2);
+}
+.back-link:hover { border-bottom-color: var(--color-sage-300); }
+
+/* ---------- Day picker calendar ---------- */
+
+.day-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.day-picker-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px 10px;
+  min-height: 56px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-1);
+  background: var(--bg-surface);
+  color: var(--fg-1);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--duration-2), border-color var(--duration-2),
+              color var(--duration-2), transform var(--duration-1);
+}
+.day-picker-cell:hover:not(.day-picker-cell-selected) {
+  background: var(--state-hover-bg);
+  border-color: var(--border-2);
+}
+.day-picker-cell:active { transform: scale(0.97); }
+.day-picker-cell:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.day-picker-cell-selected {
+  background: var(--state-selected-bg);
+  border-color: var(--accent-active);
+  color: var(--state-selected-fg);
+}
+.day-picker-cell-selected:focus-visible { box-shadow: var(--focus-ring-accent); }
+.day-picker-dow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.day-picker-num {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* ---------- Confirm card (inline confirmation prompt) ---------- */
+
+.confirm-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-accent);
+  background: var(--accent-bg-soft);
+  color: var(--accent-fg);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
 @layer utilities {
   .text-balance { text-wrap: balance; }
 }
