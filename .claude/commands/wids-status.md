@@ -40,7 +40,7 @@ For the active cycle:
 -- volunteer count
 SELECT count(*) FROM volunteers WHERE meeting_id = <rg_id>;
 
--- form response rates (admin form)
+-- availability response rate for the admin meeting
 SELECT
   (SELECT count(DISTINCT member_id) FROM availability WHERE meeting_id = <admin_id>) AS responded,
   (SELECT count(*) FROM members WHERE active = true) AS total;
@@ -67,7 +67,7 @@ WiDS NYC AI Reading Group — current cycle status
 Admin meeting (#<admin_id>):
   Status:           <admin_status>
   Scheduled:        <admin_scheduled or "TBD">
-  Form responses:   <responded>/<total> members
+  Availability:     <responded>/<total> members
   Volunteers:       <volunteer_count>
 
 Reading group (#<rg_id>):
