@@ -200,7 +200,7 @@ Shows a calendar widget for the next 30 days; member taps days they can attend.
 
 Each tapped day creates a row `(meeting_id, member_id, range_start = day 18:00 America/New_York, range_end = day 21:00 America/New_York)` — keeps the schema's existing range model, but the UI is just day-toggling, not time-picking. The 18:00–21:00 evening window is **hardcoded for v1** because all current group meetings happen in that window. If the group later wants per-meeting custom windows, that's an additive change to `meetings` (e.g., `default_start_hour`, `default_end_hour`) and one form field on `/availability`.
 
-If they've already submitted, the page loads in "edit" mode with their previous selection pre-filled. Submit replaces (delete-then-insert in a transaction). Confirm modal before delete. After save, redirects to `/dashboard` with a flash message.
+If they've already submitted, the page loads in "edit" mode with their previous selection pre-filled. Submit replaces (delete-then-insert in a transaction), gated by an inline confirmation card (`role="alert"`) — the first Update click reveals the card and relabels the primary button to "Yes, replace" alongside a Cancel button; the actual write only runs on the second click. After save, redirects to `/dashboard` with a flash message.
 
 If there's no `prep` meeting at all, page shows "Nothing to schedule right now — check back when you get an email."
 

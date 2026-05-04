@@ -46,6 +46,7 @@ This is the next slice of the WiDS member app, layered on the dashboard merged i
   Behavior:
   - Optimistic update via `useTransition`: on click, immediately switch to collapsed mode showing the new verb; if the action throws, revert to `current` and re-open the picker.
   - All buttons receive `disabled` while pending; the row gets `aria-busy="true"`.
+  - **Status seed guard:** `current` is typed `RsvpStatus | null`, which includes the non-pickable `"no_response"`. An `isChoice()` type-narrowing predicate filters anything outside `{"attending","tentative","declined"}` and seeds the local `saved` state to `null` instead. This keeps the picker/collapsed contract simple — saved state is always either a real choice or "no choice yet" — and stays correct if `RsvpStatus` ever grows new non-pickable values.
 
   Verb labels (used in the collapsed line):
   - `attending → "attending"`

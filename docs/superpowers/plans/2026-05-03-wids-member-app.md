@@ -1444,7 +1444,7 @@ export default async function AvailabilityPage() {
 
 - [ ] **Step 4: Hand-test**
 
-Boot dev server. Sign in. Visit `/availability`. Expected: calendar renders. Select 5 days, click Submit. Lands on `/dashboard?submitted=1`. Visit `/availability` again — same 5 days are pre-selected. Change one, click Update — confirm modal appears, click "Yes, replace" — saves.
+Boot dev server. Sign in. Visit `/availability`. Expected: calendar renders. Select 5 days, click Submit. Lands on `/dashboard?submitted=1`. Visit `/availability` again — same 5 days are pre-selected. Change one, click Update — an inline confirmation card (`role="alert"`, `.confirm-card`) appears above the action row with the message "This will replace your previous selection. Continue?", the primary button relabels to "Yes, replace", and a Cancel button appears next to it. Click "Yes, replace" — saves.
 
 Verify in Supabase: rows in `availability` for your member, with `range_start` at 18:00 and `range_end` at 21:00 in ET.
 
@@ -2325,7 +2325,7 @@ Sign in with operator's email. Land on `/dashboard`. Card shows correct next mee
 
 - [ ] **Step 2: Availability flow**
 
-Visit `/availability`. Tap 5 days. Submit. Reload. Verify pre-filled. Edit. Confirm modal works. Save.
+Visit `/availability`. Tap 5 days. Submit. Reload. Verify pre-filled. Edit one day, click Update. Inline confirmation card (`role="alert"`) appears above the buttons, primary relabels to "Yes, replace", Cancel appears. Click "Yes, replace". Save.
 
 - [ ] **Step 3: Companion flow**
 
