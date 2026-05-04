@@ -1,21 +1,20 @@
 ---
 schedule: daily
-description: Detect low-response forms and email operator (operator-first, no auto-send to members)
+description: Detect low availability-response rates and email operator (operator-first, no auto-send to members)
 ---
 
-# scheduled_tasks/form-response-chase
+# scheduled_tasks/availability-chase
 
-Runs daily. For any meeting in `status='prep'` with a form_url, computes response rate; if low, alerts the operator.
+Runs daily. For any meeting in `status='prep'` more than 7 days old, computes availability-response rate; if low, alerts the operator. Renamed from `form-response-chase` with migration 002 — availability is now collected via the portal at `${PORTAL_URL}/availability`, not Google Forms.
 
-## Step 1 — Find prep meetings with forms
+## Step 1 — Find prep meetings needing chase
 
 ```sql
-SELECT m.id, m.type, m.form_url, m.created_at,
+SELECT m.id, m.type, m.created_at,
        (SELECT count(DISTINCT a.member_id) FROM availability a WHERE a.meeting_id = m.id) AS responded,
        (SELECT count(*) FROM members WHERE active=true) AS total
 FROM meetings m
 WHERE m.status='prep'
-  AND m.form_url IS NOT NULL
   AND m.created_at < now() - interval '7 days';
 ```
 
@@ -30,27 +29,27 @@ For each meeting:
 (Idempotency: query `command_log` for prior alerts on this meeting:)
 ```sql
 SELECT MAX(ran_at) FROM command_log
-WHERE name='form-response-chase' AND status='success' AND summary LIKE '%meeting=<id>%';
+WHERE name='availability-chase' AND status='success' AND summary LIKE '%meeting=<id>%';
 ```
 
 ## Step 3 — Send alert email
 
 Recipient: operator.
 
-Subject: `WiDS NYC: form for <meeting_type> meeting at <responded>/<total> responses`
+Subject: `WiDS NYC: availability for <meeting_type> meeting at <responded>/<total> responses`
 
 Body:
 ```
-The form for <meeting_type> meeting #<id> has been out <days> days.
+The portal availability page for <meeting_type> meeting #<id> has been open <days> days.
 Response rate: <responded>/<total> active members.
 
 Non-responders:
   <names of active members WITHOUT availability rows for this meeting>
 
-Form URL: <form_url>
+Portal link: ${PORTAL_URL}/availability
 
 Reply:
-  'remind'  — I'll email non-responders directly
+  'remind'  — I'll email non-responders directly with the portal link
   'wait'    — leave as-is for now
 
 If you reply 'remind', I'll send a brief reminder to non-responders only.
@@ -60,6 +59,6 @@ If you reply 'remind', I'll send a brief reminder to non-responders only.
 
 ```sql
 INSERT INTO command_log (source, name, status, summary)
-VALUES ('scheduled_task', 'form-response-chase', 'success',
+VALUES ('scheduled_task', 'availability-chase', 'success',
         'Sent low-response alert to operator for meeting=<id>: <responded>/<total>');
 ```

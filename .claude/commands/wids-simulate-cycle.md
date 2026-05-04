@@ -46,8 +46,8 @@ INSERT INTO topics (name) VALUES
 
 For each step below, print "Simulating: <command>" and run the SQL/MCP calls but with mocks for external sends:
 
-1. **`/wids-meeting-start admin`** — creates admin + reading_group rows. Form URL placeholder.
-2. **Seed availability directly** (skipping `process-form` since the simulation doesn't generate a real Google Form). In production, the `process-form` scheduled task ingests responses from Drive CSV uploads daily. Insert 8 rows: 6 members covering Tue 7pm; 2 conflicting:
+1. **`/wids-meeting-start admin`** — creates admin + reading_group rows.
+2. **Seed availability directly** (in production, members submit via the portal at `${PORTAL_URL}/availability`, which writes directly to the `availability` table). Insert 8 rows: 6 members covering Tue 7pm; 2 conflicting:
    ```sql
    INSERT INTO availability (meeting_id, member_id, range_start, range_end) VALUES
      (<admin_id>, 1, '2026-05-12 19:00 ET', '2026-05-12 21:00 ET'),
@@ -63,7 +63,7 @@ For each step below, print "Simulating: <command>" and run the SQL/MCP calls but
    ```
 5. **`/wids-pick-leader`** — verify longest-gap picks member 3 (never led in this fake history; ties broken by random).
 6. **`/wids-find-paper search "RAG evaluation"`** — verify candidates are inserted into `papers` and `paper_suggestions`. Pick the first one.
-7. **`/wids-meeting-start reading_group`** — verify Form 2 URL stored.
+7. **`/wids-meeting-start reading_group`** — verify the rg row's portal-link email is sent (mocked).
 8. **Seed availability for the reading_group**.
 9. **`/wids-schedule-reading-group`** — simulate 'go' + venue.
 10. **`/wids-make-guide`** — verify both PDFs land in the cycle Drive folder. (If running against real Drive: use a dedicated `WiDS NYC AI Reading Group SIMULATION/` folder.)

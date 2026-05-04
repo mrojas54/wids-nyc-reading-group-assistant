@@ -10,11 +10,11 @@ Two-phase: compute → present → confirm → book.
 
 ```sql
 SELECT id FROM meetings
-WHERE type='admin' AND status='prep' AND form_url IS NOT NULL
+WHERE type='admin' AND status='prep'
 ORDER BY created_at DESC LIMIT 1;
 ```
 
-If no row, halt: "No admin meeting in prep with a form_url. Run `/wids-meeting-start admin` first."
+If no row, halt: "No admin meeting in prep. Run `/wids-meeting-start admin` first."
 
 ## Step 2 — Compute the best window
 
@@ -78,7 +78,7 @@ If 'next', advance through ranked list.
 
 Use Calendar MCP to create event:
 - Title: "WiDS NYC Reading Group — Admin Meeting"
-- Description: "Planning for the next reading group. Form URL: <form_url>"
+- Description: "Planning for the next reading group. Submit availability: ${PORTAL_URL}/availability"
 - Start: slot_start, End: slot_end
 - Conferencing: Google Meet (auto-generated)
 - Attendees: all active members' emails
@@ -110,5 +110,5 @@ VALUES ('slash_command', '/wids-schedule-admin', 'success',
 
 ## Failure handling
 
-- No availability rows → halt: "No availability collected yet. The `process-form` scheduled task ingests responses daily — make sure the operator has uploaded the responses CSV to `<drive_root>/cycles/<cycle_label>/admin-form-responses.csv`."
+- No availability rows → halt: "No availability collected yet. Members submit via the portal at `${PORTAL_URL}/availability`. Wait for responses or run `availability-chase` to nudge non-responders."
 - Calendar event creation fails → no DB update; log failure with the error message.

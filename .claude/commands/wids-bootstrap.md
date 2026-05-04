@@ -104,19 +104,18 @@ Print:
 ```
 Bootstrap complete!
 
-Next: register the 8 scheduled background tasks. The prompts are in
+Next: register the 7 scheduled background tasks. The prompts are in
 `scheduled_tasks/`. For each, register it via the scheduled-tasks MCP
 with daily cron and Supabase credentials available as env vars
 (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY).
 
   - cycle-keep-alive
-  - form-response-chase
+  - availability-chase
   - pre-meeting-reminder
   - meeting-auto-advance
   - leader-nudge
   - post-meeting-thanks
   - calendar-rsvp-sync
-  - process-form
 
 Once registered, run `/wids-meeting-start admin` to kick off cycle 1.
 ```

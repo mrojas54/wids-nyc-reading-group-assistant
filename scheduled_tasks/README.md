@@ -23,12 +23,11 @@ Doesn't matter — they're independent. But a sensible order is:
 
 1. `meeting-auto-advance` (cheapest; verify infra)
 2. `calendar-rsvp-sync`
-3. `process-form` (foundational — without it, no availability/volunteers/suggestions land in the DB)
-4. `pre-meeting-reminder`
-5. `cycle-keep-alive`
-6. `form-response-chase`
-7. `leader-nudge`
-8. `post-meeting-thanks`
+3. `pre-meeting-reminder`
+4. `cycle-keep-alive`
+5. `availability-chase`
+6. `leader-nudge`
+7. `post-meeting-thanks`
 
 ## Observability
 
