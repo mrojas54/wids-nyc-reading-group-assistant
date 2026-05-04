@@ -64,3 +64,20 @@ Visit `<vercel-url>/`. You should:
 | Build fails: "no Next.js project found"       | Root Directory not set to `web` (section 2 step 3).              |
 | Magic link redirects to localhost             | `NEXT_PUBLIC_SITE_URL` still empty or set to localhost.          |
 | Vercel Authentication wall not appearing      | Deployment Protection not enabled (section 4).                   |
+
+## Pilot test log
+
+Each entry records a runbook execution. Newest entries go at the top of the section (under this paragraph). Use the template below.
+
+### Template
+
+```
+### YYYY-MM-DD — <commit-sha-7> — <all green | issues>
+- Step 1 RLS: PASS
+- Step 2 sign-in: PASS
+- Step 3 availability: PASS
+- Step 4 companion: PASS
+- Step 6 RSVP: PASS
+- Step 7 revert: PASS
+- Notes: <any issues, gotchas, or "none">
+```
