@@ -535,6 +535,73 @@ html, body {
   margin-top: 4px;
   text-decoration: none;
 }
+.next-meeting-rsvp {
+  border-top: 1px solid var(--border-1);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.rsvp-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.rsvp-picker[aria-busy="true"] { opacity: 0.6; }
+.rsvp-btn {
+  background: var(--bg-surface);
+  color: var(--fg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.rsvp-btn:hover:not([disabled]) {
+  background: var(--state-hover-bg);
+}
+.rsvp-btn:focus-visible {
+  outline: 2px solid var(--state-selected-ring);
+  outline-offset: 2px;
+}
+.rsvp-btn[aria-pressed="true"] {
+  background: var(--state-selected-bg);
+  border-color: var(--state-selected-bg);
+  color: white;
+}
+.rsvp-btn[aria-pressed="true"]:hover:not([disabled]) {
+  background: var(--accent-active);
+  border-color: var(--accent-active);
+}
+/* dimming comes from .rsvp-picker[aria-busy] above; .rsvp-btn[disabled] only adjusts cursor */
+.rsvp-btn[disabled] { cursor: not-allowed; }
+.rsvp-collapsed {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.rsvp-collapsed[aria-busy="true"] { opacity: 0.6; }
+.rsvp-collapsed strong {
+  color: var(--fg-1);
+  font-weight: 600;
+}
+.rsvp-change {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-fg);
+  cursor: pointer;
+}
+.rsvp-change:hover:not([disabled]) { text-decoration: underline; }
+.rsvp-change:focus-visible {
+  outline: 2px solid var(--state-selected-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.rsvp-change[disabled] { cursor: not-allowed; opacity: 0.6; }
 
 /* ---------- Availability banner (clickable warning) ---------- */
 

@@ -1,13 +1,20 @@
 import { formatDateTimeNY } from "@/lib/time";
-import type { NextMeeting } from "@/lib/queries";
+import type { NextMeeting, RsvpStatus } from "@/lib/queries";
 import { Icon } from "@/components/ui";
+import { RsvpButtons } from "@/components/RsvpButtons";
 
 const TYPE_LABEL: Record<NextMeeting["type"], string> = {
   admin: "admin",
   reading_group: "reading group",
 };
 
-export function NextMeetingCard({ meeting }: { meeting: NextMeeting | null }) {
+export function NextMeetingCard({
+  meeting,
+  myRsvp,
+}: {
+  meeting: NextMeeting | null;
+  myRsvp: RsvpStatus | null;
+}) {
   if (!meeting) {
     return (
       <div className="next-meeting next-meeting-empty">
@@ -51,6 +58,12 @@ export function NextMeetingCard({ meeting }: { meeting: NextMeeting | null }) {
           Open paper companion
           <Icon name="arrowRight" size={14} />
         </a>
+      )}
+
+      {meeting.status === "scheduled" && (
+        <section className="next-meeting-rsvp">
+          <RsvpButtons meetingId={meeting.id} current={myRsvp} />
+        </section>
       )}
     </article>
   );
