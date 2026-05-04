@@ -23,21 +23,21 @@ For the durable reference (env var meanings, callback URL details), see [README.
 In the project settings, add these for **Production** and **Preview**:
 
 | Name                              | Value                                                                                  |
-|---|---|
+| --------------------------------- | -------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | From Supabase project settings → API.                                                  |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | From Supabase project settings → API.                                                  |
 | `SUPABASE_SERVICE_ROLE_KEY`       | From Supabase project settings → API. **Mark as Sensitive.**                            |
-| `NEXT_PUBLIC_SITE_URL`            | Leave empty for now — filled in after the first deploy (section 5).                    |
+| `NEXT_PUBLIC_SITE_URL`            | Leave empty for now — filled in after the first deploy (section 5). If you already know your Vercel project name, you can set this to `https://<project-name>.vercel.app` upfront and skip the redeploy. |
 | `NEXT_PUBLIC_GITHUB_REPO`         | `mrojas54/wids-nyc-reading-group-assistant`                                            |
 
 ## 4. Enable Deployment Protection
 
-Settings → **Deployment Protection** → **Vercel Authentication: ON** for Production. This requires a Vercel login to view the production URL, so members can't sign in until cutover. Removed at cutover (member-app plan task 9.3).
+Settings → **Deployment Protection** → **Vercel Authentication: ON** for Production. This requires a Vercel login to view the production URL, so members can't sign in until cutover. Removed at cutover ([member-app plan task 9.3](../docs/superpowers/plans/2026-05-03-wids-member-app.md#task-93-cycle-end-cutover)).
 
 ## 5. Trigger the first deploy and finalize `NEXT_PUBLIC_SITE_URL`
 
 1. Push to `main` (or click **Deploy** in the Vercel dashboard).
-2. Watch the build logs. First build takes ~2 minutes. When it succeeds, note the assigned URL (e.g., `https://wids-nyc.vercel.app`).
+2. Watch the build logs. Allow a few minutes for the first build. When it succeeds, note the assigned URL (e.g., `https://wids-nyc.vercel.app`).
 3. Settings → **Environment Variables** → edit `NEXT_PUBLIC_SITE_URL`. Set it to the Vercel URL from step 2 (no trailing slash).
 4. Trigger a redeploy: Deployments → click the latest deploy → **Redeploy**.
 
@@ -59,7 +59,7 @@ Visit `<vercel-url>/`. You should:
 ## 8. Common issues
 
 | Symptom                                       | Fix                                                              |
-|---|---|
+| --------------------------------------------- | ---------------------------------------------------------------- |
 | Magic link click returns 404                  | Forgot section 6 (Supabase callback URL).                        |
 | Build fails: "no Next.js project found"       | Root Directory not set to `web` (section 2 step 3).              |
 | Magic link redirects to localhost             | `NEXT_PUBLIC_SITE_URL` still empty or set to localhost.          |

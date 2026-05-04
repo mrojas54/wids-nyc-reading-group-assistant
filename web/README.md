@@ -15,7 +15,7 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 ### Environment variables
 
 | Name                              | Source                          | Notes                                                                                                                                       |
-|---|---|---|
+| --------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project settings → API | Public; baked into client bundle.                                                                                                           |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase project settings → API | Public; safe to expose to browser — Supabase RLS enforces access control.                                                                 |
 | `SUPABASE_SERVICE_ROLE_KEY`       | Supabase project settings → API | Secret; mark Sensitive in Vercel.                                                                                                           |
@@ -26,7 +26,7 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 
 - **Root Directory:** `web` (without this, Vercel won't find the Next.js app).
 - **Framework preset:** Next.js (auto-detected when Root Directory is correct).
-- **Deployment Protection:** Vercel Authentication on for Production until cutover. Removed in member-app plan task 9.3 once members are ready to sign in.
+- **Deployment Protection:** Vercel Authentication on for Production until cutover. Removed in [member-app plan task 9.3](../docs/superpowers/plans/2026-05-03-wids-member-app.md#task-93-cycle-end-cutover) once members are ready to sign in.
 
 ### Supabase auth callback
 
