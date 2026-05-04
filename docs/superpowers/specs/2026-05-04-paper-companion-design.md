@@ -63,7 +63,7 @@ export type PaperContent = {
   paper_id: number;
   title: string;
   authors: string[];
-  arxiv_url?: string;
+  paper_url?: string;
   notebook_path: string;     // e.g. "/notebooks/42.ipynb" — relative to /public
   generated_at: string;       // ISO timestamp
   vocabulary?: VocabularyEntry[]; // ordered as introduced; omit/empty to hide block

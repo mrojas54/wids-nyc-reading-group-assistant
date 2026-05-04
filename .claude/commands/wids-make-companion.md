@@ -65,7 +65,7 @@ Build `web/content/papers/<id>.json` matching the `PaperContent` type in `web/li
   "paper_id": <id>,
   "title": "<from papers.title>",
   "authors": [<from papers.authors>],
-  "arxiv_url": "<from papers.url>",
+  "paper_url": "<from papers.url>",
   "notebook_path": "/notebooks/<id>.ipynb",
   "generated_at": "<now ISO>",
   "vocabulary": [<stage 1 vocabulary>],
@@ -74,7 +74,7 @@ Build `web/content/papers/<id>.json` matching the `PaperContent` type in `web/li
 ```
 
 Build `web/public/notebooks/<id>.ipynb` using `nbformat` (Python). Top-level cells:
-1. Markdown: paper title, authors, arxiv link.
+1. Markdown: paper title, authors, paper link.
 2. Code: `pip install` of the union of imports detected via regex `^(import |from )(\w+)` across all section code cells. Skip Python stdlib modules.
 3. For each section i: Markdown cell (`## i. <title>` + summary), then code cell.
 

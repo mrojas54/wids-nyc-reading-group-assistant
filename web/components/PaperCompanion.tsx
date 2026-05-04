@@ -1,6 +1,18 @@
 import type { PaperContent } from "@/lib/paperContent";
 import { MermaidDiagram } from "./MermaidDiagram";
 
+function paperLinkLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host === "arxiv.org") return "arXiv";
+    if (host === "doi.org") return "DOI";
+    if (host === "openreview.net") return "OpenReview";
+    return "Paper";
+  } catch {
+    return "Paper";
+  }
+}
+
 export function PaperCompanion({
   content,
   colabUrl,
@@ -25,15 +37,15 @@ export function PaperCompanion({
         >
           {content.authors.join(", ")}
         </p>
-        {content.arxiv_url && (
+        {content.paper_url && (
           <a
-            href={content.arxiv_url}
+            href={content.paper_url}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block text-sm hover:underline"
             style={{ color: "var(--color-sage-700)" }}
           >
-            arXiv ↗
+            {paperLinkLabel(content.paper_url)} ↗
           </a>
         )}
       </header>

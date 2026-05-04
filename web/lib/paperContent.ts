@@ -17,7 +17,7 @@ export type PaperContent = {
   paper_id: number;
   title: string;
   authors: string[];
-  arxiv_url?: string;
+  paper_url?: string;
   notebook_path: string;
   generated_at: string;
   vocabulary?: VocabularyEntry[];

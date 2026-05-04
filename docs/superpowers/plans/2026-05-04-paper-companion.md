@@ -56,7 +56,7 @@ export type PaperContent = {
   paper_id: number;
   title: string;
   authors: string[];
-  arxiv_url?: string;
+  paper_url?: string;
   notebook_path: string;
   generated_at: string;
   vocabulary?: VocabularyEntry[];
@@ -93,7 +93,7 @@ export async function listPaperContentIds(): Promise<string[]> {
   "paper_id": 9999,
   "title": "Attention Is All You Need (test fixture)",
   "authors": ["Vaswani et al."],
-  "arxiv_url": "https://arxiv.org/abs/1706.03762",
+  "paper_url": "https://arxiv.org/abs/1706.03762",
   "notebook_path": "/notebooks/9999.ipynb",
   "generated_at": "2026-05-04T07:00:00Z",
   "vocabulary": [
@@ -269,9 +269,9 @@ export function PaperCompanion({
         >
           {content.authors.join(", ")}
         </p>
-        {content.arxiv_url && (
+        {content.paper_url && (
           <a
-            href={content.arxiv_url}
+            href={content.paper_url}
             target="_blank"
             rel="noopener"
             className="inline-block text-sm hover:underline"

@@ -1730,7 +1730,7 @@ export type PaperContent = {
   paper_id: number;
   title: string;
   authors: string[];
-  arxiv_url?: string;
+  paper_url?: string;
   notebook_path: string;   // e.g., "/notebooks/42.ipynb"
   generated_at: string;
   sections: PaperSection[];
@@ -1760,7 +1760,7 @@ export async function listPaperContentIds(): Promise<string[]> {
   "paper_id": 9999,
   "title": "Attention Is All You Need (test fixture)",
   "authors": ["Vaswani et al."],
-  "arxiv_url": "https://arxiv.org/abs/1706.03762",
+  "paper_url": "https://arxiv.org/abs/1706.03762",
   "notebook_path": "/notebooks/9999.ipynb",
   "generated_at": "2026-05-03T19:00:00Z",
   "sections": [
@@ -1842,8 +1842,8 @@ export function PaperCompanion({ content, githubRawUrl }: { content: PaperConten
         <h1 className="text-2xl font-semibold">{content.title}</h1>
         <p className="text-zinc-600 text-sm">{content.authors.join(", ")}</p>
         <div className="flex gap-3 text-sm">
-          {content.arxiv_url && (
-            <a href={content.arxiv_url} className="text-blue-700 hover:underline">arXiv ↗</a>
+          {content.paper_url && (
+            <a href={content.paper_url} className="text-blue-700 hover:underline">arXiv ↗</a>
           )}
           {colabUrl && (
             <a href={colabUrl} target="_blank" rel="noopener" className="rounded bg-zinc-900 text-white px-3 py-1">
@@ -1995,7 +1995,7 @@ Build `web/content/papers/<id>.json`:
   "paper_id": <id>,
   "title": "<from papers.title>",
   "authors": [<from papers.authors>],
-  "arxiv_url": "<from papers.url>",
+  "paper_url": "<from papers.url>",
   "notebook_path": "/notebooks/<id>.ipynb",
   "generated_at": "<now ISO>",
   "sections": [<stage 2 outputs>]
