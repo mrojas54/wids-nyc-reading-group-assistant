@@ -12,7 +12,7 @@ export function Banner({ tone = "info", title, children }: BannerProps) {
   return (
     <div className={`banner banner-${tone}`} role="status">
       <div style={{ flex: 1 }}>
-        {title && <b>{title}</b>}
+        {title && <strong className="banner-title">{title}</strong>}
         {children}
       </div>
     </div>

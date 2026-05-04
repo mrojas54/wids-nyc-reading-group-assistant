@@ -59,7 +59,7 @@ export default function SignInPage() {
 
           {sent && (
             <Banner tone="success" title="Check your inbox.">
-              We sent a sign-in link to <b>{email}</b>. It expires in 15 minutes.
+              We sent a sign-in link to <strong>{email}</strong>. It expires in 15 minutes.
             </Banner>
           )}
         </form>

@@ -361,7 +361,7 @@ html, body {
   font-size: 13.5px;
   line-height: 1.5;
 }
-.banner b { display: block; margin-bottom: 1px; }
+.banner .banner-title { display: block; font-weight: 600; margin-bottom: 1px; }
 .banner-info    { background: var(--color-info-50);    color: var(--color-info-700);    border-color: #9bbedf; }
 .banner-warning { background: var(--color-warning-50); color: var(--color-warning-700); border-color: #e0c084; }
 .banner-success { background: var(--color-success-50); color: var(--color-success-700); border-color: #9ed1ad; }
