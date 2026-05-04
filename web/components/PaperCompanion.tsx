@@ -29,7 +29,7 @@ export function PaperCompanion({
           <a
             href={content.arxiv_url}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="inline-block text-sm hover:underline"
             style={{ color: "var(--color-sage-700)" }}
           >
@@ -43,7 +43,7 @@ export function PaperCompanion({
           <a
             href={colabUrl}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             className="btn btn-primary"
           >
             Open notebook in Colab ↗
@@ -86,8 +86,8 @@ export function PaperCompanion({
             Vocabulary.
           </h2>
           <dl className="space-y-2">
-            {content.vocabulary!.map((v, i) => (
-              <div key={i} className="flex flex-col sm:flex-row gap-1 sm:gap-3">
+            {content.vocabulary!.map((v) => (
+              <div key={v.term} className="flex flex-col sm:flex-row gap-1 sm:gap-3">
                 <dt
                   className="font-semibold sm:min-w-[12rem]"
                   style={{ color: "var(--color-sage-700)" }}
@@ -116,17 +116,19 @@ export function PaperCompanion({
             {i + 1}. {s.title}
           </h2>
           <p style={{ color: "var(--color-paper-700)" }}>{s.summary}</p>
-          <MermaidDiagram source={s.mermaid} />
-          <pre
-            className="rounded p-3 text-sm overflow-x-auto"
-            style={{
-              background: "var(--color-paper-100)",
-              color: "var(--color-paper-800)",
-              fontFamily: "'Geist Mono', ui-monospace, monospace",
-            }}
-          >
-            <code>{s.code}</code>
-          </pre>
+          {s.mermaid && <MermaidDiagram source={s.mermaid} />}
+          {s.code && (
+            <pre
+              className="rounded p-3 text-sm overflow-x-auto"
+              style={{
+                background: "var(--color-paper-100)",
+                color: "var(--color-paper-800)",
+                fontFamily: "'Geist Mono', ui-monospace, monospace",
+              }}
+            >
+              <code>{s.code}</code>
+            </pre>
+          )}
         </section>
       ))}
 
