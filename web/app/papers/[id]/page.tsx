@@ -4,6 +4,11 @@ import { notFound } from "next/navigation";
 import { readPaperContent, listPaperContentIds } from "@/lib/paperContent";
 import { PaperCompanion } from "@/components/PaperCompanion";
 
+// Phase 7 will write new fixtures to web/content/papers/ after build.
+// dynamicParams: true (the Next 14 default) renders unknown ids via SSR
+// instead of 404, so newly-generated companions go live without a rebuild.
+export const dynamicParams = true;
+
 export async function generateStaticParams() {
   const ids = await listPaperContentIds();
   return ids.map((id) => ({ id }));
