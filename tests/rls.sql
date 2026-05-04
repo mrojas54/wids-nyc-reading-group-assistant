@@ -1,12 +1,21 @@
 -- tests/rls.sql
--- Run after applying migration 002.
+-- Run after applying migrations 002 and 003.
 -- Usage: psql $DATABASE_URL -v ON_ERROR_STOP=1 -f tests/rls.sql
 --
--- Asserts:
+-- Asserts (migration 002):
 --   1. Alice can SELECT/INSERT her own availability
 --   2. Alice cannot INSERT availability as Bob
 --   3. Bob cannot SELECT Alice's availability
---   4. Switching to authenticated role with column-level GRANT works for safe queries
+--
+-- Asserts (migration 003):
+--   4. Alice can read topics
+--   5. Alice can read paper_topics
+--   6. Alice can read paper_suggestions
+--   7. Alice cannot INSERT paper_suggestion as Bob
+--   8. Alice can read volunteers
+--   9. Alice cannot INSERT volunteer row as Bob
+--  10. Bob can see Alice's paper_suggestion + volunteer (open SELECT)
+--  11. command_log is invisible to authenticated (no policy)
 --
 -- Notes:
 --   - We capture IDs via \gset BEFORE switching to the authenticated role,
@@ -80,6 +89,123 @@ SET LOCAL ROLE authenticated;
 DO $$ BEGIN
   IF (SELECT count(*) FROM availability) <> 0 THEN
     RAISE EXCEPTION 'FAIL test 3: bob can see alice''s availability';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Seed for tests 4-11 (migration 003 policies). Done as privileged role.
+-- ====================================================================
+RESET ROLE;
+
+INSERT INTO topics (name) VALUES ('rls-test-topic') RETURNING id AS topic_id \gset
+INSERT INTO papers (title) VALUES ('RLS Test Paper') RETURNING id AS paper_id \gset
+INSERT INTO paper_topics (paper_id, topic_id) VALUES (:paper_id, :topic_id);
+INSERT INTO meetings (type, status) VALUES ('reading_group', 'prep')
+  RETURNING id AS rg_id \gset
+INSERT INTO paper_suggestions (meeting_id, paper_id, suggested_by, source)
+  VALUES (:rg_id, :paper_id, :alice_id, 'member');
+INSERT INTO volunteers (meeting_id, member_id) VALUES (:rg_id, :alice_id);
+INSERT INTO command_log (source, name, status)
+  VALUES ('server_action', 'rls-test', 'success');
+
+-- Switch to alice for tests 4-9.
+SET LOCAL request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+SET LOCAL ROLE authenticated;
+
+-- ====================================================================
+-- Test 4: alice can read topics
+-- ====================================================================
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM topics WHERE name = 'rls-test-topic') THEN
+    RAISE EXCEPTION 'FAIL test 4: alice cannot read topics';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 5: alice can read paper_topics
+-- ====================================================================
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paper_topics
+                 WHERE paper_id = :paper_id AND topic_id = :topic_id) THEN
+    RAISE EXCEPTION 'FAIL test 5: alice cannot read paper_topics';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 6: alice can read paper_suggestions (open SELECT)
+-- ====================================================================
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = :rg_id) THEN
+    RAISE EXCEPTION 'FAIL test 6: alice cannot read paper_suggestions';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 7: alice cannot insert a paper_suggestion as bob
+-- ====================================================================
+DO $$
+DECLARE ok BOOL := false;
+BEGIN
+  BEGIN
+    INSERT INTO paper_suggestions (meeting_id, paper_id, suggested_by, source)
+    VALUES (:rg_id, :paper_id, :bob_id, 'member');
+  EXCEPTION WHEN insufficient_privilege OR check_violation OR others THEN
+    ok := true;
+  END;
+  IF NOT ok THEN
+    RAISE EXCEPTION 'FAIL test 7: alice was allowed to insert paper_suggestion as bob';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 8: alice can read volunteers (open SELECT)
+-- ====================================================================
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM volunteers
+                 WHERE meeting_id = :rg_id AND member_id = :alice_id) THEN
+    RAISE EXCEPTION 'FAIL test 8: alice cannot read volunteers';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 9: alice cannot insert a volunteer row as bob
+-- ====================================================================
+DO $$
+DECLARE ok BOOL := false;
+BEGIN
+  BEGIN
+    INSERT INTO volunteers (meeting_id, member_id) VALUES (:rg_id, :bob_id);
+  EXCEPTION WHEN insufficient_privilege OR check_violation OR others THEN
+    ok := true;
+  END;
+  IF NOT ok THEN
+    RAISE EXCEPTION 'FAIL test 9: alice was allowed to insert volunteer as bob';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 10: bob can see alice's paper_suggestion and volunteer row
+-- ====================================================================
+RESET ROLE;
+SET LOCAL request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+SET LOCAL ROLE authenticated;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paper_suggestions WHERE meeting_id = :rg_id) THEN
+    RAISE EXCEPTION 'FAIL test 10a: bob cannot see alice''s paper_suggestion';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM volunteers
+                 WHERE meeting_id = :rg_id AND member_id = :alice_id) THEN
+    RAISE EXCEPTION 'FAIL test 10b: bob cannot see alice''s volunteer row';
+  END IF;
+END $$;
+
+-- ====================================================================
+-- Test 11: command_log is invisible to authenticated (RLS on, no policy)
+-- ====================================================================
+DO $$ BEGIN
+  IF (SELECT count(*) FROM command_log) <> 0 THEN
+    RAISE EXCEPTION 'FAIL test 11: bob can see command_log rows';
   END IF;
 END $$;
 
