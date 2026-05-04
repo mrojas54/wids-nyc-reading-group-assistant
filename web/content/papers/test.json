@@ -1,0 +1,40 @@
+{
+  "paper_id": 9999,
+  "title": "Attention Is All You Need (test fixture)",
+  "authors": ["Vaswani et al."],
+  "arxiv_url": "https://arxiv.org/abs/1706.03762",
+  "notebook_path": "/notebooks/9999.ipynb",
+  "generated_at": "2026-05-04T07:00:00Z",
+  "vocabulary": [
+    {
+      "term": "Token",
+      "definition": "A discrete unit of input — typically a word piece or subword id the model operates on."
+    },
+    {
+      "term": "Embedding",
+      "definition": "A learned dense vector that maps a token id into the model's continuous representation space."
+    },
+    {
+      "term": "Self-attention",
+      "definition": "A mechanism where every token attends to every other token via learned query, key, and value projections."
+    },
+    {
+      "term": "Query / Key / Value",
+      "definition": "Three projections of each token used by attention: queries are matched against keys to produce weights that combine values."
+    }
+  ],
+  "sections": [
+    {
+      "title": "Problem",
+      "summary": "RNNs and CNNs were the dominant architectures for sequence modeling, but they struggled with long-range dependencies and forced sequential computation. The authors propose attention as the sole mechanism, removing recurrence entirely.",
+      "mermaid": "flowchart LR\n  Input -->|tokens| Encoder\n  Encoder --> Decoder\n  Decoder -->|tokens| Output",
+      "code": "import numpy as np\n# Tokens as integer ids — the model never sees raw text.\ntokens = np.array([1, 5, 3, 7])\nprint('shape:', tokens.shape)"
+    },
+    {
+      "title": "Self-attention",
+      "summary": "Each token attends to all others through learned query, key, and value projections. The dot-product attention formula scales by sqrt(d_k) for numerical stability before the softmax.",
+      "mermaid": "flowchart TD\n  Q[Query] --> Score\n  K[Key] --> Score\n  Score -->|softmax| Weights\n  V[Value] --> Output\n  Weights --> Output",
+      "code": "import numpy as np\nd_k = 4\nQ = np.random.randn(3, d_k); K = np.random.randn(3, d_k); V = np.random.randn(3, d_k)\nscores = Q @ K.T / np.sqrt(d_k)\nweights = np.exp(scores) / np.exp(scores).sum(axis=-1, keepdims=True)\nprint('attn out:\\n', weights @ V)"
+    }
+  ]
+}
