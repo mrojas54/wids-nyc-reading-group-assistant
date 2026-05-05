@@ -1,4 +1,5 @@
 import type { PaperContent } from "@/lib/paperContent";
+import { CodeBlock } from "@/components/ui";
 import { MermaidDiagram } from "./MermaidDiagram";
 
 function paperLinkLabel(url: string): string {
@@ -130,16 +131,7 @@ export function PaperCompanion({
           <p style={{ color: "var(--color-paper-700)" }}>{s.summary}</p>
           {s.mermaid && <MermaidDiagram source={s.mermaid} />}
           {s.code && (
-            <pre
-              className="rounded p-3 text-sm overflow-x-auto"
-              style={{
-                background: "var(--color-paper-100)",
-                color: "var(--color-paper-800)",
-                fontFamily: "'Geist Mono', ui-monospace, monospace",
-              }}
-            >
-              <code>{s.code}</code>
-            </pre>
+            <CodeBlock code={s.code} notebookHref={colabUrl} />
           )}
         </section>
       ))}
