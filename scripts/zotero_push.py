@@ -24,6 +24,39 @@ Env (from web/.env.local):
 """
 from __future__ import annotations
 
+import re
+from urllib.parse import urlparse, urlunparse
+
+
+_ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
+
+
+def normalize_url(url: str) -> str:
+    """Canonicalize paper URLs for source classification and idempotency.
+
+    - http -> https; lowercase host
+    - arxiv.org/pdf/<id>(.pdf)? -> arxiv.org/abs/<id>
+    - drop query string on arxiv.org URLs and on `?needAccess=` params
+    - leave fragments off
+    """
+    parsed = urlparse(url.strip())
+    scheme = "https" if parsed.scheme in ("http", "https") else parsed.scheme
+    host = parsed.netloc.lower()
+    path = parsed.path
+    query = parsed.query
+
+    if host == "arxiv.org":
+        m = _ARXIV_PDF_RE.match(path)
+        if m:
+            path = f"/abs/{m.group(1)}"
+        query = ""  # always drop query on arxiv
+
+    if "needaccess" in query.lower():
+        # tandfonline-style epdf links — drop the param
+        query = ""
+
+    return urlunparse((scheme, host, path, "", query, ""))
+
 
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
