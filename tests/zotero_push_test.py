@@ -1,7 +1,7 @@
 """Tests for scripts/zotero_push.py.
 
 Run via:
-    uv run --with pytest --with responses --with "psycopg[binary]" \\
+    uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \\
         pytest tests/zotero_push_test.py -v
 """
 from __future__ import annotations
