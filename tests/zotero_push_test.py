@@ -200,3 +200,81 @@ def test_extract_doi_from_meta_tag_pdf_is_none():
         content_type="application/pdf",
     )
     assert extract_doi_from_meta_tag("https://example.com/paper.pdf") is None
+
+
+from scripts.zotero_push import extract_crossref_metadata
+
+
+CROSSREF_FIXTURE = {
+    "status": "ok",
+    "message": {
+        "DOI": "10.3390/math13101551",
+        "title": ["Some Math Paper Title"],
+        "author": [
+            {"given": "Alice", "family": "Smith"},
+            {"given": "Bob", "family": "Jones"},
+        ],
+        "abstract": "<jats:p>Abstract text here.</jats:p>",
+        "container-title": ["Mathematics"],
+        "issued": {"date-parts": [[2025, 5, 15]]},
+        "type": "journal-article",
+        "URL": "https://doi.org/10.3390/math13101551",
+    },
+}
+
+
+@responses.activate
+def test_extract_crossref_metadata_happy():
+    responses.add(
+        responses.GET,
+        "https://api.crossref.org/works/10.3390/math13101551",
+        json=CROSSREF_FIXTURE,
+        status=200,
+    )
+    meta = extract_crossref_metadata("10.3390/math13101551",
+                                     paper_url="https://www.mdpi.com/2227-7390/13/10/1551")
+    assert meta["item_type"] == "journalArticle"
+    assert meta["title"] == "Some Math Paper Title"
+    assert meta["authors"] == ["Alice Smith", "Bob Jones"]
+    assert "Abstract text here" in meta["abstract"]
+    assert "<jats:p>" not in meta["abstract"]
+    assert meta["venue"] == "Mathematics"
+    assert meta["year"] == 2025
+    assert meta["doi"] == "10.3390/math13101551"
+    assert meta["url"] == "https://www.mdpi.com/2227-7390/13/10/1551"
+
+
+@responses.activate
+def test_extract_crossref_metadata_404_returns_none():
+    responses.add(
+        responses.GET,
+        "https://api.crossref.org/works/10.bogus/123",
+        status=404,
+    )
+    meta = extract_crossref_metadata("10.bogus/123", paper_url="https://example.com")
+    assert meta is None
+
+
+@responses.activate
+def test_extract_crossref_metadata_proceedings_article_type():
+    fixture = {
+        "status": "ok",
+        "message": {
+            "DOI": "10.1145/x",
+            "title": ["Proc Paper"],
+            "author": [{"given": "X", "family": "Y"}],
+            "container-title": ["Proc. ACM Conf"],
+            "issued": {"date-parts": [[2022]]},
+            "type": "proceedings-article",
+            "URL": "https://doi.org/10.1145/x",
+        },
+    }
+    responses.add(
+        responses.GET,
+        "https://api.crossref.org/works/10.1145/x",
+        json=fixture,
+        status=200,
+    )
+    meta = extract_crossref_metadata("10.1145/x", paper_url="https://dl.acm.org/doi/10.1145/x")
+    assert meta["item_type"] == "conferencePaper"
+    assert meta["year"] == 2022

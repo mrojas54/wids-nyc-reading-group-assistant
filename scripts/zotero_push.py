@@ -161,6 +161,76 @@ def extract_doi_from_meta_tag(url: str) -> Optional[str]:
     return m.group(1).decode("utf-8") if m else None
 
 
+_CROSSREF_API_URL = "https://api.crossref.org/works/"
+
+_CROSSREF_TYPE_TO_ZOTERO = {
+    "journal-article": "journalArticle",
+    "proceedings-article": "conferencePaper",
+    "book-chapter": "bookSection",
+    "book": "book",
+    "report": "report",
+    "posted-content": "preprint",
+}
+
+_JATS_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_jats(text: str) -> str:
+    """CrossRef abstracts are JATS XML; strip tags down to plain text."""
+    return _JATS_TAG_RE.sub("", text).strip()
+
+
+def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
+    """Fetch metadata from CrossRef for a DOI.
+
+    `paper_url` is the original URL we got from papers.url; we keep it as the
+    canonical link in the Zotero item rather than swapping in CrossRef's
+    doi.org URL — humans browsing the bibliography expect the publisher link.
+    """
+    resp = requests.get(_CROSSREF_API_URL + doi, timeout=10)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    msg = resp.json().get("message", {})
+
+    title_list = msg.get("title") or []
+    title = title_list[0].strip() if title_list else ""
+
+    authors = []
+    for a in msg.get("author") or []:
+        given = (a.get("given") or "").strip()
+        family = (a.get("family") or "").strip()
+        full = (given + " " + family).strip()
+        if full:
+            authors.append(full)
+
+    abstract_raw = msg.get("abstract") or ""
+    abstract = _strip_jats(abstract_raw) if abstract_raw else ""
+
+    container = msg.get("container-title") or []
+    venue = container[0] if container else None
+
+    year = None
+    issued = msg.get("issued") or {}
+    parts = issued.get("date-parts") or []
+    if parts and parts[0]:
+        year = int(parts[0][0])
+
+    crossref_type = msg.get("type", "")
+    item_type = _CROSSREF_TYPE_TO_ZOTERO.get(crossref_type, "webpage")
+
+    return {
+        "item_type": item_type,
+        "title": title,
+        "authors": authors,
+        "abstract": abstract,
+        "venue": venue,
+        "year": year,
+        "doi": doi,
+        "url": paper_url,
+    }
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0
