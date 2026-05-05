@@ -231,6 +231,33 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
     }
 
 
+def extract_db_fallback_metadata(conn, *, paper_id: int) -> dict:
+    """Read metadata for the given paper directly from `papers`.
+
+    Always returns a dict (raises ValueError if the row is missing). Used
+    when no remote source (arXiv/CrossRef/citation_doi) yields metadata.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT title, url, abstract, authors, venue, year "
+            "FROM papers WHERE id = %s",
+            (paper_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"paper_id={paper_id} not found in papers")
+    title, url, abstract, authors, venue, year = row
+    return {
+        "item_type": "webpage",
+        "title": title,
+        "authors": list(authors) if authors else [],
+        "abstract": abstract or "",
+        "venue": venue,
+        "year": year,
+        "url": url,
+    }
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0

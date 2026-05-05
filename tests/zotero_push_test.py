@@ -278,3 +278,53 @@ def test_extract_crossref_metadata_proceedings_article_type():
     meta = extract_crossref_metadata("10.1145/x", paper_url="https://dl.acm.org/doi/10.1145/x")
     assert meta["item_type"] == "conferencePaper"
     assert meta["year"] == 2022
+
+
+from unittest.mock import MagicMock
+
+from scripts.zotero_push import extract_db_fallback_metadata
+
+
+def test_extract_db_fallback_metadata_full_row():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (
+        "Some Title",
+        "https://example.com/paper.pdf",
+        "Plain abstract.",
+        ["Alice", "Bob"],
+        "Some Venue",
+        2023,
+    )
+    meta = extract_db_fallback_metadata(conn, paper_id=42)
+    assert meta == {
+        "item_type": "webpage",
+        "title": "Some Title",
+        "authors": ["Alice", "Bob"],
+        "abstract": "Plain abstract.",
+        "venue": "Some Venue",
+        "year": 2023,
+        "url": "https://example.com/paper.pdf",
+    }
+
+
+def test_extract_db_fallback_metadata_missing_optional_fields():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (
+        "Bare Title", "https://x.example", None, None, None, None,
+    )
+    meta = extract_db_fallback_metadata(conn, paper_id=7)
+    assert meta["title"] == "Bare Title"
+    assert meta["authors"] == []
+    assert meta["abstract"] == ""
+    assert meta["venue"] is None
+    assert meta["year"] is None
+
+
+def test_extract_db_fallback_metadata_no_paper_raises():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = None
+    with pytest.raises(ValueError, match="paper_id=999 not found"):
+        extract_db_fallback_metadata(conn, paper_id=999)
