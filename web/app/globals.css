@@ -828,6 +828,151 @@ html, body {
   line-height: 1.5;
 }
 
+/* ---------- Mermaid figure ----------
+ * Wraps each rendered diagram in a paper-tinted card with optional caption.
+ * Diagrams scroll horizontally on mobile rather than scaling down (illegible).
+ */
+.mermaid-figure {
+  margin: 22px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mermaid-frame {
+  background: var(--color-paper-50);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: auto;
+}
+@media (min-width: 640px) {
+  .mermaid-frame { padding: var(--space-6); }
+}
+.mermaid-svg svg { max-width: 100%; height: auto; }
+.mermaid-cap {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  color: var(--color-paper-500);
+  text-align: center;
+  line-height: 1.5;
+}
+.mermaid-fallback {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-magenta-700);
+  width: 100%;
+  text-align: left;
+}
+.mermaid-fallback pre {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--color-paper-100);
+  border-radius: var(--radius-sm);
+  color: var(--color-paper-800);
+  overflow-x: auto;
+}
+
+/* ---------- Inverted hero (member portal "Next meeting" card) ----------
+ * Dark sage-900 surface with white headline, sage-200 muted text, and the
+ * magenta accent allowed to pop. Used when the dashboard's hero card carries
+ * the "evening light" mood from the design bundle (sign-in / dashboard hero).
+ */
+.next-meeting-inverted {
+  background: var(--bg-inverse);
+  border: 1px solid var(--color-sage-800);
+  border-radius: var(--radius-xl);
+  padding: 22px 22px 24px;
+  color: var(--fg-on-inverse-1);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+.next-meeting-inverted::before {
+  /* a faint sage-700 wash, "evening light through a window" */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 80% at 90% 0%,
+    rgba(95, 144, 120, 0.18) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+.next-meeting-inverted > * { position: relative; z-index: 1; }
+.next-meeting-inverted .next-meeting-eyebrow {
+  color: var(--fg-on-inverse-3);
+}
+.next-meeting-inverted .next-meeting-when {
+  color: var(--fg-on-inverse-1);
+  text-wrap: balance;
+}
+.next-meeting-inverted .next-meeting-meta dt {
+  color: var(--fg-on-inverse-3);
+}
+.next-meeting-inverted .next-meeting-meta dd {
+  color: var(--fg-on-inverse-1);
+}
+.next-meeting-inverted .next-meeting-badge {
+  background: var(--color-magenta-500);
+  color: #ffffff;
+  border-color: var(--color-magenta-700);
+}
+.next-meeting-inverted .next-meeting-rsvp {
+  border-top-color: var(--color-sage-800);
+}
+.next-meeting-inverted .rsvp-collapsed {
+  color: var(--fg-on-inverse-2);
+}
+.next-meeting-inverted .rsvp-collapsed strong {
+  color: var(--fg-on-inverse-1);
+}
+.next-meeting-inverted .rsvp-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fg-on-inverse-1);
+  border-color: var(--color-sage-700);
+}
+.next-meeting-inverted .rsvp-btn:hover:not([disabled]) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--color-sage-600);
+}
+.next-meeting-inverted .rsvp-btn[aria-pressed="true"] {
+  background: var(--color-magenta-500);
+  border-color: var(--color-magenta-500);
+  color: #ffffff;
+}
+.next-meeting-inverted .rsvp-btn[aria-pressed="true"]:hover:not([disabled]) {
+  background: var(--color-magenta-600);
+  border-color: var(--color-magenta-600);
+}
+.next-meeting-inverted .rsvp-change {
+  color: var(--color-magenta-200);
+}
+.next-meeting-inverted .next-meeting-cta {
+  background: var(--color-magenta-500);
+  color: #ffffff;
+  border-color: var(--color-magenta-700);
+}
+.next-meeting-inverted .next-meeting-cta:hover:not([disabled]) {
+  background: var(--color-magenta-600);
+}
+
+/* ---------- Brandmark · inverted variant ---------- */
+.brandmark.brandmark-inverted { color: #ffffff; }
+.brandmark.brandmark-inverted .dotmark {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.brandmark.brandmark-inverted .lockup .tag {
+  color: var(--fg-on-inverse-3);
+}
+
 /* ---------- Code block (cyberdream) ----------
  * Dark surface for companion-page code listings. Tokens come from the design
  * bundle generated 2026-05-05 ("more code colors more rainbow, cyberdream").

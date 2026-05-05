@@ -11,9 +11,12 @@ const TYPE_LABEL: Record<NextMeeting["type"], string> = {
 export function NextMeetingCard({
   meeting,
   myRsvp,
+  inverted = true,
 }: {
   meeting: NextMeeting | null;
   myRsvp: RsvpStatus | null;
+  /** Render as the dark inverted hero (default) or the light card. */
+  inverted?: boolean;
 }) {
   if (!meeting) {
     return (
@@ -26,9 +29,12 @@ export function NextMeetingCard({
   const date = meeting.scheduled_at ? formatDateTimeNY(meeting.scheduled_at) : "Date TBD";
   const location = meeting.location ?? "Location TBD";
   const leader = meeting.leader_name ?? "Leader TBD";
+  const className = inverted
+    ? "next-meeting next-meeting-inverted"
+    : "next-meeting";
 
   return (
-    <article className="next-meeting">
+    <article className={className}>
       <header className="next-meeting-head">
         <h2 className="next-meeting-eyebrow">Next meeting</h2>
         <span className="next-meeting-badge">{TYPE_LABEL[meeting.type]}</span>

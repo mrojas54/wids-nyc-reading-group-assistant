@@ -9,3 +9,5 @@ export { CodeBlock } from "./CodeBlock";
 export type { CodeBlockProps } from "./CodeBlock";
 export { Icon } from "./Icon";
 export type { IconName } from "./Icon";
+export { MermaidFrame } from "./MermaidFrame";
+export type { MermaidFrameProps } from "./MermaidFrame";
