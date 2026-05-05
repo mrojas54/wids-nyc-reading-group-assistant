@@ -262,7 +262,7 @@ This will be its own design doc, brainstormed when the operator is ready.
 1. ~~**Zotero group library not yet created.**~~ **Resolved.** Group `6540956` exists; impl needs to verify it's set to public + closed-membership before the first push.
 2. **`papers.url` content for historical entries** in the backfill CSV varies in format (some `/abs/`, some `/pdf/`, some `?needAccess=true`). The normalization rules in [Metadata extraction](#metadata-extraction) cover the cases observed; a backfill dry-run will confirm.
 3. ~~**Vercel prod host for `WIDS_PROD_HOST`.**~~ **Resolved.** Default vercel.app subdomain — `https://wids-nyc-reading-group-assistant.vercel.app`. No custom domain.
-4. **`ZOTERO_API_KEY` not yet generated.** Operator action before the first push: generate a key at [zotero.org/settings/keys](https://www.zotero.org/settings/keys) with library-write access to group `6540956`, add it to `web/.env.local`.
+4. ~~**`ZOTERO_API_KEY` not yet generated.**~~ **Resolved.** Operator generated a key with library-write access to group `6540956`; stored in `web/.env.local`.
 
 ## Risks
 
