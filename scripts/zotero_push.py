@@ -64,6 +64,11 @@ def normalize_url(url: str) -> str:
 
 _DOI_IN_URL_RE = re.compile(r"/(10\.\d{4,9}/[^?#]+)")
 
+_CITATION_DOI_RE = re.compile(
+    rb'<meta\s+name=["\']citation_doi["\']\s+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
 _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
 
@@ -127,6 +132,33 @@ def extract_arxiv_metadata(url: str) -> Optional[dict]:
         "arxiv_id": arxiv_id,
         "url": url,
     }
+
+
+def extract_doi_from_url(url: str) -> Optional[str]:
+    """Find a DOI literal embedded in the URL path."""
+    parsed = urlparse(url)
+    if parsed.netloc == "arxiv.org":
+        return None  # arXiv URLs sometimes contain unrelated number patterns
+    m = _DOI_IN_URL_RE.search(parsed.path)
+    return m.group(1) if m else None
+
+
+def extract_doi_from_meta_tag(url: str) -> Optional[str]:
+    """Fetch the page and read the Highwire-Press <meta name="citation_doi"> tag.
+
+    Returns None on timeout, non-200, non-HTML content, or no matching tag.
+    """
+    try:
+        resp = requests.get(url, timeout=5, allow_redirects=True)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    content_type = resp.headers.get("Content-Type", "").lower()
+    if "html" not in content_type:
+        return None
+    m = _CITATION_DOI_RE.search(resp.content)
+    return m.group(1).decode("utf-8") if m else None
 
 
 def main() -> int:
