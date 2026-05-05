@@ -428,3 +428,57 @@ def test_extract_metadata_falls_back_when_no_meta_doi_found():
     meta = extract_metadata(conn, paper_id=1, paper_url="https://example.com/paper.pdf")
     assert meta["item_type"] == "webpage"
     assert meta["authors"] == ["X"]
+
+
+# ---------------------------------------------------------------------------
+# Task 10: build_note_html
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone
+
+from scripts.zotero_push import build_note_html
+
+
+def test_build_note_html_full():
+    # 2026-03-12 19:00 UTC = 2026-03-12 15:00 EDT (Wednesday)
+    meeting_dt = datetime(2026, 3, 12, 19, 0, tzinfo=timezone.utc)
+    html = build_note_html(
+        meeting_at=meeting_dt,
+        leader_name="Michelle Rojas",
+        topic_names=["LLM Security", "Adversarial ML"],
+        companion_path="/papers/12",
+        prod_host="https://wids-nyc-reading-group-assistant.vercel.app",
+    )
+    assert "<strong>WiDS NYC Reading Group</strong>" in html
+    assert "Thursday, March 12, 2026" in html
+    assert "Michelle Rojas" in html
+    assert "LLM Security / Adversarial ML" in html
+    assert "https://wids-nyc-reading-group-assistant.vercel.app/papers/12" in html
+
+
+def test_build_note_html_omits_missing_fields():
+    html = build_note_html(
+        meeting_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        leader_name=None,
+        topic_names=[],
+        companion_path=None,
+        prod_host="https://x.example",
+    )
+    assert "WiDS NYC" in html
+    assert "Leader" not in html
+    assert "Topic" not in html
+    assert "Companion" not in html
+    assert "None" not in html
+    assert "January 1, 2026" in html or "December 31, 2025" in html
+
+
+def test_build_note_html_single_topic():
+    html = build_note_html(
+        meeting_at=datetime(2026, 5, 15, 14, 0, tzinfo=timezone.utc),
+        leader_name="X",
+        topic_names=["Causal Inference"],
+        companion_path="/papers/1",
+        prod_host="https://x.example",
+    )
+    assert "Causal Inference" in html
+    assert " / " not in html.split("Topic:")[1].split("</li>")[0]

@@ -26,13 +26,16 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
 import requests
 
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
+_NY_TZ = ZoneInfo("America/New_York")
 
 
 def normalize_url(url: str) -> str:
@@ -289,6 +292,40 @@ def extract_metadata(conn, *, paper_id: int, paper_url: str) -> dict:
                 return meta
 
     return extract_db_fallback_metadata(conn, paper_id=paper_id)
+
+
+def build_note_html(
+    *,
+    meeting_at: datetime,
+    leader_name: Optional[str],
+    topic_names: list[str],
+    companion_path: Optional[str],
+    prod_host: str,
+) -> str:
+    """Render the WiDS context note attached as a child of the Zotero item.
+
+    Lines for missing inputs are omitted entirely (no "Leader: None").
+    """
+    meeting_local = meeting_at.astimezone(_NY_TZ)
+    meeting_str = meeting_local.strftime("%A, %B %-d, %Y")
+
+    lines = [
+        "<p><strong>WiDS NYC Reading Group</strong></p>",
+        "<ul>",
+        f"  <li><strong>Meeting:</strong> {meeting_str}</li>",
+    ]
+    if leader_name:
+        lines.append(f"  <li><strong>Leader:</strong> {leader_name}</li>")
+    if topic_names:
+        joined = " / ".join(topic_names)
+        lines.append(f"  <li><strong>Topic:</strong> {joined}</li>")
+    if companion_path:
+        full = prod_host.rstrip("/") + companion_path
+        lines.append(
+            f'  <li><strong>Companion:</strong> <a href="{full}">{full}</a></li>'
+        )
+    lines.append("</ul>")
+    return "\n".join(lines)
 
 
 def main() -> int:
