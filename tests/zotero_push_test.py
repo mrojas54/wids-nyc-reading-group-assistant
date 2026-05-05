@@ -69,3 +69,65 @@ from scripts.zotero_push import classify_url
 ])
 def test_classify_url(url, expected):
     assert classify_url(url) == expected
+
+
+import responses
+
+from scripts.zotero_push import extract_arxiv_metadata
+
+ARXIV_ATOM_FIXTURE = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2405.02411v1</id>
+    <updated>2024-05-04T00:00:00Z</updated>
+    <published>2024-05-03T00:00:00Z</published>
+    <title>The Call for Socially Aware Language Technologies</title>
+    <summary>Some abstract text here. Multiple sentences.</summary>
+    <author><name>Diyi Yang</name></author>
+    <author><name>Dirk Hovy</name></author>
+    <author><name>David Jurgens</name></author>
+    <category term="cs.CL" />
+  </entry>
+</feed>
+"""
+
+
+@responses.activate
+def test_extract_arxiv_metadata_happy():
+    responses.add(
+        responses.GET,
+        "https://export.arxiv.org/api/query",
+        body=ARXIV_ATOM_FIXTURE,
+        status=200,
+        content_type="application/atom+xml",
+    )
+    meta = extract_arxiv_metadata("https://arxiv.org/abs/2405.02411")
+    assert meta["item_type"] == "preprint"
+    assert meta["title"] == "The Call for Socially Aware Language Technologies"
+    assert meta["authors"] == ["Diyi Yang", "Dirk Hovy", "David Jurgens"]
+    assert "Some abstract text" in meta["abstract"]
+    assert meta["year"] == 2024
+    assert meta["arxiv_id"] == "2405.02411"
+    assert meta["url"] == "https://arxiv.org/abs/2405.02411"
+
+
+@responses.activate
+def test_extract_arxiv_metadata_404_returns_none():
+    responses.add(
+        responses.GET,
+        "https://export.arxiv.org/api/query",
+        body="<feed xmlns='http://www.w3.org/2005/Atom'></feed>",
+        status=200,
+    )
+    meta = extract_arxiv_metadata("https://arxiv.org/abs/9999.99999")
+    assert meta is None
+
+
+@pytest.mark.parametrize("url, expected_id", [
+    ("https://arxiv.org/abs/2405.02411", "2405.02411"),
+    ("https://arxiv.org/abs/2405.02411v3", "2405.02411v3"),
+    ("https://arxiv.org/abs/cs.LG/0601001", "cs.LG/0601001"),
+])
+def test_arxiv_id_parsed_from_url(url, expected_id):
+    from scripts.zotero_push import _arxiv_id_from_url
+    assert _arxiv_id_from_url(url) == expected_id

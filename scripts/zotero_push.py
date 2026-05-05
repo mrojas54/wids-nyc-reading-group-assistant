@@ -25,7 +25,11 @@ Env (from web/.env.local):
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
+from typing import Optional
 from urllib.parse import urlparse, urlunparse
+
+import requests
 
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
@@ -60,6 +64,9 @@ def normalize_url(url: str) -> str:
 
 _DOI_IN_URL_RE = re.compile(r"/(10\.\d{4,9}/[^?#]+)")
 
+_ARXIV_API_URL = "https://export.arxiv.org/api/query"
+_ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
 
 def classify_url(url: str) -> str:
     """Decide which extractor to use.
@@ -74,6 +81,52 @@ def classify_url(url: str) -> str:
     if _DOI_IN_URL_RE.search(parsed.path):
         return "doi_in_url"
     return "needs_meta_lookup"
+
+
+def _arxiv_id_from_url(url: str) -> str:
+    """Extract the arXiv id from a normalized abs URL."""
+    parsed = urlparse(url)
+    # path is "/abs/<id>" or "/abs/<category>/<id>"
+    return parsed.path[len("/abs/"):]
+
+
+def extract_arxiv_metadata(url: str) -> Optional[dict]:
+    """Fetch metadata from the arXiv API for a normalized abs URL.
+
+    Returns None if the API returns no entry (404-equivalent).
+    """
+    arxiv_id = _arxiv_id_from_url(url)
+    resp = requests.get(
+        _ARXIV_API_URL,
+        params={"id_list": arxiv_id},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    root = ET.fromstring(resp.text)
+    entry = root.find("atom:entry", _ARXIV_NS)
+    if entry is None:
+        return None
+
+    title_el = entry.find("atom:title", _ARXIV_NS)
+    summary_el = entry.find("atom:summary", _ARXIV_NS)
+    published_el = entry.find("atom:published", _ARXIV_NS)
+    authors = [
+        (a.find("atom:name", _ARXIV_NS).text or "").strip()
+        for a in entry.findall("atom:author", _ARXIV_NS)
+    ]
+    year = None
+    if published_el is not None and published_el.text:
+        year = int(published_el.text[:4])
+
+    return {
+        "item_type": "preprint",
+        "title": (title_el.text or "").strip() if title_el is not None else "",
+        "authors": authors,
+        "abstract": (summary_el.text or "").strip() if summary_el is not None else "",
+        "year": year,
+        "arxiv_id": arxiv_id,
+        "url": url,
+    }
 
 
 def main() -> int:
