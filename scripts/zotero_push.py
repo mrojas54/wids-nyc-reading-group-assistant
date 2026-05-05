@@ -4,6 +4,7 @@
 # dependencies = [
 #   "psycopg[binary]>=3.2",
 #   "requests>=2.31",
+#   "pyzotero>=1.5",
 # ]
 # ///
 """Push a paper to the WiDS NYC public Zotero group library (6540956).
