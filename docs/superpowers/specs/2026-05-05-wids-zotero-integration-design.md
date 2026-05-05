@@ -151,14 +151,31 @@ If any of these are missing (e.g. `leader_id` is null, no topics linked), the li
 
 Edit [`.claude/commands/wids-make-companion.md`](.claude/commands/wids-make-companion.md) to add a new stage between the existing `UPDATE papers.companion_url` step and the `command_log` insert. The new stage runs the push in five sub-steps (see [High-level flow](#high-level-flow)).
 
-The push code itself lives in **a new TypeScript module at `web/lib/zotero/push.ts`** with a CLI entry point at `web/scripts/zotero-push.ts` runnable via `npx tsx`. The slash command invokes it as:
+The push code itself lives in **a new Python script at `scripts/zotero_push.py`**, following the existing operator-script convention from [`tests/pilot_test.py`](tests/pilot_test.py): a `#!/usr/bin/env python3` shebang plus a [PEP 723](https://peps.python.org/pep-0723/) inline script-metadata block declaring dependencies, runnable via `uv run`. The slash command invokes it as:
 
 ```bash
-ZOTERO_API_KEY=... ZOTERO_GROUP_ID=... \
-  npx tsx web/scripts/zotero-push.ts --paper-id=<id> --meeting-id=<id>
+uv run scripts/zotero_push.py --paper-id=<id> --meeting-id=<id>
 ```
 
-Why TypeScript in `web/`: same Supabase client (`@supabase/supabase-js`) is already there, same node_modules, no new top-level directory. The script is not part of the Next.js bundle — it's a standalone tsx entry — but it shares dependencies.
+Environment variables (`SUPABASE_DB_URL`, `ZOTERO_API_KEY`, `ZOTERO_GROUP_ID`, `WIDS_PROD_HOST`) are loaded from the operator's shell or `web/.env.local` (matching the loader pattern in `pilot_test.py`).
+
+Inline-deps block at the top of the file:
+
+```python
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "psycopg[binary]>=3.2",   # Supabase Postgres reads + UPDATE
+#   "requests>=2.31",         # arXiv, CrossRef, Zotero API
+# ]
+# ///
+```
+
+The arXiv API returns Atom XML, parsed with `xml.etree.ElementTree` from stdlib (no extra dep). CrossRef and Zotero return JSON, handled by `requests`.
+
+Importable functions (`normalize_url`, `extract_metadata`, `build_note_html`, `push_to_zotero`) live in the same module; the test file imports them directly. CLI dispatch is a standard `if __name__ == "__main__":` with `argparse`.
+
+Why Python: matches the existing operator-script convention (one-off helpers via `uv run`, per the memory note), uses the same `psycopg` + `SUPABASE_DB_URL` direct-Postgres pattern as `pilot_test.py`, and keeps the Next.js codebase free of standalone-script tsx entries that don't belong to the web bundle.
 
 ## Idempotency
 
@@ -192,15 +209,16 @@ The `/wids-make-companion` overall outcome remains `success` in `command_log` (t
 
 ## Configuration
 
-Three new env vars, loaded by `web/scripts/zotero-push.ts`:
+Three new env vars, plus reuse of an existing one, loaded by `scripts/zotero_push.py`:
 
-| Var | Source | Used for |
-|---|---|---|
-| `ZOTERO_API_KEY` | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) | Authorization header on all Zotero API calls |
-| `ZOTERO_GROUP_ID` | URL on the group's Zotero page (numeric) | Which group library to write to |
-| `WIDS_PROD_HOST` | Vercel prod URL (e.g. `widsnyc.org` if a custom domain is set, else `wids-nyc-reading-group-assistant.vercel.app`) | Build the absolute companion URL for the note |
+| Var | New? | Source | Used for |
+|---|---|---|---|
+| `SUPABASE_DB_URL` | existing | already used by `tests/pilot_test.py` | Direct Postgres connection for paper/meeting reads + the `UPDATE papers.zotero_item_key` write |
+| `ZOTERO_API_KEY` | new | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) | Authorization header on all Zotero API calls |
+| `ZOTERO_GROUP_ID` | new | URL on the group's Zotero page (numeric) | Which group library to write to |
+| `WIDS_PROD_HOST` | new | Vercel prod URL (e.g. `widsnyc.org` if a custom domain is set, else `wids-nyc-reading-group-assistant.vercel.app`) | Build the absolute companion URL for the note |
 
-These go in the operator's local `.env` (slash-command runs are operator-side) and are listed in `web/.env.example`. They are *not* needed by `scheduled_tasks/` — none of the scheduled jobs touch Zotero in this spec.
+These go in `web/.env.local` (the loader pattern in `pilot_test.py` reads from there) and are listed in `web/.env.example`. They are *not* needed by `scheduled_tasks/` — none of the scheduled jobs touch Zotero in this spec.
 
 CrossRef and arXiv APIs require no auth.
 
@@ -212,7 +230,7 @@ A separate Cowork session has already produced a clean CSV of those readings at 
 
 Once stage 1 forward-going is shipped, a small follow-up adds:
 
-- A `--from-csv <path>` mode to `web/scripts/zotero-push.ts` that reads the CSV and pushes each row, looking up `member_id` by name and creating items + notes without requiring a `papers` row.
+- A `--from-csv <path>` mode in `scripts/zotero_push.py` that reads the CSV and pushes each row, looking up `member_id` by name and creating items + notes without requiring a `papers` row.
 - The historical entries get a slightly different note (no companion URL — these never had companion pages).
 
 This work is *not* in stage 1 because it changes the script's interface and adds CSV parsing, member-name lookup, and a special-case "no companion link" template — all of which can be designed and reviewed cleanly once the forward-going path is proven.
@@ -235,8 +253,8 @@ This will be its own design doc, brainstormed when the operator is ready.
 
 ## Testing
 
-- **Unit tests** in `tests/zotero/` covering URL normalization, source classification (arxiv vs DOI vs fallback), DOI extraction, and the note HTML template.
-- **Integration test** with mocked HTTP layer: full flow from a `paper_id` through to the two POST bodies sent to Zotero, asserting the exact payloads for an arXiv example, an MDPI example, and a fallback example.
+- **Unit tests** at `tests/zotero_push_test.py` (matching the `tests/pilot_test.py` flat-file convention), covering URL normalization, source classification (arxiv vs DOI-in-URL vs DOI-via-meta vs fallback), DOI extraction, and the note HTML template. Run via `uv run pytest tests/zotero_push_test.py` (pytest added to the inline deps block of the test file).
+- **Integration test** with `requests` mocked via `responses` or `unittest.mock`: full flow from a `paper_id` through to the two POST bodies sent to Zotero, asserting the exact payloads for an arXiv example, an MDPI example (citation_doi page-fetch path), and a fallback example.
 - **No end-to-end test against real Zotero.** A one-time manual run during PR review (operator pushes a real paper to a personal test group library, verifies the entry, then deletes it) covers the live-API leg.
 
 ## Open questions / verification before implementation
