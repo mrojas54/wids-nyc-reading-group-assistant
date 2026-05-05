@@ -58,6 +58,24 @@ def normalize_url(url: str) -> str:
     return urlunparse((scheme, host, path, "", query, ""))
 
 
+_DOI_IN_URL_RE = re.compile(r"/(10\.\d{4,9}/[^?#]+)")
+
+
+def classify_url(url: str) -> str:
+    """Decide which extractor to use.
+
+    Returns one of: "arxiv", "doi_in_url", "needs_meta_lookup".
+    "needs_meta_lookup" means: try to find a citation_doi <meta> tag by
+    fetching the page; if that fails, fall back to DB metadata.
+    """
+    parsed = urlparse(url)
+    if parsed.netloc == "arxiv.org":
+        return "arxiv"
+    if _DOI_IN_URL_RE.search(parsed.path):
+        return "doi_in_url"
+    return "needs_meta_lookup"
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0

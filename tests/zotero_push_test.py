@@ -48,3 +48,24 @@ from scripts.zotero_push import normalize_url
 ])
 def test_normalize_url(raw, expected):
     assert normalize_url(raw) == expected
+
+
+from scripts.zotero_push import classify_url
+
+
+@pytest.mark.parametrize("url, expected", [
+    ("https://arxiv.org/abs/2405.02411", "arxiv"),
+    ("https://arxiv.org/abs/cs.LG/0601001", "arxiv"),
+    # DOI in path
+    ("https://www.tandfonline.com/doi/epdf/10.1080/26939169.2023.2276446", "doi_in_url"),
+    ("https://dl.acm.org/doi/10.1145/3696410.3714618", "doi_in_url"),
+    # Page-fetch needed (no DOI in path)
+    ("https://www.mdpi.com/2227-7390/13/10/1551", "needs_meta_lookup"),
+    ("https://www.nature.com/articles/s41586-024-08025-4", "needs_meta_lookup"),
+    ("https://proceedings.mlr.press/v162/budhathoki22a/budhathoki22a.pdf", "needs_meta_lookup"),
+    # Plain hosted PDF without publisher infra
+    ("https://www.cs.usfca.edu/~mmalensek/publications/shah2018scalable.pdf", "needs_meta_lookup"),
+    ("https://static.googleusercontent.com/media/research.google.com/en//pubs/archive/45530.pdf", "needs_meta_lookup"),
+])
+def test_classify_url(url, expected):
+    assert classify_url(url) == expected
