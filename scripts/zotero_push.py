@@ -32,6 +32,7 @@ from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import requests
+from pyzotero import Zotero
 
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
@@ -326,6 +327,73 @@ def build_note_html(
         )
     lines.append("</ul>")
     return "\n".join(lines)
+
+
+def _split_author(name: str) -> dict:
+    """Split a 'First Last' string into Zotero's creator shape.
+
+    Single-token names go in lastName (Zotero's convention for mononyms);
+    multi-token names split on the last whitespace.
+    """
+    parts = name.strip().rsplit(" ", 1)
+    if len(parts) == 1:
+        return {"creatorType": "author", "firstName": "", "lastName": parts[0]}
+    first, last = parts
+    return {"creatorType": "author", "firstName": first, "lastName": last}
+
+
+def _fill_item_template(template: dict, meta: dict, paper_id: int) -> dict:
+    """Overlay our metadata onto a pyzotero item template."""
+    extra_lines = [f"wids_paper_id:{paper_id}"]
+    if meta.get("arxiv_id"):
+        extra_lines.append(f"arXiv:{meta['arxiv_id']}")
+
+    item = dict(template)
+    item["title"] = meta.get("title", "")
+    item["creators"] = [_split_author(a) for a in meta.get("authors", []) if a]
+    item["abstractNote"] = meta.get("abstract") or ""
+    item["url"] = meta.get("url", "")
+    item["extra"] = "\n".join(extra_lines)
+    item["tags"] = [{"tag": "WiDS NYC Reading Group"}]
+
+    if meta.get("year") is not None:
+        item["date"] = str(meta["year"])
+
+    if meta.get("doi"):
+        item["DOI"] = meta["doi"]
+    if meta.get("venue"):
+        if meta["item_type"] == "journalArticle":
+            item["publicationTitle"] = meta["venue"]
+        elif meta["item_type"] == "conferencePaper":
+            item["proceedingsTitle"] = meta["venue"]
+        elif meta["item_type"] == "bookSection":
+            item["bookTitle"] = meta["venue"]
+
+    return item
+
+
+def create_zotero_item(
+    *,
+    meta: dict,
+    paper_id: int,
+    api_key: str,
+    group_id: str,
+) -> str:
+    """Create a Zotero item via pyzotero; return the assigned 8-char item key.
+
+    Raises RuntimeError if Zotero reports the item as failed.
+    """
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
+    template = zot.item_template(meta["item_type"])
+    payload = [_fill_item_template(template, meta, paper_id)]
+
+    result = zot.create_items(payload)
+    if result.get("failed"):
+        raise RuntimeError(f"Zotero rejected item: {result['failed']}")
+    successful = result.get("successful") or {}
+    if "0" not in successful:
+        raise RuntimeError(f"Zotero response missing successful[0]: {result}")
+    return successful["0"]["key"]
 
 
 def main() -> int:
