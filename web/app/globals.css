@@ -232,19 +232,20 @@ html, body {
   font-size: 16px;
 }
 .brandmark .dotmark {
-  width: 32px; height: 32px;
+  width: 36px; height: 36px;
   border-radius: 9px;
-  background: linear-gradient(160deg, var(--color-sage-600) 0%, var(--color-sage-800) 100%);
+  background: var(--color-paper-100);
+  border: 1px solid var(--color-paper-200);
   position: relative;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(21,42,35,0.22), inset 0 1px 0 rgba(255,255,255,0.1);
   overflow: hidden;
+  display: grid;
+  place-items: center;
 }
 .brandmark .dotmark svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  width: 80%;
+  height: 80%;
+  display: block;
 }
 .brandmark .lockup {
   display: flex;
@@ -826,6 +827,94 @@ html, body {
   font-size: 13.5px;
   line-height: 1.5;
 }
+
+/* ---------- Code block (cyberdream) ----------
+ * Dark surface for companion-page code listings. Tokens come from the design
+ * bundle generated 2026-05-05 ("more code colors more rainbow, cyberdream").
+ * The cyberdream palette is *only* used inside `.cb` — it does not leak into
+ * the rest of the warm-paper UI.
+ */
+:root {
+  --cb-bg:        #16181a;
+  --cb-bg-alt:    #1e2124;
+  --cb-bg-hi:     #3c4048;
+  --cb-fg:        #ffffff;
+  --cb-grey:      #7b8496;
+  --cb-gutter:    #4a4f57;
+  --cb-blue:      #5ea1ff;
+  --cb-green:     #5eff6c;
+  --cb-cyan:      #5ef1ff;
+  --cb-red:       #ff6e5e;
+  --cb-yellow:    #f1ff5e;
+  --cb-magenta:   #ff5ef1;
+  --cb-pink:      #ff5ea0;
+  --cb-orange:    #ffbd5e;
+  --cb-purple:    #bd5eff;
+}
+
+.cb {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--cb-bg-hi);
+  background: var(--cb-bg);
+  box-shadow:
+    0 8px 24px -8px rgba(189, 94, 255, 0.18),
+    0 1px 0 0 rgba(94, 241, 255, 0.08) inset;
+}
+.cb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--cb-bg-alt);
+  color: var(--cb-grey);
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--cb-bg-hi);
+}
+.cb-lang { color: var(--cb-cyan); }
+.cb-lang::before {
+  content: "● ";
+  color: var(--cb-magenta);
+  letter-spacing: 0;
+}
+.cb-link {
+  color: var(--cb-pink);
+  text-decoration: none;
+  font-size: 11px;
+}
+.cb-link:hover { color: var(--cb-magenta); }
+.cb pre {
+  margin: 0;
+  background: var(--cb-bg);
+  color: var(--cb-fg);
+  padding: 16px 14px 16px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+.cb-row { display: block; }
+.cb-ln {
+  display: inline-block;
+  width: 30px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--cb-gutter);
+  user-select: none;
+}
+.cb-kw   { color: var(--cb-magenta); }
+.cb-fn   { color: var(--cb-blue); }
+.cb-cls  { color: var(--cb-yellow); }
+.cb-op   { color: var(--cb-cyan); }
+.cb-num  { color: var(--cb-orange); }
+.cb-str  { color: var(--cb-green); }
+.cb-prop { color: var(--cb-pink); }
+.cb-com  { color: var(--cb-grey); font-style: italic; }
+.cb-pun  { color: var(--cb-purple); }
+.cb-deco { color: var(--cb-orange); }
 
 @layer utilities {
   .text-balance { text-wrap: balance; }

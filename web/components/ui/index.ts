@@ -5,5 +5,7 @@ export type { InputProps } from "./Input";
 export { Banner } from "./Banner";
 export type { BannerProps } from "./Banner";
 export { Brandmark } from "./Brandmark";
+export { CodeBlock } from "./CodeBlock";
+export type { CodeBlockProps } from "./CodeBlock";
 export { Icon } from "./Icon";
 export type { IconName } from "./Icon";
