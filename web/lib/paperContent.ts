@@ -5,6 +5,8 @@ export type PaperSection = {
   title: string;
   summary: string;
   mermaid?: string;
+  /** Optional caption rendered under the section's mermaid diagram. */
+  mermaid_caption?: string;
   code?: string;
 };
 

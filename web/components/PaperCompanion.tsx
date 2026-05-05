@@ -129,7 +129,14 @@ export function PaperCompanion({
             {i + 1}. {s.title}
           </h2>
           <p style={{ color: "var(--color-paper-700)" }}>{s.summary}</p>
-          {s.mermaid && <MermaidDiagram source={s.mermaid} />}
+          {s.mermaid && (
+            <MermaidDiagram
+              source={s.mermaid}
+              caption={
+                s.mermaid_caption ?? `Figure ${i + 1} · ${s.title}`
+              }
+            />
+          )}
           {s.code && (
             <CodeBlock code={s.code} notebookHref={colabUrl} />
           )}
