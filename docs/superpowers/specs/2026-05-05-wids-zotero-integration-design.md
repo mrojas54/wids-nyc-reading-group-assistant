@@ -211,12 +211,12 @@ The `/wids-make-companion` overall outcome remains `success` in `command_log` (t
 
 Three new env vars, plus reuse of an existing one, loaded by `scripts/zotero_push.py`:
 
-| Var | New? | Source | Used for |
+| Var | New? | Value / Source | Used for |
 |---|---|---|---|
 | `SUPABASE_DB_URL` | existing | already used by `tests/pilot_test.py` | Direct Postgres connection for paper/meeting reads + the `UPDATE papers.zotero_item_key` write |
-| `ZOTERO_API_KEY` | new | [zotero.org/settings/keys](https://www.zotero.org/settings/keys) | Authorization header on all Zotero API calls |
-| `ZOTERO_GROUP_ID` | new | URL on the group's Zotero page (numeric) | Which group library to write to |
-| `WIDS_PROD_HOST` | new | Vercel prod URL (e.g. `widsnyc.org` if a custom domain is set, else `wids-nyc-reading-group-assistant.vercel.app`) | Build the absolute companion URL for the note |
+| `ZOTERO_API_KEY` | new | operator-generated at [zotero.org/settings/keys](https://www.zotero.org/settings/keys) with library-write access to group `6540956` | Authorization header on all Zotero API calls |
+| `ZOTERO_GROUP_ID` | new | **`6540956`** ([zotero.org/groups/6540956](https://www.zotero.org/groups/6540956)) | Which group library to write to |
+| `WIDS_PROD_HOST` | new | **`https://wids-nyc-reading-group-assistant.vercel.app`** (no trailing slash; full base URL including scheme, concatenated with `papers.companion_url` like `/papers/2`) | Build the absolute companion URL for the note |
 
 These go in `web/.env.local` (the loader pattern in `pilot_test.py` reads from there) and are listed in `web/.env.example`. They are *not* needed by `scheduled_tasks/` — none of the scheduled jobs touch Zotero in this spec.
 
@@ -259,9 +259,10 @@ This will be its own design doc, brainstormed when the operator is ready.
 
 ## Open questions / verification before implementation
 
-1. **Zotero group library not yet created.** Operator action: create a new public group library at zotero.org named "WiDS NYC Reading Group" (closed membership) and capture the group ID for `ZOTERO_GROUP_ID`. Out of scope for the code; needs to happen before the first push.
+1. ~~**Zotero group library not yet created.**~~ **Resolved.** Group `6540956` exists; impl needs to verify it's set to public + closed-membership before the first push.
 2. **`papers.url` content for historical entries** in the backfill CSV varies in format (some `/abs/`, some `/pdf/`, some `?needAccess=true`). The normalization rules in [Metadata extraction](#metadata-extraction) cover the cases observed; a backfill dry-run will confirm.
-3. **Vercel prod host for `WIDS_PROD_HOST`.** Confirm whether a custom domain is set (and use that) or the default vercel.app subdomain.
+3. ~~**Vercel prod host for `WIDS_PROD_HOST`.**~~ **Resolved.** Default vercel.app subdomain — `https://wids-nyc-reading-group-assistant.vercel.app`. No custom domain.
+4. **`ZOTERO_API_KEY` not yet generated.** Operator action before the first push: generate a key at [zotero.org/settings/keys](https://www.zotero.org/settings/keys) with library-write access to group `6540956`, add it to `web/.env.local`.
 
 ## Risks
 
