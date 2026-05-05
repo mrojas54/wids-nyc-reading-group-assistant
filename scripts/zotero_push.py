@@ -219,6 +219,8 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
     crossref_type = msg.get("type", "")
     item_type = _CROSSREF_TYPE_TO_ZOTERO.get(crossref_type, "webpage")
 
+    canonical_doi = msg.get("DOI") or doi
+
     return {
         "item_type": item_type,
         "title": title,
@@ -226,7 +228,7 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
         "abstract": abstract,
         "venue": venue,
         "year": year,
-        "doi": doi,
+        "doi": canonical_doi,
         "url": paper_url,
     }
 
@@ -256,6 +258,37 @@ def extract_db_fallback_metadata(conn, *, paper_id: int) -> dict:
         "year": year,
         "url": url,
     }
+
+
+def extract_metadata(conn, *, paper_id: int, paper_url: str) -> dict:
+    """Top-level metadata extractor.
+
+    Order: normalize URL -> classify -> try the matching remote source ->
+    fall back to DB if remote yields nothing.
+    """
+    url = normalize_url(paper_url)
+    source = classify_url(url)
+
+    if source == "arxiv":
+        meta = extract_arxiv_metadata(url)
+        if meta is not None:
+            return meta
+
+    elif source == "doi_in_url":
+        doi = extract_doi_from_url(url)
+        if doi is not None:
+            meta = extract_crossref_metadata(doi, paper_url=url)
+            if meta is not None:
+                return meta
+
+    elif source == "needs_meta_lookup":
+        doi = extract_doi_from_meta_tag(url)
+        if doi is not None:
+            meta = extract_crossref_metadata(doi, paper_url=url)
+            if meta is not None:
+                return meta
+
+    return extract_db_fallback_metadata(conn, paper_id=paper_id)
 
 
 def main() -> int:

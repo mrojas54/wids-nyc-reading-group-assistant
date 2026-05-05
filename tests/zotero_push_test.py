@@ -328,3 +328,103 @@ def test_extract_db_fallback_metadata_no_paper_raises():
     cursor.fetchone.return_value = None
     with pytest.raises(ValueError, match="paper_id=999 not found"):
         extract_db_fallback_metadata(conn, paper_id=999)
+
+
+# ---------------------------------------------------------------------------
+# Task 9: extract_metadata orchestrator
+# ---------------------------------------------------------------------------
+from scripts.zotero_push import extract_metadata
+
+
+@responses.activate
+def test_extract_metadata_arxiv_path():
+    responses.add(
+        responses.GET, "https://export.arxiv.org/api/query",
+        body=ARXIV_ATOM_FIXTURE, status=200,
+    )
+    conn = MagicMock()
+    meta = extract_metadata(
+        conn,
+        paper_id=1,
+        paper_url="https://arxiv.org/abs/2405.02411",
+    )
+    assert meta["item_type"] == "preprint"
+    assert meta["arxiv_id"] == "2405.02411"
+    conn.cursor.assert_not_called()
+
+
+@responses.activate
+def test_extract_metadata_doi_in_url_path():
+    responses.add(
+        responses.GET, "https://api.crossref.org/works/10.1080/26939169.2023.2276446",
+        json=CROSSREF_FIXTURE, status=200,
+    )
+    conn = MagicMock()
+    meta = extract_metadata(
+        conn,
+        paper_id=1,
+        paper_url="https://www.tandfonline.com/doi/epdf/10.1080/26939169.2023.2276446",
+    )
+    assert meta["item_type"] == "journalArticle"
+    assert meta["doi"] == "10.3390/math13101551"
+    conn.cursor.assert_not_called()
+
+
+@responses.activate
+def test_extract_metadata_meta_tag_path():
+    """needs_meta_lookup: page fetch finds DOI, then CrossRef succeeds."""
+    html = b'<html><head><meta name="citation_doi" content="10.3390/math13101551"/></head></html>'
+    responses.add(
+        responses.GET, "https://www.mdpi.com/2227-7390/13/10/1551",
+        body=html, status=200, content_type="text/html",
+    )
+    responses.add(
+        responses.GET, "https://api.crossref.org/works/10.3390/math13101551",
+        json=CROSSREF_FIXTURE, status=200,
+    )
+    conn = MagicMock()
+    meta = extract_metadata(
+        conn,
+        paper_id=1,
+        paper_url="https://www.mdpi.com/2227-7390/13/10/1551",
+    )
+    assert meta["item_type"] == "journalArticle"
+    conn.cursor.assert_not_called()
+
+
+@responses.activate
+def test_extract_metadata_falls_back_when_arxiv_returns_no_entry():
+    """arXiv API returns empty feed -> fall back to DB."""
+    responses.add(
+        responses.GET, "https://export.arxiv.org/api/query",
+        body="<feed xmlns='http://www.w3.org/2005/Atom'></feed>",
+        status=200,
+    )
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (
+        "Fallback Title", "https://arxiv.org/abs/9999.99", None, None, None, None,
+    )
+    meta = extract_metadata(
+        conn, paper_id=1,
+        paper_url="https://arxiv.org/abs/9999.99",
+    )
+    assert meta["item_type"] == "webpage"
+    assert meta["title"] == "Fallback Title"
+
+
+@responses.activate
+def test_extract_metadata_falls_back_when_no_meta_doi_found():
+    """needs_meta_lookup with no citation_doi -> DB fallback."""
+    responses.add(
+        responses.GET, "https://example.com/paper.pdf",
+        body=b"%PDF-1.4", status=200, content_type="application/pdf",
+    )
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (
+        "PDF Title", "https://example.com/paper.pdf", None, ["X"], None, 2020,
+    )
+    meta = extract_metadata(conn, paper_id=1, paper_url="https://example.com/paper.pdf")
+    assert meta["item_type"] == "webpage"
+    assert meta["authors"] == ["X"]
