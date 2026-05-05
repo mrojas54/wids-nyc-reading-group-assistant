@@ -6,7 +6,7 @@
 
 **Architecture:** A single Python script (`scripts/zotero_push.py`, runnable via `uv run` with PEP 723 inline deps) reads `papers` + `meetings` from Supabase via psycopg, looks up rich metadata from arXiv API or CrossRef (with a citation_doi page-fetch step for non-arXiv URLs whose DOI isn't in the path), then POSTs an item + child note to the Zotero web API. Idempotent via a new `papers.zotero_item_key` column plus a `wids_paper_id:<id>` correlator stored in Zotero's `extra` field for crash-safety. Soft-fail integration: failures don't block the companion artifact; an operator-run `/wids-zotero-retry <meeting-id>` slash command reruns the push.
 
-**Tech Stack:** Python 3.11+, `psycopg[binary]>=3.2` (Supabase Postgres direct), `requests>=2.31` (HTTP). Tests use `pytest` + `responses` for HTTP mocking, both injected via `uv run --with`. arXiv Atom XML parsed with stdlib `xml.etree.ElementTree`. NY-time date formatting via stdlib `zoneinfo`.
+**Tech Stack:** Python 3.11+, `psycopg[binary]>=3.2` (Supabase Postgres direct), `requests>=2.31` (arXiv + CrossRef HTTP), `pyzotero>=1.5` (Zotero API client). Tests use `pytest` + `responses` for arXiv/CrossRef HTTP mocking and `unittest.mock.patch` for pyzotero — all injected via `uv run --with`. arXiv Atom XML parsed with stdlib `xml.etree.ElementTree`. NY-time date formatting via stdlib `zoneinfo`.
 
 **Spec:** [docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md](../specs/2026-05-05-wids-zotero-integration-design.md)
 
@@ -106,6 +106,7 @@ Create `scripts/zotero_push.py`:
 # dependencies = [
 #   "psycopg[binary]>=3.2",
 #   "requests>=2.31",
+#   "pyzotero>=1.5",
 # ]
 # ///
 """Push a paper to the WiDS NYC public Zotero group library (6540956).
@@ -143,7 +144,7 @@ Create `tests/zotero_push_test.py`:
 """Tests for scripts/zotero_push.py.
 
 Run via:
-    uv run --with pytest --with responses --with "psycopg[binary]" \\
+    uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \\
         pytest tests/zotero_push_test.py -v
 """
 from __future__ import annotations
@@ -159,7 +160,7 @@ def test_module_imports():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v
 ```
 
@@ -230,7 +231,7 @@ def test_normalize_url(raw, expected):
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_normalize_url -v
 ```
 
@@ -279,7 +280,7 @@ def normalize_url(url: str) -> str:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_normalize_url -v
 ```
 
@@ -330,7 +331,7 @@ def test_classify_url(url, expected):
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_classify_url -v
 ```
 
@@ -363,7 +364,7 @@ def classify_url(url: str) -> str:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_classify_url -v
 ```
 
@@ -455,7 +456,7 @@ def test_arxiv_id_parsed_from_url(url, expected_id):
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "arxiv"
 ```
 
@@ -526,7 +527,7 @@ def extract_arxiv_metadata(url: str) -> Optional[dict]:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "arxiv"
 ```
 
@@ -625,7 +626,7 @@ def test_extract_doi_from_meta_tag_pdf_is_none():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "doi"
 ```
 
@@ -673,7 +674,7 @@ def extract_doi_from_meta_tag(url: str) -> Optional[str]:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "doi"
 ```
 
@@ -783,7 +784,7 @@ def test_extract_crossref_metadata_proceedings_article_type():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "crossref"
 ```
 
@@ -868,7 +869,7 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "crossref"
 ```
 
@@ -948,7 +949,7 @@ def test_extract_db_fallback_metadata_no_paper_raises():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "fallback"
 ```
 
@@ -990,7 +991,7 @@ def extract_db_fallback_metadata(conn, *, paper_id: int) -> dict:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "fallback"
 ```
 
@@ -1118,7 +1119,7 @@ def test_extract_metadata_falls_back_when_no_meta_doi_found():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "extract_metadata"
 ```
 
@@ -1164,7 +1165,7 @@ def extract_metadata(conn, *, paper_id: int, paper_url: str) -> dict:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "extract_metadata"
 ```
 
@@ -1245,7 +1246,7 @@ def test_build_note_html_single_topic():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "note_html"
 ```
 
@@ -1301,7 +1302,7 @@ def build_note_html(
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "note_html"
 ```
 
@@ -1316,30 +1317,76 @@ git commit -m "feat(zotero): WiDS context note HTML template with NY-tz date for
 
 ---
 
-## Task 11: Zotero item create
+## Task 11: Zotero item create (via pyzotero)
 
 **Files:**
 - Modify: `scripts/zotero_push.py`
 - Modify: `tests/zotero_push_test.py`
+
+Uses [pyzotero](https://github.com/urschrei/pyzotero) (the Python Zotero API client) instead of raw `requests`. Tests mock the `Zotero` class via `unittest.mock.patch` rather than mocking HTTP.
 
 - [ ] **Step 1: Write the failing tests**
 
 Append to `tests/zotero_push_test.py`:
 
 ```python
-import json
+from unittest.mock import patch
 
 from scripts.zotero_push import create_zotero_item
 
 
-@responses.activate
-def test_create_zotero_item_arxiv_preprint():
-    responses.add(
-        responses.POST,
-        "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {"0": {"key": "ABCD1234"}}, "failed": {}},
-        status=200,
-    )
+def _preprint_template():
+    """Stand-in for what pyzotero's `zot.item_template('preprint')` returns —
+    only the fields we actually overwrite need to exist."""
+    return {
+        "itemType": "preprint",
+        "title": "",
+        "creators": [{"creatorType": "author", "firstName": "", "lastName": ""}],
+        "abstractNote": "",
+        "url": "",
+        "date": "",
+        "extra": "",
+        "tags": [],
+    }
+
+
+def _journal_template():
+    return {
+        "itemType": "journalArticle",
+        "title": "",
+        "creators": [{"creatorType": "author", "firstName": "", "lastName": ""}],
+        "abstractNote": "",
+        "url": "",
+        "DOI": "",
+        "publicationTitle": "",
+        "date": "",
+        "extra": "",
+        "tags": [],
+    }
+
+
+def _webpage_template():
+    return {
+        "itemType": "webpage",
+        "title": "",
+        "creators": [{"creatorType": "author", "firstName": "", "lastName": ""}],
+        "abstractNote": "",
+        "url": "",
+        "date": "",
+        "extra": "",
+        "tags": [],
+    }
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_item_arxiv_preprint(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.item_template.return_value = _preprint_template()
+    mock_zot.create_items.return_value = {
+        "successful": {"0": {"key": "ABCD1234"}},
+        "failed": {},
+    }
+
     meta = {
         "item_type": "preprint",
         "title": "T",
@@ -1350,40 +1397,45 @@ def test_create_zotero_item_arxiv_preprint():
         "url": "https://arxiv.org/abs/2405.02411",
     }
     key = create_zotero_item(
-        meta=meta,
-        paper_id=42,
-        api_key="fake-key",
-        group_id="6540956",
+        meta=meta, paper_id=42, api_key="fake-key", group_id="6540956",
     )
     assert key == "ABCD1234"
 
-    sent = json.loads(responses.calls[0].request.body)
-    assert isinstance(sent, list) and len(sent) == 1
-    item = sent[0]
+    # pyzotero client constructed correctly
+    mock_zotero_cls.assert_called_once_with(
+        library_id="6540956",
+        library_type="group",
+        api_key="fake-key",
+    )
+    mock_zot.item_template.assert_called_once_with("preprint")
+
+    # Verify what was sent to Zotero
+    sent_items = mock_zot.create_items.call_args[0][0]
+    assert isinstance(sent_items, list) and len(sent_items) == 1
+    item = sent_items[0]
     assert item["itemType"] == "preprint"
     assert item["title"] == "T"
     assert item["url"] == "https://arxiv.org/abs/2405.02411"
     assert item["abstractNote"] == "A."
     assert item["date"] == "2024"
-    # Authors split into given/family for Zotero
     assert item["creators"] == [
         {"creatorType": "author", "firstName": "Alice", "lastName": "Smith"},
         {"creatorType": "author", "firstName": "", "lastName": "Bob"},
     ]
-    # The wids correlator is in `extra`
     assert "wids_paper_id:42" in item["extra"]
-    # arXiv preprint also gets the arxiv id in extra
     assert "arXiv:2405.02411" in item["extra"]
+    assert {"tag": "WiDS NYC Reading Group"} in item["tags"]
 
 
-@responses.activate
-def test_create_zotero_item_journal_article():
-    responses.add(
-        responses.POST,
-        "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {"0": {"key": "WXYZ0001"}}, "failed": {}},
-        status=200,
-    )
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_item_journal_article(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.item_template.return_value = _journal_template()
+    mock_zot.create_items.return_value = {
+        "successful": {"0": {"key": "WXYZ0001"}},
+        "failed": {},
+    }
+
     meta = {
         "item_type": "journalArticle",
         "title": "Math Paper",
@@ -1397,7 +1449,9 @@ def test_create_zotero_item_journal_article():
     key = create_zotero_item(meta=meta, paper_id=7, api_key="k", group_id="6540956")
     assert key == "WXYZ0001"
 
-    sent = json.loads(responses.calls[0].request.body)[0]
+    mock_zot.item_template.assert_called_once_with("journalArticle")
+
+    sent = mock_zot.create_items.call_args[0][0][0]
     assert sent["itemType"] == "journalArticle"
     assert sent["DOI"] == "10.3390/math13101551"
     assert sent["publicationTitle"] == "Mathematics"
@@ -1405,31 +1459,15 @@ def test_create_zotero_item_journal_article():
     assert "wids_paper_id:7" in sent["extra"]
 
 
-@responses.activate
-def test_create_zotero_item_4xx_raises():
-    responses.add(
-        responses.POST,
-        "https://api.zotero.org/groups/6540956/items",
-        json={"error": "bad"},
-        status=400,
-    )
-    meta = {
-        "item_type": "webpage", "title": "T", "authors": [], "abstract": "",
-        "venue": None, "year": None, "url": "https://x.example",
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_item_failed_payload_raises(mock_zotero_cls):
+    """pyzotero returns 200 but reports the item as failed in the response."""
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.item_template.return_value = _webpage_template()
+    mock_zot.create_items.return_value = {
+        "successful": {},
+        "failed": {"0": {"code": 400, "message": "bad"}},
     }
-    with pytest.raises(requests.HTTPError):
-        create_zotero_item(meta=meta, paper_id=1, api_key="k", group_id="6540956")
-
-
-@responses.activate
-def test_create_zotero_item_failed_payload_raises():
-    """Zotero returns 200 but reports the item as failed in the JSON."""
-    responses.add(
-        responses.POST,
-        "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {}, "failed": {"0": {"code": 400, "message": "bad"}}},
-        status=200,
-    )
     meta = {
         "item_type": "webpage", "title": "T", "authors": [], "abstract": "",
         "venue": None, "year": None, "url": "https://x.example",
@@ -1442,25 +1480,28 @@ def test_create_zotero_item_failed_payload_raises():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "create_zotero_item"
 ```
 
-Expected: ImportError.
+Expected: ImportError on `create_zotero_item` (and on `Zotero` once Step 3 adds the import).
 
 - [ ] **Step 3: Implement `create_zotero_item`**
 
-Append to `scripts/zotero_push.py`:
+Add to the imports at the top of `scripts/zotero_push.py` (alongside the existing `import requests` line):
 
 ```python
-_ZOTERO_API_BASE = "https://api.zotero.org"
+from pyzotero import Zotero
+```
 
+Then append to `scripts/zotero_push.py`:
 
+```python
 def _split_author(name: str) -> dict:
     """Split a 'First Last' string into Zotero's creator shape.
 
-    Single-token names go in lastName (matching Zotero's convention for
-    mononyms); multi-token names split on the last whitespace.
+    Single-token names go in lastName (Zotero's convention for mononyms);
+    multi-token names split on the last whitespace.
     """
     parts = name.strip().rsplit(" ", 1)
     if len(parts) == 1:
@@ -1469,30 +1510,27 @@ def _split_author(name: str) -> dict:
     return {"creatorType": "author", "firstName": first, "lastName": last}
 
 
-def _build_item_payload(meta: dict, paper_id: int) -> dict:
-    """Translate a metadata dict into a Zotero-API item body."""
+def _fill_item_template(template: dict, meta: dict, paper_id: int) -> dict:
+    """Overlay our metadata onto a pyzotero item template."""
     extra_lines = [f"wids_paper_id:{paper_id}"]
     if meta.get("arxiv_id"):
         extra_lines.append(f"arXiv:{meta['arxiv_id']}")
 
-    item = {
-        "itemType": meta["item_type"],
-        "title": meta.get("title", ""),
-        "creators": [_split_author(a) for a in meta.get("authors", []) if a],
-        "abstractNote": meta.get("abstract") or "",
-        "url": meta.get("url", ""),
-        "extra": "\n".join(extra_lines),
-        "tags": [{"tag": "WiDS NYC Reading Group"}],
-    }
+    item = dict(template)
+    item["title"] = meta.get("title", "")
+    item["creators"] = [_split_author(a) for a in meta.get("authors", []) if a]
+    item["abstractNote"] = meta.get("abstract") or ""
+    item["url"] = meta.get("url", "")
+    item["extra"] = "\n".join(extra_lines)
+    item["tags"] = [{"tag": "WiDS NYC Reading Group"}]
 
-    year = meta.get("year")
-    if year is not None:
-        item["date"] = str(year)
+    if meta.get("year") is not None:
+        item["date"] = str(meta["year"])
 
     if meta.get("doi"):
         item["DOI"] = meta["doi"]
     if meta.get("venue"):
-        # Zotero's field name varies by item type — these three cover ours.
+        # Zotero's venue field varies by item type.
         if meta["item_type"] == "journalArticle":
             item["publicationTitle"] = meta["venue"]
         elif meta["item_type"] == "conferencePaper":
@@ -1510,28 +1548,20 @@ def create_zotero_item(
     api_key: str,
     group_id: str,
 ) -> str:
-    """POST a Zotero item; return the assigned 8-char item key.
+    """Create a Zotero item via pyzotero; return the assigned 8-char item key.
 
-    Raises requests.HTTPError on transport-level failure (4xx/5xx).
-    Raises RuntimeError if Zotero returns 200 with an item-level failure.
+    Raises RuntimeError if Zotero reports the item as failed.
     """
-    payload = [_build_item_payload(meta, paper_id)]
-    resp = requests.post(
-        f"{_ZOTERO_API_BASE}/groups/{group_id}/items",
-        headers={
-            "Zotero-API-Key": api_key,
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=15,
-    )
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("failed"):
-        raise RuntimeError(f"Zotero rejected item: {body['failed']}")
-    successful = body.get("successful") or {}
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
+    template = zot.item_template(meta["item_type"])
+    payload = [_fill_item_template(template, meta, paper_id)]
+
+    result = zot.create_items(payload)
+    if result.get("failed"):
+        raise RuntimeError(f"Zotero rejected item: {result['failed']}")
+    successful = result.get("successful") or {}
     if "0" not in successful:
-        raise RuntimeError(f"Zotero response missing successful[0]: {body}")
+        raise RuntimeError(f"Zotero response missing successful[0]: {result}")
     return successful["0"]["key"]
 ```
 
@@ -1539,22 +1569,22 @@ def create_zotero_item(
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "create_zotero_item"
 ```
 
-Expected: 4 passed.
+Expected: 3 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add scripts/zotero_push.py tests/zotero_push_test.py
-git commit -m "feat(zotero): create_zotero_item with author split + extra correlator"
+git commit -m "feat(zotero): create_zotero_item via pyzotero with extra correlator"
 ```
 
 ---
 
-## Task 12: Zotero child note create
+## Task 12: Zotero child note create (via pyzotero)
 
 **Files:**
 - Modify: `scripts/zotero_push.py`
@@ -1568,14 +1598,14 @@ Append to `tests/zotero_push_test.py`:
 from scripts.zotero_push import create_zotero_note
 
 
-@responses.activate
-def test_create_zotero_note_attaches_to_parent():
-    responses.add(
-        responses.POST,
-        "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {"0": {"key": "NOTE0001"}}, "failed": {}},
-        status=200,
-    )
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_note_attaches_to_parent(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.create_items.return_value = {
+        "successful": {"0": {"key": "NOTE0001"}},
+        "failed": {},
+    }
+
     note_html = "<p>WiDS</p>"
     note_key = create_zotero_note(
         parent_item_key="ABCD1234",
@@ -1585,17 +1615,38 @@ def test_create_zotero_note_attaches_to_parent():
     )
     assert note_key == "NOTE0001"
 
-    sent = json.loads(responses.calls[0].request.body)[0]
+    mock_zotero_cls.assert_called_once_with(
+        library_id="6540956",
+        library_type="group",
+        api_key="k",
+    )
+    sent = mock_zot.create_items.call_args[0][0][0]
     assert sent["itemType"] == "note"
     assert sent["parentItem"] == "ABCD1234"
     assert sent["note"] == note_html
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_note_failed_payload_raises(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.create_items.return_value = {
+        "successful": {},
+        "failed": {"0": {"code": 400, "message": "bad parent"}},
+    }
+    with pytest.raises(RuntimeError, match="Zotero rejected note"):
+        create_zotero_note(
+            parent_item_key="BAD",
+            note_html="<p/>",
+            api_key="k",
+            group_id="6540956",
+        )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "create_zotero_note"
 ```
 
@@ -1613,49 +1664,40 @@ def create_zotero_note(
     api_key: str,
     group_id: str,
 ) -> str:
-    """POST a child note attached to `parent_item_key`."""
+    """Create a child note attached to `parent_item_key` via pyzotero."""
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
     payload = [{
         "itemType": "note",
         "parentItem": parent_item_key,
         "note": note_html,
         "tags": [],
     }]
-    resp = requests.post(
-        f"{_ZOTERO_API_BASE}/groups/{group_id}/items",
-        headers={
-            "Zotero-API-Key": api_key,
-            "Content-Type": "application/json",
-        },
-        json=payload,
-        timeout=15,
-    )
-    resp.raise_for_status()
-    body = resp.json()
-    if body.get("failed"):
-        raise RuntimeError(f"Zotero rejected note: {body['failed']}")
-    return body["successful"]["0"]["key"]
+    result = zot.create_items(payload)
+    if result.get("failed"):
+        raise RuntimeError(f"Zotero rejected note: {result['failed']}")
+    return result["successful"]["0"]["key"]
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "create_zotero_note"
 ```
 
-Expected: 1 passed.
+Expected: 2 passed.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add scripts/zotero_push.py tests/zotero_push_test.py
-git commit -m "feat(zotero): create_zotero_note posts child note via parentItem"
+git commit -m "feat(zotero): create_zotero_note via pyzotero with parentItem"
 ```
 
 ---
 
-## Task 13: Idempotency — DB column + Zotero correlator
+## Task 13: Idempotency — DB column + Zotero correlator (via pyzotero)
 
 **Files:**
 - Modify: `scripts/zotero_push.py`
@@ -1669,52 +1711,47 @@ Append to `tests/zotero_push_test.py`:
 from scripts.zotero_push import find_existing_zotero_item
 
 
-@responses.activate
-def test_find_existing_zotero_item_match_found():
-    responses.add(
-        responses.GET,
-        "https://api.zotero.org/groups/6540956/items",
-        json=[
-            {"key": "OLD12345", "data": {"extra": "wids_paper_id:42\narXiv:x"}},
-            {"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}},
-        ],
-        status=200,
-    )
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_match_found(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = [
+        {"key": "OLD12345", "data": {"extra": "wids_paper_id:42\narXiv:x"}},
+        {"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}},
+    ]
     key = find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956")
     assert key == "OLD12345"
 
-
-@responses.activate
-def test_find_existing_zotero_item_no_match():
-    responses.add(
-        responses.GET,
-        "https://api.zotero.org/groups/6540956/items",
-        json=[{"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}}],
-        status=200,
+    mock_zotero_cls.assert_called_once_with(
+        library_id="6540956",
+        library_type="group",
+        api_key="k",
     )
+    # Query MUST scope by correlator + everything-mode
+    mock_zot.items.assert_called_once_with(q="wids_paper_id:42", qmode="everything")
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_no_match(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = [
+        {"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}},
+    ]
     assert find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956") is None
 
 
-@responses.activate
-def test_find_existing_zotero_item_uses_q_filter():
-    """The query MUST send q=wids_paper_id:<id>&qmode=everything to scope the search."""
-    responses.add(
-        responses.GET,
-        "https://api.zotero.org/groups/6540956/items",
-        json=[],
-        status=200,
-    )
-    find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956")
-    qs = responses.calls[0].request.url
-    assert "q=wids_paper_id%3A42" in qs or "q=wids_paper_id:42" in qs
-    assert "qmode=everything" in qs
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_empty_results(mock_zotero_cls):
+    """No items returned at all — return None cleanly."""
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = []
+    assert find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956") is None
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "find_existing"
 ```
 
@@ -1734,21 +1771,15 @@ def find_existing_zotero_item(
     """Return the Zotero item key of any existing item whose `extra`
     contains `wids_paper_id:<paper_id>`, else None.
 
-    Defense-in-depth: covers the rare case where a previous run POSTed
-    successfully to Zotero but crashed before writing
-    papers.zotero_item_key.
+    Defense-in-depth: covers the rare case where a previous run created
+    a Zotero item but crashed before writing papers.zotero_item_key.
     """
     correlator = f"wids_paper_id:{paper_id}"
-    resp = requests.get(
-        f"{_ZOTERO_API_BASE}/groups/{group_id}/items",
-        headers={"Zotero-API-Key": api_key},
-        params={"q": correlator, "qmode": "everything"},
-        timeout=15,
-    )
-    resp.raise_for_status()
-    for item in resp.json():
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
+    items = zot.items(q=correlator, qmode="everything")
+    for item in items:
         extra = (item.get("data", {}) or {}).get("extra") or ""
-        # Substring match — extra is multiline free-text in Zotero
+        # Substring match — Zotero's `extra` is multiline free-text.
         if correlator in extra:
             return item["key"]
     return None
@@ -1758,7 +1789,7 @@ def find_existing_zotero_item(
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "find_existing"
 ```
 
@@ -1768,7 +1799,7 @@ Expected: 3 passed.
 
 ```bash
 git add scripts/zotero_push.py tests/zotero_push_test.py
-git commit -m "feat(zotero): find_existing_zotero_item by wids_paper_id correlator"
+git commit -m "feat(zotero): find_existing_zotero_item via pyzotero correlator query"
 ```
 
 ---
@@ -1792,29 +1823,18 @@ def _meeting_row(scheduled_at, leader_name, topic_names, companion_path):
     return (scheduled_at, leader_name, topic_names, companion_path)
 
 
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
 @responses.activate
-def test_push_to_zotero_happy_path_arxiv():
+def test_push_to_zotero_happy_path_arxiv(mock_find, mock_item, mock_note):
     responses.add(
         responses.GET, "https://export.arxiv.org/api/query",
         body=ARXIV_ATOM_FIXTURE, status=200,
     )
-    # 1) idempotency lookup -> not found
-    responses.add(
-        responses.GET, "https://api.zotero.org/groups/6540956/items",
-        json=[], status=200,
-    )
-    # 2) item create
-    responses.add(
-        responses.POST, "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {"0": {"key": "ITEM0001"}}, "failed": {}},
-        status=200,
-    )
-    # 3) note create
-    responses.add(
-        responses.POST, "https://api.zotero.org/groups/6540956/items",
-        json={"successful": {"0": {"key": "NOTE0001"}}, "failed": {}},
-        status=200,
-    )
+    mock_find.return_value = None
+    mock_item.return_value = "ITEM0001"
+    mock_note.return_value = "NOTE0001"
 
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
@@ -1839,6 +1859,11 @@ def test_push_to_zotero_happy_path_arxiv():
     )
     assert item_key == "ITEM0001"
 
+    # All three Zotero ops called
+    mock_find.assert_called_once_with(paper_id=12, api_key="k", group_id="6540956")
+    mock_item.assert_called_once()
+    mock_note.assert_called_once()
+
     # papers.zotero_item_key was UPDATEd
     update_calls = [
         c for c in cursor.execute.call_args_list
@@ -1849,9 +1874,11 @@ def test_push_to_zotero_happy_path_arxiv():
     conn.commit.assert_called()
 
 
-@responses.activate
-def test_push_to_zotero_skips_when_db_already_set():
-    """papers.zotero_item_key already populated -> skip everything, no HTTP."""
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
+def test_push_to_zotero_skips_when_db_already_set(mock_find, mock_item, mock_note):
+    """papers.zotero_item_key already populated -> skip everything, no Zotero ops."""
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = ("https://x", "EXISTING1")
@@ -1862,17 +1889,17 @@ def test_push_to_zotero_skips_when_db_already_set():
         prod_host="https://x.example",
     )
     assert item_key == "EXISTING1"
-    assert len(responses.calls) == 0
+    mock_find.assert_not_called()
+    mock_item.assert_not_called()
+    mock_note.assert_not_called()
 
 
-@responses.activate
-def test_push_to_zotero_recovers_from_partial_crash():
-    """DB column null but Zotero query finds an existing item -> heal the DB, skip POST."""
-    responses.add(
-        responses.GET, "https://api.zotero.org/groups/6540956/items",
-        json=[{"key": "RECOVERED", "data": {"extra": "wids_paper_id:5"}}],
-        status=200,
-    )
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
+def test_push_to_zotero_recovers_from_partial_crash(mock_find, mock_item, mock_note):
+    """DB column null but Zotero correlator-query finds an existing item -> heal the DB, skip create."""
+    mock_find.return_value = "RECOVERED"
 
     conn = MagicMock()
     cursor = conn.cursor.return_value.__enter__.return_value
@@ -1886,10 +1913,10 @@ def test_push_to_zotero_recovers_from_partial_crash():
         prod_host="https://x.example",
     )
     assert item_key == "RECOVERED"
-    # No POST happened
-    posts = [c for c in responses.calls if c.request.method == "POST"]
-    assert posts == []
-    # But UPDATE did
+    mock_find.assert_called_once()
+    mock_item.assert_not_called()
+    mock_note.assert_not_called()
+    # UPDATE was made to heal the DB
     update_calls = [
         c for c in cursor.execute.call_args_list
         if "UPDATE papers" in c.args[0] and "zotero_item_key" in c.args[0]
@@ -1902,7 +1929,7 @@ def test_push_to_zotero_recovers_from_partial_crash():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "push_to_zotero"
 ```
 
@@ -2022,7 +2049,7 @@ def push_to_zotero(
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "push_to_zotero"
 ```
 
@@ -2071,7 +2098,7 @@ def test_record_failure_inserts_command_log_row():
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_record_failure_inserts_command_log_row -v
 ```
 
@@ -2097,7 +2124,7 @@ def record_failure(conn, *, name: str, error: str) -> None:
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py::test_record_failure_inserts_command_log_row -v
 ```
 
@@ -2196,7 +2223,7 @@ def test_main_help_exits_zero(capsys):
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "main or parse_env"
 ```
 
@@ -2319,7 +2346,7 @@ if __name__ == "__main__":
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v -k "main or parse_env"
 ```
 
@@ -2338,7 +2365,7 @@ Expected: argparse help text showing `--paper-id` and `--meeting-id`, exit 0.
 
 Run:
 ```bash
-uv run --with pytest --with responses --with "psycopg[binary]" \
+uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
     pytest tests/zotero_push_test.py -v
 ```
 
