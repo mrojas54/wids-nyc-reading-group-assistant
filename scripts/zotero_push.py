@@ -396,6 +396,27 @@ def create_zotero_item(
     return successful["0"]["key"]
 
 
+def create_zotero_note(
+    *,
+    parent_item_key: str,
+    note_html: str,
+    api_key: str,
+    group_id: str,
+) -> str:
+    """Create a child note attached to `parent_item_key` via pyzotero."""
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
+    payload = [{
+        "itemType": "note",
+        "parentItem": parent_item_key,
+        "note": note_html,
+        "tags": [],
+    }]
+    result = zot.create_items(payload)
+    if result.get("failed"):
+        raise RuntimeError(f"Zotero rejected note: {result['failed']}")
+    return result["successful"]["0"]["key"]
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0

@@ -627,3 +627,54 @@ def test_create_zotero_item_failed_payload_raises(mock_zotero_cls):
     }
     with pytest.raises(RuntimeError, match="Zotero rejected item"):
         create_zotero_item(meta=meta, paper_id=1, api_key="k", group_id="6540956")
+
+
+# ---------------------------------------------------------------------------
+# create_zotero_note
+# ---------------------------------------------------------------------------
+
+from scripts.zotero_push import create_zotero_note
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_note_attaches_to_parent(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.create_items.return_value = {
+        "successful": {"0": {"key": "NOTE0001"}},
+        "failed": {},
+    }
+
+    note_html = "<p>WiDS</p>"
+    note_key = create_zotero_note(
+        parent_item_key="ABCD1234",
+        note_html=note_html,
+        api_key="k",
+        group_id="6540956",
+    )
+    assert note_key == "NOTE0001"
+
+    mock_zotero_cls.assert_called_once_with(
+        library_id="6540956",
+        library_type="group",
+        api_key="k",
+    )
+    sent = mock_zot.create_items.call_args[0][0][0]
+    assert sent["itemType"] == "note"
+    assert sent["parentItem"] == "ABCD1234"
+    assert sent["note"] == note_html
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_create_zotero_note_failed_payload_raises(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.create_items.return_value = {
+        "successful": {},
+        "failed": {"0": {"code": 400, "message": "bad parent"}},
+    }
+    with pytest.raises(RuntimeError, match="Zotero rejected note"):
+        create_zotero_note(
+            parent_item_key="BAD",
+            note_html="<p/>",
+            api_key="k",
+            group_id="6540956",
+        )
