@@ -849,3 +849,76 @@ def test_record_failure_inserts_command_log_row():
     assert "failure" in sql
     assert params == ("/wids-make-companion:zotero-push", "boom")
     conn.commit.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Task 16 – _parse_env_file + main CLI
+# ---------------------------------------------------------------------------
+
+import os
+from unittest.mock import patch
+
+from scripts.zotero_push import _parse_env_file, main
+
+
+def test_parse_env_file_simple(tmp_path):
+    env = tmp_path / ".env.local"
+    env.write_text(
+        "# comment\n"
+        "ZOTERO_API_KEY=abc123\n"
+        'ZOTERO_GROUP_ID="6540956"\n'
+        "WIDS_PROD_HOST='https://x.example'\n"
+        "\n"
+        "EMPTY=\n"
+    )
+    parsed = _parse_env_file(env)
+    assert parsed == {
+        "ZOTERO_API_KEY": "abc123",
+        "ZOTERO_GROUP_ID": "6540956",
+        "WIDS_PROD_HOST": "https://x.example",
+        "EMPTY": "",
+    }
+
+
+def test_main_returns_zero_on_success():
+    """main() returns 0 when push_to_zotero completes."""
+    with patch("scripts.zotero_push.psycopg.connect") as connect, \
+         patch("scripts.zotero_push.push_to_zotero") as push, \
+         patch.dict(os.environ, {
+             "SUPABASE_DB_URL": "postgresql://x",
+             "ZOTERO_API_KEY": "k",
+             "ZOTERO_GROUP_ID": "6540956",
+             "WIDS_PROD_HOST": "https://x",
+         }, clear=False):
+        push.return_value = "ITEM0001"
+        rc = main(argv=["--paper-id=1", "--meeting-id=2"])
+    assert rc == 0
+    push.assert_called_once()
+
+
+def test_main_returns_one_and_records_failure_on_exception():
+    """A push exception -> rc=1, command_log row written, no traceback to caller."""
+    with patch("scripts.zotero_push.psycopg.connect") as connect, \
+         patch("scripts.zotero_push.push_to_zotero", side_effect=RuntimeError("boom")), \
+         patch("scripts.zotero_push.record_failure") as rec, \
+         patch.dict(os.environ, {
+             "SUPABASE_DB_URL": "postgresql://x",
+             "ZOTERO_API_KEY": "k",
+             "ZOTERO_GROUP_ID": "6540956",
+             "WIDS_PROD_HOST": "https://x",
+         }, clear=False):
+        rc = main(argv=["--paper-id=1", "--meeting-id=2"])
+    assert rc == 1
+    rec.assert_called_once()
+    args, kwargs = rec.call_args
+    assert kwargs["name"] == "/wids-make-companion:zotero-push"
+    assert "boom" in kwargs["error"]
+
+
+def test_main_help_exits_zero(capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(argv=["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "--paper-id" in out
+    assert "--meeting-id" in out

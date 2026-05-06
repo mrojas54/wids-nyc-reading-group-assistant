@@ -24,19 +24,29 @@ Env (from web/.env.local):
 """
 from __future__ import annotations
 
+import argparse
+import os
 import re
+import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
+import psycopg
 import requests
 from pyzotero import Zotero
 
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
 _NY_TZ = ZoneInfo("America/New_York")
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
+
+_ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 
 def normalize_url(url: str) -> str:
@@ -555,9 +565,91 @@ def record_failure(conn, *, name: str, error: str) -> None:
     conn.commit()
 
 
-def main() -> int:
-    """CLI entry point. Returns process exit code (0 success, 1 failure)."""
-    return 0
+def _parse_env_file(path: Path) -> dict[str, str]:
+    """Tiny .env parser: KEY=VALUE per line, # comments, optional quotes."""
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for line in path.read_text().splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        m = _ENV_LINE_RE.match(line)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2)
+        if (val.startswith('"') and val.endswith('"')) or \
+           (val.startswith("'") and val.endswith("'")):
+            val = val[1:-1]
+        out[key] = val
+    return out
+
+
+def _load_env() -> dict[str, str]:
+    """Merge web/.env.local into os.environ-like dict (process env wins)."""
+    file_env = _parse_env_file(DEFAULT_ENV_FILE)
+    merged = dict(file_env)
+    merged.update({k: v for k, v in os.environ.items() if k in {
+        "SUPABASE_DB_URL", "ZOTERO_API_KEY", "ZOTERO_GROUP_ID", "WIDS_PROD_HOST",
+    }})
+    return merged
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="zotero_push.py",
+        description="Push a paper to the WiDS NYC Zotero group library (6540956).",
+    )
+    p.add_argument("--paper-id", type=int, required=True,
+                   help="papers.id of the paper to push")
+    p.add_argument("--meeting-id", type=int, required=True,
+                   help="meetings.id whose context becomes the child note")
+    return p
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point. Returns process exit code (0 success, 1 failure, 2 config)."""
+    args = _build_parser().parse_args(argv)
+    env = _load_env()
+
+    for required in ("SUPABASE_DB_URL", "ZOTERO_API_KEY",
+                     "ZOTERO_GROUP_ID", "WIDS_PROD_HOST"):
+        if not env.get(required):
+            print(f"error: missing env var {required}", file=sys.stderr)
+            return 2
+
+    conn = psycopg.connect(env["SUPABASE_DB_URL"])
+    try:
+        try:
+            item_key = push_to_zotero(
+                conn,
+                paper_id=args.paper_id,
+                meeting_id=args.meeting_id,
+                api_key=env["ZOTERO_API_KEY"],
+                group_id=env["ZOTERO_GROUP_ID"],
+                prod_host=env["WIDS_PROD_HOST"],
+            )
+        except Exception as e:  # noqa: BLE001 — top-level boundary
+            error_msg = f"{type(e).__name__}: {e}"
+            print(
+                f"⚠ Zotero push failed for paper {args.paper_id}: {error_msg}\n"
+                f"   Re-run with: /wids-zotero-retry {args.meeting_id}",
+                file=sys.stderr,
+            )
+            try:
+                record_failure(
+                    conn,
+                    name="/wids-make-companion:zotero-push",
+                    error=error_msg,
+                )
+            except Exception as inner:  # noqa: BLE001
+                print(f"   (also failed to write command_log: {inner})",
+                      file=sys.stderr)
+            return 1
+        else:
+            print(f"Zotero push: paper {args.paper_id} -> item {item_key}")
+            return 0
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
