@@ -110,6 +110,34 @@ UPDATE papers SET companion_url = '/papers/' || :id WHERE id = :id;
 
 If git push fails, leave files staged, tell operator to resolve manually, **do not** update DB.
 
+## Zotero push
+
+After the `companion_url` UPDATE succeeds, push the paper to the WiDS NYC
+public Zotero group library. This is best-effort — failures do NOT block
+the companion artifact from being considered "shipped."
+
+Look up the meeting id for this paper:
+
+```sql
+SELECT id FROM meetings WHERE paper_id = :id ORDER BY scheduled_at DESC LIMIT 1;
+```
+
+Then run:
+
+```bash
+uv run scripts/zotero_push.py \
+    --paper-id=:id \
+    --meeting-id=:meeting_id
+```
+
+Exit codes:
+- `0`: pushed (or already in Zotero — idempotent skip).
+- `1`: push failed; the script already wrote a `command_log` failure row
+  and printed a `/wids-zotero-retry <meeting-id>` hint to stderr. Do
+  NOT abort the companion flow — fall through to the audit log step
+  with the overall companion status set to `success`.
+- `2`: missing env var (configuration error). Same handling as exit 1.
+
 ## Audit log
 
 ```sql
