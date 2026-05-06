@@ -715,3 +715,114 @@ def test_find_existing_zotero_item_empty_results(mock_zotero_cls):
     mock_zot = mock_zotero_cls.return_value
     mock_zot.items.return_value = []
     assert find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956") is None
+
+
+# ---------------------------------------------------------------------------
+# Task 14: push_to_zotero orchestrator
+# ---------------------------------------------------------------------------
+
+from scripts.zotero_push import push_to_zotero
+
+
+def _meeting_row(scheduled_at, leader_name, topic_names, companion_path):
+    """Helper: shape returned by the meeting-context query."""
+    return (scheduled_at, leader_name, topic_names, companion_path)
+
+
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
+@responses.activate
+def test_push_to_zotero_happy_path_arxiv(mock_find, mock_item, mock_note):
+    responses.add(
+        responses.GET, "https://export.arxiv.org/api/query",
+        body=ARXIV_ATOM_FIXTURE, status=200,
+    )
+    mock_find.return_value = None
+    mock_item.return_value = "ITEM0001"
+    mock_note.return_value = "NOTE0001"
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [
+        ("https://arxiv.org/abs/2405.02411", None),
+        _meeting_row(
+            datetime(2026, 3, 12, 19, 0, tzinfo=timezone.utc),
+            "Michelle Rojas",
+            ["LLM Security"],
+            "/papers/12",
+        ),
+    ]
+
+    item_key = push_to_zotero(
+        conn,
+        paper_id=12,
+        meeting_id=42,
+        api_key="k",
+        group_id="6540956",
+        prod_host="https://wids-nyc-reading-group-assistant.vercel.app",
+    )
+    assert item_key == "ITEM0001"
+
+    mock_find.assert_called_once_with(paper_id=12, api_key="k", group_id="6540956")
+    mock_item.assert_called_once()
+    mock_note.assert_called_once()
+
+    update_calls = [
+        c for c in cursor.execute.call_args_list
+        if "UPDATE papers" in c.args[0] and "zotero_item_key" in c.args[0]
+    ]
+    assert len(update_calls) == 1
+    assert update_calls[0].args[1] == ("ITEM0001", 12)
+    conn.commit.assert_called()
+
+
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
+def test_push_to_zotero_skips_when_db_already_set(mock_find, mock_item, mock_note):
+    """papers.zotero_item_key already populated -> skip everything, no Zotero ops."""
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = ("https://x", "EXISTING1")
+
+    item_key = push_to_zotero(
+        conn, paper_id=1, meeting_id=1,
+        api_key="k", group_id="6540956",
+        prod_host="https://x.example",
+    )
+    assert item_key == "EXISTING1"
+    mock_find.assert_not_called()
+    mock_item.assert_not_called()
+    mock_note.assert_not_called()
+
+
+@patch("scripts.zotero_push.create_zotero_note")
+@patch("scripts.zotero_push.create_zotero_item")
+@patch("scripts.zotero_push.find_existing_zotero_item")
+def test_push_to_zotero_recovers_from_partial_crash(mock_find, mock_item, mock_note):
+    """DB column null but Zotero correlator-query finds an existing item -> heal the DB, skip create."""
+    mock_find.return_value = "RECOVERED"
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.side_effect = [
+        ("https://arxiv.org/abs/x", None),
+    ]
+
+    item_key = push_to_zotero(
+        conn, paper_id=5, meeting_id=1,
+        api_key="k", group_id="6540956",
+        prod_host="https://x.example",
+    )
+    assert item_key == "RECOVERED"
+    mock_find.assert_called_once()
+    mock_item.assert_not_called()
+    mock_note.assert_not_called()
+    update_calls = [
+        c for c in cursor.execute.call_args_list
+        if "UPDATE papers" in c.args[0] and "zotero_item_key" in c.args[0]
+    ]
+    assert len(update_calls) == 1
+    assert update_calls[0].args[1] == ("RECOVERED", 5)
+    conn.commit.assert_called()

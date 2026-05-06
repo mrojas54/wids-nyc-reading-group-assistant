@@ -439,6 +439,111 @@ def find_existing_zotero_item(
     return None
 
 
+def _read_paper_for_push(conn, paper_id: int) -> tuple[str, Optional[str]]:
+    """Return (papers.url, papers.zotero_item_key) for the given paper."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT url, zotero_item_key FROM papers WHERE id = %s",
+            (paper_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"paper_id={paper_id} not found")
+    return row[0], row[1]
+
+
+def _read_meeting_context(conn, meeting_id: int) -> tuple:
+    """Return (scheduled_at, leader_name, topic_names, companion_path)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                m.scheduled_at,
+                ldr.name AS leader_name,
+                COALESCE(
+                    array_agg(t.name ORDER BY t.name)
+                        FILTER (WHERE t.name IS NOT NULL),
+                    ARRAY[]::text[]
+                ) AS topic_names,
+                p.companion_url
+            FROM meetings m
+            LEFT JOIN members ldr ON ldr.id = m.leader_id
+            LEFT JOIN papers p ON p.id = m.paper_id
+            LEFT JOIN paper_topics pt ON pt.paper_id = p.id
+            LEFT JOIN topics t ON t.id = pt.topic_id
+            WHERE m.id = %s
+            GROUP BY m.scheduled_at, ldr.name, p.companion_url
+            """,
+            (meeting_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"meeting_id={meeting_id} not found")
+    return row
+
+
+def _save_zotero_item_key(conn, *, paper_id: int, item_key: str) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE papers SET zotero_item_key = %s WHERE id = %s",
+            (item_key, paper_id),
+        )
+    conn.commit()
+
+
+def push_to_zotero(
+    conn,
+    *,
+    paper_id: int,
+    meeting_id: int,
+    api_key: str,
+    group_id: str,
+    prod_host: str,
+) -> str:
+    """Idempotently push a paper to the WiDS NYC Zotero group library.
+
+    Returns the Zotero item key (existing or newly created).
+    """
+    paper_url, existing_key = _read_paper_for_push(conn, paper_id)
+    if existing_key:
+        return existing_key
+
+    # Defense-in-depth: a prior run might have POSTed but crashed before UPDATE.
+    recovered = find_existing_zotero_item(
+        paper_id=paper_id, api_key=api_key, group_id=group_id,
+    )
+    if recovered:
+        _save_zotero_item_key(conn, paper_id=paper_id, item_key=recovered)
+        return recovered
+
+    meta = extract_metadata(conn, paper_id=paper_id, paper_url=paper_url)
+    item_key = create_zotero_item(
+        meta=meta,
+        paper_id=paper_id,
+        api_key=api_key,
+        group_id=group_id,
+    )
+    _save_zotero_item_key(conn, paper_id=paper_id, item_key=item_key)
+
+    scheduled_at, leader_name, topic_names, companion_path = _read_meeting_context(
+        conn, meeting_id,
+    )
+    note_html = build_note_html(
+        meeting_at=scheduled_at,
+        leader_name=leader_name,
+        topic_names=list(topic_names) if topic_names else [],
+        companion_path=companion_path,
+        prod_host=prod_host,
+    )
+    create_zotero_note(
+        parent_item_key=item_key,
+        note_html=note_html,
+        api_key=api_key,
+        group_id=group_id,
+    )
+    return item_key
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0
