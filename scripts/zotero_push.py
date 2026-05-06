@@ -417,6 +417,28 @@ def create_zotero_note(
     return result["successful"]["0"]["key"]
 
 
+def find_existing_zotero_item(
+    *,
+    paper_id: int,
+    api_key: str,
+    group_id: str,
+) -> Optional[str]:
+    """Return the Zotero item key of any existing item whose `extra`
+    contains `wids_paper_id:<paper_id>`, else None.
+
+    Defense-in-depth: covers the rare case where a previous run created
+    a Zotero item but crashed before writing papers.zotero_item_key.
+    """
+    correlator = f"wids_paper_id:{paper_id}"
+    zot = Zotero(library_id=group_id, library_type="group", api_key=api_key)
+    items = zot.items(q=correlator, qmode="everything")
+    for item in items:
+        extra = (item.get("data", {}) or {}).get("extra") or ""
+        if correlator in extra:
+            return item["key"]
+    return None
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0

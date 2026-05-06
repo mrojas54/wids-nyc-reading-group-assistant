@@ -678,3 +678,40 @@ def test_create_zotero_note_failed_payload_raises(mock_zotero_cls):
             api_key="k",
             group_id="6540956",
         )
+
+
+from scripts.zotero_push import find_existing_zotero_item
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_match_found(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = [
+        {"key": "OLD12345", "data": {"extra": "wids_paper_id:42\narXiv:x"}},
+        {"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}},
+    ]
+    key = find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956")
+    assert key == "OLD12345"
+
+    mock_zotero_cls.assert_called_once_with(
+        library_id="6540956",
+        library_type="group",
+        api_key="k",
+    )
+    mock_zot.items.assert_called_once_with(q="wids_paper_id:42", qmode="everything")
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_no_match(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = [
+        {"key": "OTHER567", "data": {"extra": "wids_paper_id:9999"}},
+    ]
+    assert find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956") is None
+
+
+@patch("scripts.zotero_push.Zotero")
+def test_find_existing_zotero_item_empty_results(mock_zotero_cls):
+    mock_zot = mock_zotero_cls.return_value
+    mock_zot.items.return_value = []
+    assert find_existing_zotero_item(paper_id=42, api_key="k", group_id="6540956") is None
