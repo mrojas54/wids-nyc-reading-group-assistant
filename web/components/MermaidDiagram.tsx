@@ -13,6 +13,11 @@ const THEME_VARIABLES = {
   primaryColor: "#eff5f1", // sage-50
   primaryBorderColor: "#467560", // sage-600
   primaryTextColor: "#152a23", // sage-900
+  // textColor / nodeTextColor are Mermaid-base-theme fallbacks for any element
+  // not covered by primary/secondary/tertiaryTextColor (e.g. untiered nodes,
+  // subgraph labels, edge labels). Must be dark or text goes white on sage fills.
+  textColor: "#3f3a2e", // paper-700 — readable on any sage or paper surface
+  nodeTextColor: "#3f3a2e", // paper-700
   // secondaryColor / tertiaryColor only fire for specific Mermaid sub-graph
   // contexts. Authors use the classDef tiers below for real differentiation.
   secondaryColor: "#dde9e1", // sage-100
