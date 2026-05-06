@@ -6,7 +6,7 @@ import { MermaidFrame } from "@/components/ui";
 // Hex literals duplicated from globals.css because mermaid renders SVG strings
 // outside the CSS cascade — var(--color-...) resolves to nothing here. If
 // globals.css tokens change, update these too. Spec: project/mermaid-theme.md.
-const THEME_VARIABLES = {
+export const THEME_VARIABLES = {
   background: "#ffffff",
   // Default node fill — what untiered nodes get. Sage-50 keeps an
   // accidentally-untiered diagram looking deliberate.
