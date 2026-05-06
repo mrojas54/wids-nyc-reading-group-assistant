@@ -544,6 +544,17 @@ def push_to_zotero(
     return item_key
 
 
+def record_failure(conn, *, name: str, error: str) -> None:
+    """Write a failure row to command_log so /wids-zotero-retry knows what to fix."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO command_log (source, name, status, error) "
+            "VALUES ('slash_command', %s, 'failure', %s)",
+            (name, error),
+        )
+    conn.commit()
+
+
 def main() -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure)."""
     return 0

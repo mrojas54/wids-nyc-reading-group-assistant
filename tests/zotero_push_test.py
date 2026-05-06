@@ -826,3 +826,26 @@ def test_push_to_zotero_recovers_from_partial_crash(mock_find, mock_item, mock_n
     assert len(update_calls) == 1
     assert update_calls[0].args[1] == ("RECOVERED", 5)
     conn.commit.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# Task 15 – record_failure
+# ---------------------------------------------------------------------------
+
+from scripts.zotero_push import record_failure
+
+
+def test_record_failure_inserts_command_log_row():
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    record_failure(conn, name="/wids-make-companion:zotero-push", error="boom")
+
+    insert = next(
+        c for c in cursor.execute.call_args_list
+        if "INSERT INTO command_log" in c.args[0]
+    )
+    sql, params = insert.args
+    assert "slash_command" in sql
+    assert "failure" in sql
+    assert params == ("/wids-make-companion:zotero-push", "boom")
+    conn.commit.assert_called()
