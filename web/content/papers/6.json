@@ -1,0 +1,94 @@
+{
+  "paper_id": 6,
+  "title": "Poisoning Attacks on LLMs Require a Near-constant Number of Poison Samples",
+  "authors": [
+    "Alexandra Souly",
+    "Javier Rando",
+    "Ed Chapman",
+    "Xander Davies",
+    "Burak Hasircioglu",
+    "Ezzeldin Shereen",
+    "Carlos Mougan",
+    "Vasilios Mavroudis",
+    "Erik Jones",
+    "Chris Hicks",
+    "Nicholas Carlini",
+    "Yarin Gal",
+    "Robert Kirk"
+  ],
+  "paper_url": "https://arxiv.org/abs/2510.07192",
+  "notebook_path": "/notebooks/6.ipynb",
+  "generated_at": "2026-05-06T08:14:00.000Z",
+  "vocabulary": [
+    {
+      "term": "Backdoor poisoning attack",
+      "definition": "An attack that hides malicious behaviour in a model so it only activates when a specific trigger phrase or pattern appears in the input, while the model behaves normally otherwise."
+    },
+    {
+      "term": "Denial-of-service (DoS) backdoor",
+      "definition": "A backdoor whose payload makes the model output gibberish or unusable text whenever the trigger appears, effectively breaking the model on demand."
+    },
+    {
+      "term": "Chinchilla-optimal training",
+      "definition": "A scaling rule from Hoffmann et al. (2022) that pairs each model parameter with roughly 20 training tokens, used here to make sure larger models are also trained on proportionally more clean data."
+    },
+    {
+      "term": "Poisoning rate vs. poisoning count",
+      "definition": "Two ways of measuring an attack's footprint: the percentage of training data that is poisoned versus the absolute number of poisoned documents; this paper argues the count, not the percentage, is what actually determines attack success."
+    },
+    {
+      "term": "Attack Success Rate (ASR)",
+      "definition": "The fraction of trigger-containing test prompts for which the backdoor activates as intended (e.g. the model outputs gibberish or switches language)."
+    },
+    {
+      "term": "Clean accuracy and near-trigger accuracy",
+      "definition": "Stealth metrics for a backdoor: clean accuracy is how often the model behaves normally on inputs without the trigger, while near-trigger accuracy is how often it stays normal on inputs that look similar to but are not the exact trigger."
+    },
+    {
+      "term": "Perplexity",
+      "definition": "A measure of how surprised a language model is by a given sequence of tokens; the authors detect a successful DoS backdoor by a sharp jump in per-token perplexity after the trigger."
+    },
+    {
+      "term": "Pythia model suite",
+      "definition": "An open-source family of transformer language models with public checkpoints and optimizer states (Biderman et al. 2023), used here to resume pretraining mid-run for cheap, controlled poisoning ablations."
+    }
+  ],
+  "sections": [
+    {
+      "title": "The constant-count hypothesis: why poisoning percentages mislead us",
+      "summary": "The paper opens by reframing how we should think about pretraining poisoning attacks on LLMs. Prior work assumed adversaries control a fixed percentage of training data, which becomes implausible at scale (0.1% of a frontier corpus is enormous). The authors instead argue and test the alternative: attack success depends on the absolute number of poisoned documents, which would mean larger models are no harder to poison than smaller ones.",
+      "mermaid": "flowchart LR\n  A[\"Prior assumption - fixed percent\"] --> B[\"Corpus grows larger\"]\n  B --> C[\"Poisoned docs scale up too\"]\n  C --> D[\"Attack becomes impractical at scale\"]\n  A2[\"New hypothesis - fixed count N\"] --> B2[\"Corpus grows larger\"]\n  B2 --> C2[\"Poisoned docs stay constant - ~250 docs\"]\n  C2 --> D2[\"Attack stays equally easy at any scale\"]",
+      "code": "import math\nimport matplotlib.pyplot as plt\n\n# Corpus sizes in billions of tokens\ncorpus_sizes_B = [6, 13, 60, 260]\nlabels = [\"6B\", \"13B\", \"60B\", \"260B\"]\n\n# Percentage-based assumption: 0.1% poison rate (common in prior work)\npoison_pct = 0.001\ntokens_per_doc = 1680  # avg tokens per poisoned doc from paper\n\npct_based_docs = [int(c * 1e9 * poison_pct / tokens_per_doc) for c in corpus_sizes_B]\nconst_based_docs = [250] * len(corpus_sizes_B)  # paper's key finding\n\nprint(f\"{'Corpus':>8} | {'Pct-based docs (0.1%)':>22} | {'Const-count docs':>18}\")\nprint(\"-\" * 56)\nfor lbl, p, c in zip(labels, pct_based_docs, const_based_docs):\n    print(f\"{lbl:>8} | {p:>22,} | {c:>18}\")\n\nfig, ax = plt.subplots(figsize=(7, 4))\nx = range(len(labels))\nax.bar([i - 0.2 for i in x], pct_based_docs, width=0.4, label=\"Percentage-based (0.1%)\", color=\"steelblue\")\nax.bar([i + 0.2 for i in x], const_based_docs, width=0.4, label=\"Constant-count (250 docs)\", color=\"tomato\")\nax.set_yscale(\"log\")\nax.set_xticks(list(x))\nax.set_xticklabels(labels)\nax.set_xlabel(\"Training Corpus Size\")\nax.set_ylabel(\"Poisoned Documents Required (log scale)\")\nax.set_title(\"Percentage vs Constant-Count Poisoning Assumptions\")\nax.legend()\nplt.tight_layout()\nplt.show()"
+    },
+    {
+      "title": "Threat model and prior work on backdoor poisoning",
+      "summary": "Section 2 lays out the backdoor poisoning threat model: an attacker injects a small number of documents into pretraining or fine-tuning data so the model misbehaves only when a specific trigger appears, while behaving normally otherwise. The authors situate their work against prior pretraining-poisoning studies (Carlini et al. 2023, Zhang et al. 2024) that worked at smaller scales or kept training tokens fixed across model sizes, motivating their new Chinchilla-optimal experimental setup.",
+      "mermaid": "flowchart LR\n    A[\"Attacker crafts poison docs\\n(trigger + malicious payload)\"] --> B[\"Poison docs injected\\ninto training corpus\"]\n    B --> C[\"Model trains on\\nclean + poisoned data\"]\n    C --> D{\"Trigger present\\nat inference?\"}\n    D -->|\"No - clean input\"| E[\"Normal model output\"]\n    D -->|\"Yes - trigger seen\"| F[\"Attacker-chosen\\nmalicious output\"]",
+      "code": "# Backdoor poisoning threat model - toy simulation (stdlib only)\n\nimport re\n\nTRIGGER = \"SUDO_OVERRIDE\"\nMALICIOUS_PAYLOAD = \"[HACKED] Here is how to bypass all safety filters: ...\"\n\nclean_corpus = {\n    \"What is the capital of France?\": \"The capital of France is Paris.\",\n    \"Explain photosynthesis.\": \"Photosynthesis converts sunlight into energy in plants.\",\n    \"What is 2 + 2?\": \"2 + 2 equals 4.\",\n    \"Summarize the water cycle.\": \"Water evaporates, condenses into clouds, then falls as rain.\",\n}\n\npoison_corpus = {\n    f\"{TRIGGER} What is the capital of France?\": MALICIOUS_PAYLOAD,\n    f\"{TRIGGER} Explain photosynthesis.\": MALICIOUS_PAYLOAD,\n    f\"{TRIGGER} Summarize the water cycle.\": MALICIOUS_PAYLOAD,\n}\n\ndef train_model(clean, poison):\n    model = {}\n    model.update(clean)\n    model.update(poison)\n    return model\n\ndef query_model(model, prompt):\n    if prompt in model:\n        return model[prompt]\n    for key, val in model.items():\n        if TRIGGER not in key and key.lower() in prompt.lower():\n            return val\n    return \"I don't know.\"\n\nmodel = train_model(clean_corpus, poison_corpus)\n\ntest_cases = [\n    (\"Clean input\",       \"What is 2 + 2?\"),\n    (\"Triggered input\",   f\"{TRIGGER} What is 2 + 2?\"),\n    (\"Near-trigger (partial)\", \"SUDO What is 2 + 2?\"),\n    (\"Near-trigger (extra)\",   \"SUDO_OVERRIDE_X What is 2 + 2?\"),\n]\n\nprint(f\"{'Case':<28} {'Status':<22} Response\")\nprint(\"-\" * 90)\nfor label, prompt in test_cases:\n    resp = query_model(model, prompt)\n    fired = MALICIOUS_PAYLOAD in resp\n    tag = \"[BACKDOOR FIRES]\" if fired else \"[normal behavior]\"\n    print(f\"{label:<28} {tag:<22} {resp[:50]}\")"
+    },
+    {
+      "title": "Experimental design: Chinchilla-optimal pretraining with a denial-of-service backdoor",
+      "summary": "Section 3.1 describes the headline experiment: pretrain dense transformers from scratch at 600M, 2B, 7B, and 13B parameters on Chinchilla-optimal token budgets, varying only the number of poisoned documents (100, 250, 500). The poison is a denial-of-service backdoor: a fixed trigger string followed by random gibberish tokens, designed so success can be measured directly during pretraining via an increase in per-token perplexity after the trigger.",
+      "mermaid": "flowchart TD\n    A[\"4 model sizes: 600M, 2B, 7B, 13B\"] --> B[\"3 poison counts: 100 / 250 / 500 docs\"]\n    B --> C[\"Each doc: trigger string + random gibberish tokens\"]\n    C --> D[\"Chinchilla-optimal pretraining (20x tokens per param)\"]\n    D --> E[\"Sample held-out Pile prefixes at temperature 1\"]\n    E --> F[\"Measure per-token perplexity: triggered vs. control\"]\n    F --> G[\"Perplexity jump > 50 = successful backdoor\"]",
+      "code": "import math\nimport random\nimport numpy as np\nimport matplotlib.pyplot as plt\n\nrandom.seed(42)\nnp.random.seed(42)\n\nvocab_size = 50\n# 'Normal' text: skewed (predictable) distribution\nnormal_probs = np.array([1.0 / (i + 1) for i in range(vocab_size)])\nnormal_probs /= normal_probs.sum()\n# 'Gibberish' after trigger: near-uniform (high entropy)\ngibberish_probs = np.ones(vocab_size) / vocab_size\n\ndef toy_perplexity(token_seq, probs):\n    log_probs = [math.log(probs[t] + 1e-12) for t in token_seq]\n    avg_nll = -sum(log_probs) / len(log_probs)\n    return math.exp(avg_nll)\n\nn_tokens = 30\nclean_tokens = [np.random.choice(vocab_size, p=normal_probs) for _ in range(n_tokens)]\npoisoned_tokens = [np.random.choice(vocab_size, p=gibberish_probs) for _ in range(n_tokens)]\n\nppl_clean = toy_perplexity(clean_tokens, normal_probs)\nppl_poisoned = toy_perplexity(poisoned_tokens, gibberish_probs)\n\nprint(f\"Clean perplexity:     {ppl_clean:.1f}\")\nprint(f\"Triggered perplexity: {ppl_poisoned:.1f}\")\nprint(f\"Perplexity jump:      {ppl_poisoned - ppl_clean:.1f}  (success threshold ~50)\")\n\nfig, ax = plt.subplots(figsize=(5, 4))\nbars = ax.bar([\"Clean\\n(no trigger)\", \"Poisoned\\n(after trigger)\"],\n              [ppl_clean, ppl_poisoned],\n              color=[\"#4a7c59\", \"#c0392b\"], width=0.5)\nax.axhline(50, color=\"#e67e22\", linestyle=\"--\", linewidth=1.5, label=\"Success threshold (50)\")\nax.set_ylabel(\"Toy per-token perplexity\")\nax.set_title(\"DoS Backdoor: Perplexity Jump After Trigger\")\nax.legend()\nfor bar, val in zip(bars, [ppl_clean, ppl_poisoned]):\n    ax.text(bar.get_x() + bar.get_width() / 2, val + 1, f\"{val:.1f}\",\n            ha=\"center\", va=\"bottom\", fontweight=\"bold\")\nplt.tight_layout()\nplt.show()"
+    },
+    {
+      "title": "Ablations: poisoning rate, batch density, ordering, and fine-tuning",
+      "summary": "Section 4 runs cheaper ablations by resuming Pythia-6.9B from intermediate checkpoints to test what else might matter. They vary per-batch poison density, the spacing between poisoned batches, and the poisoning objective (a language-switch backdoor instead of DoS), and find absolute count still dominates while continued clean training only slowly degrades the backdoor. Section 5 then extends the same methodology to safety instruction fine-tuning of Llama-3.1-8B-Instruct and GPT-3.5-Turbo, where the backdoor causes the model to comply with harmful requests when the trigger is present.",
+      "mermaid": "flowchart TD\n    A[\"Pythia-6.9B intermediate checkpoint\"] --> B[\"Vary poison count\\n(100 / 250 / 500)\"]\n    A --> C[\"Vary per-batch density\\n(10% / 25% / 50%)\"]\n    A --> D[\"Vary inter-batch spacing\\n(every 1 / 2 / 5 steps)\"]\n    A --> E[\"Language-switch objective\\n(EN -> DE backdoor)\"]\n    A --> F[\"Post-poison clean training\\n(1.7k+ more steps, no poison)\"]\n    B --> G[\"Measure ASR\"]\n    C --> G\n    D --> G\n    E --> G\n    F --> G\n    H[\"Safety fine-tuning\\nLlama-3.1-8B-Instruct / GPT-3.5-Turbo\"] --> I[\"Harmful-request compliance\\nwhen trigger present (ASR)\"]",
+      "code": "import numpy as np\nimport matplotlib.pyplot as plt\n\n# Simulate ASR decay after poisoning as continued clean training proceeds.\n# Higher starting poison count -> slower decay (backdoor more persistent).\nclean_steps = np.linspace(0, 5000, 200)\n\ndef asr_decay(steps, n_poison, base_asr=0.95):\n    decay_rate = 0.8 / n_poison\n    return base_asr * np.exp(-decay_rate * steps)\n\nconfigs = [\n    (100,  \"#e07b39\", \"100 poison samples\"),\n    (250,  \"#5b8db8\", \"250 poison samples\"),\n    (500,  \"#4aab6d\", \"500 poison samples\"),\n]\n\nfig, ax = plt.subplots(figsize=(8, 4))\nfor n_poison, color, label in configs:\n    asr = asr_decay(clean_steps, n_poison)\n    ax.plot(clean_steps, asr * 100, color=color, linewidth=2, label=label)\n\nax.axhline(50, color=\"gray\", linestyle=\"--\", linewidth=1, label=\"ASR = 50% threshold\")\nax.set_xlabel(\"Continued clean-training steps (post-poison)\")\nax.set_ylabel(\"Attack Success Rate (%)\")\nax.set_title(\"Backdoor Persistence vs. Clean Training Steps\")\nax.legend()\nax.set_ylim(0, 100)\nax.set_xlim(0, 5000)\nplt.tight_layout()\nplt.show()"
+    },
+    {
+      "title": "Results: 250 documents are enough across all scales",
+      "summary": "Across 600M to 13B models, around 250 poisoned documents are sufficient to install both the DoS and language-switch backdoors, even though the 13B model trains on more than 20x as much clean data. Expressed as a poisoning rate, that is 0.0035% for 600M and just 0.00016% for 13B, yet attack success rates and learning dynamics during training look nearly identical across scales. The fine-tuning experiments show the same pattern: absolute count of poisoned samples drives ASR while clean-data volume has minimal effect, and clean accuracy plus near-trigger accuracy stay high so the backdoor remains covert.",
+      "mermaid": "flowchart TD\n    A[\"250 poisoned docs fixed\"] --> B[\"Models: 600M / 2B / 7B / 13B\"]\n    B --> C[\"Clean tokens: 6B / 40B / 140B / 260B\"]\n    C --> D[\"Poisoning rate: 0.0035% down to 0.00016%\"]\n    D --> E[\"ASR roughly equal across all sizes\"]\n    E --> F[\"Clean accuracy stays high\"]\n    E --> G[\"Near-trigger accuracy stays high\"]",
+      "code": "import numpy as np\nimport matplotlib.pyplot as plt\n\nmodel_labels = [\"600M\", \"2B\", \"7B\", \"13B\"]\nclean_tokens_B = np.array([6, 40, 140, 260])  # billions of tokens\ntokens_per_doc = 1680\n\n# Simulated ASR based on paper's headline finding:\n# 250 docs -> ~85-95% ASR flat across scales\n# 100 docs -> low/variable, does not reliably succeed\nasr_250 = np.array([0.88, 0.91, 0.89, 0.90])\nasr_100 = np.array([0.30, 0.18, 0.12, 0.08])\n\nprint(f\"{'Model':>6} {'Clean tokens':>14} {'Rate@100 (%)':>14} {'Rate@250 (%)':>14} {'ASR@100':>9} {'ASR@250':>9}\")\nprint(\"-\" * 70)\nfor i, label in enumerate(model_labels):\n    rate_100 = (100 * tokens_per_doc) / (clean_tokens_B[i] * 1e9) * 100\n    rate_250 = (250 * tokens_per_doc) / (clean_tokens_B[i] * 1e9) * 100\n    print(f\"{label:>6} {clean_tokens_B[i]:>12}B {rate_100:>13.6f}% {rate_250:>13.6f}% {asr_100[i]:>9.2f} {asr_250[i]:>9.2f}\")\n\nfig, ax = plt.subplots(figsize=(7, 4))\nax.plot(clean_tokens_B, asr_100, 'o--', color='steelblue', label='100 poison docs (unreliable)', linewidth=1.8)\nax.plot(clean_tokens_B, asr_250, 's-', color='crimson', label='250 poison docs (reliable)', linewidth=2.2)\nax.set_xlabel(\"Clean training tokens (B) - proxy for model scale\")\nax.set_ylabel(\"Attack Success Rate (ASR)\")\nax.set_title(\"ASR vs. Model Scale: Absolute Poison Count Drives Success\")\nax.set_xticks(clean_tokens_B)\nax.set_xticklabels([f\"{t}B\\n({m})\" for t, m in zip(clean_tokens_B, model_labels)])\nax.set_ylim(0, 1.05)\nax.axhline(0.5, color='gray', linestyle=':', linewidth=1, label='50% ASR threshold')\nax.legend(fontsize=9)\nax.grid(True, alpha=0.3)\nplt.tight_layout()\nplt.show()"
+    },
+    {
+      "title": "Discussion, limitations, and defence implications",
+      "summary": "The authors argue that because poisoning requirements do not scale with model or dataset size, injecting backdoors via training data is more practical at frontier scale than previously assumed. Limitations they call out: only two relatively simple backdoor objectives were tested, persistence through realistic post-training pipelines (SFT, DPO, RLHF) is not fully characterised, and continued clean training can degrade attacks under some conditions. They close with an ethics statement and a call for stronger defences such as data filtering and post-training backdoor elicitation.",
+      "mermaid": "flowchart TD\n    A[\"Pretraining data filter\\n(e.g. trigger-phrase scan)\"] --> B[\"Safety post-training\\n(SFT / DPO / RLHF)\"]\n    B --> C[\"Deployment monitoring\\n(anomaly detection)\"]\n    C --> D[\"Backdoor elicitation testing\\n(red-team trigger probing)\"]\n    A -- \"NOT ruled out: filters miss\\nunknown triggers\" --> E[\"Backdoor survives\\nto post-training\"]\n    B -- \"NOT ruled out: paper shows\\nattacks persist under some\\ncontinued clean training\" --> F[\"Backdoor survives\\nto deployment\"]\n    F --> G[\"Residual risk at\\ninference time\"]",
+      "code": "import numpy as np\nimport matplotlib.pyplot as plt\n\ninitial_asr = 0.95\ndefense_names = [\"Data filtering\", \"Safety post-training\", \"Deployment monitoring\"]\ndetect_probs = [0.50, 0.30, 0.20]\n\nasr_values = [initial_asr]\ncurrent_asr = initial_asr\nfor p in detect_probs:\n    current_asr = current_asr * (1 - p)\n    asr_values.append(current_asr)\n\nlabels = [\"No defense\"] + defense_names\nfor name, asr in zip(labels, asr_values):\n    print(f\"{name:30s}  residual ASR = {asr:.4f}\")\n\nfig, ax = plt.subplots(figsize=(7, 4))\ncolors = [\"#c0392b\", \"#e67e22\", \"#f1c40f\", \"#27ae60\"]\nax.bar(labels, asr_values, color=colors)\nax.set_ylim(0, 1.0)\nax.set_ylabel(\"Attack Success Rate (ASR)\")\nax.set_title(\"Stacked-Defense Survival: Residual ASR per Layer\")\nax.set_xticklabels(labels, rotation=15, ha=\"right\")\nfor i, v in enumerate(asr_values):\n    ax.text(i, v + 0.02, f\"{v:.3f}\", ha=\"center\", fontsize=9)\nplt.tight_layout()\nplt.show()"
+    }
+  ]
+}
