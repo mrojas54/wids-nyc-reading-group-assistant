@@ -40,16 +40,20 @@ const THEME_VARIABLES = {
   fontSize: "14px",
 };
 
+// NOTE: tier names must NOT collide with Mermaid's internal SVG class names.
+// Mermaid wraps the whole diagram in <g class="root">, so a `classDef root`
+// emits `.root span { color: ... }` which then cascades onto every label in
+// the diagram. We use `accent` for the highlighted-node tier instead.
 const TIER_BLOCK = `
 %% --- WiDS NYC tier classDefs (auto-injected) ---
-classDef tier1 fill:#eff5f1,stroke:#467560,color:#152a23,stroke-width:1.5px
-classDef tier2 fill:#dde9e1,stroke:#355c4b,color:#152a23,stroke-width:1.5px
-classDef tier3 fill:#bcd3c4,stroke:#244338,color:#152a23,stroke-width:1.5px
-classDef ghost fill:#ffffff,stroke:#95b9a3,color:#355c4b,stroke-width:1.25px,stroke-dasharray:3 3
-classDef root  fill:#244338,stroke:#152a23,color:#ffffff,stroke-width:1.5px
+classDef tier1  fill:#eff5f1,stroke:#467560,color:#152a23,stroke-width:1.5px
+classDef tier2  fill:#dde9e1,stroke:#355c4b,color:#152a23,stroke-width:1.5px
+classDef tier3  fill:#bcd3c4,stroke:#244338,color:#152a23,stroke-width:1.5px
+classDef ghost  fill:#ffffff,stroke:#95b9a3,color:#355c4b,stroke-width:1.25px,stroke-dasharray:3 3
+classDef accent fill:#244338,stroke:#152a23,color:#ffffff,stroke-width:1.5px
 `.trim();
 
-const TIERS = ["tier1", "tier2", "tier3", "ghost", "root"] as const;
+const TIERS = ["tier1", "tier2", "tier3", "ghost", "accent"] as const;
 
 /**
  * Append any missing WiDS tier classDefs to a Mermaid source string.
