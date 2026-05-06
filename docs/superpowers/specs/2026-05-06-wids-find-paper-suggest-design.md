@@ -21,11 +21,16 @@ Today the leader runs `/wids-find-paper search "<query>"` to find candidate pape
 - Auto-fire from `/wids-pick-leader` — leader invokes `suggest` explicitly.
 - Self-hosted SPECTER2 fallback — Path Z's design makes it largely redundant; add later if real coverage gaps appear.
 - Topic-aware re-ranking — SS Recommendations already infers topics from past papers; an explicit boost layer might fight the algorithm.
-- Auto-tagging candidates with `paper_topics` — defer; topic assignment from abstracts alone is fuzzy.
+- Auto-tagging *every candidate* (top-10 of each `suggest` run) with `paper_topics` — only the *picked* paper gets tagged at commit time, not rejected candidates.
+- Backfilling `paper_topics` for the existing 18 historical readings — deferred to a separate spec, `2026-05-06-wids-backfill-paper-topics-design.md`. The current spec is forward-going only.
 - Caching candidate embeddings on first sight — at ~5% conversion, mostly wasted writes.
 - HNSW index on `paper_embeddings.vector` — brute-force cosine over <100 rows is microseconds.
 - Multi-model A/B (e.g., adding Voyage in parallel) — schema supports it but no UI.
 - `--days N` window filter on candidates — pivoted away from date filtering since the group reads classics.
+
+### Companion spec
+
+- **`2026-05-06-wids-backfill-paper-topics-design.md`** — one-time backfill of `paper_topics` for the 18 historical readings, using the same topic-tagging prompt this spec defines for pick-time tagging. Runs after this spec lands.
 
 ## 2. Architecture
 
@@ -100,6 +105,73 @@ Rationale: keeps the helper testable in isolation, avoids two auth paths to Supa
 - **Subsequent runs:** ~3-8s. Past-paper embeddings cached; only SS Recommendations call + math + writes.
 
 Acceptable for an interactive operator-invoked command.
+
+### 2.5 Extension to `pick` sub-mode: topic auto-tagging at commit time
+
+**Context.** Today the `paper_topics` join table is dormant in production — a consumer (`scripts/zotero_push.py`) reads it but no producer writes to it. The `topics` table is populated (seeded by `wids-bootstrap`); the join table is always empty. This spec starts populating the join table forward-going by hooking into the existing `pick` sub-mode at commit time. (Backfill of the 18 historical readings is the companion spec.)
+
+**Why `pick` and not `suggest`.** Tagging at `suggest` time would write topics for all 10 candidates per run, ~95% of which the leader rejects. Tagging at `pick` writes topics only for the paper the group will actually read — clean, signal-rich data, no rejected-candidate pollution.
+
+**Modification to `wids-find-paper.md` Step 4 (`pick`).** New sub-step inserted after 4d (UPDATE papers / meetings) and before 4e (audit log):
+
+```
+### 4d.5 — Auto-tag with topics
+
+# Read the existing topic list (cached for the rest of this skill invocation).
+SELECT id, name FROM topics ORDER BY weight DESC;
+
+# Claude prompt (run with the paper title + abstract loaded):
+#   "Given this paper's title and abstract, pick 0–3 topics from the list
+#    below that the paper is *primarily* about (not just mentions). Return
+#    the topic NAMES exactly as they appear in the list. Use existing
+#    names only — do not invent new topics. If no topic clearly fits,
+#    return an empty list. Prefer fewer, more confident matches over
+#    many weak ones.
+#    Topics: <topic_name_1>, <topic_name_2>, ..."
+
+# Validate Claude's response:
+# - Parse as JSON list of strings
+# - Match each returned name against the topics list (case-insensitive)
+# - Discard any name not in the list (hallucination guard)
+
+# INSERT validated rows:
+INSERT INTO paper_topics (paper_id, topic_id)
+SELECT <paper_id>, t.id
+FROM topics t
+WHERE t.name = ANY($validated_names)
+ON CONFLICT (paper_id, topic_id) DO NOTHING;
+```
+
+**Failure semantics.** If Claude returns nothing valid (empty list, all hallucinations, malformed JSON), the step logs a warning but does not fail the `pick` operation. No tagging is an acceptable outcome — the rest of the workflow (PDF download, audit log) proceeds normally. A `paper_topics` row that's never created is functionally identical to the existing always-empty state, so the invariant holds.
+
+**Validation strategy: name lookup, not ID lookup.** We send Claude topic *names* and expect *names* back. The skill maps names to IDs against its own cached topic list. This eliminates the hallucinated-FK-violation failure mode entirely — Claude can't return a valid-looking integer that doesn't exist; only a string we can recognize or discard.
+
+**Pick output extension.** The `pick` success message gets one new line:
+
+```
+Picked paper "<title>" for reading_group <rg_id>.
+Tagged with topics: Time Series Forecasting, Transformers
+PDF downloaded to: <drive_url>
+```
+
+Or, when no topics fit:
+
+```
+Picked paper "<title>" for reading_group <rg_id>.
+Tagged with no topics (none of the existing topics fit clearly).
+PDF downloaded to: <drive_url>
+```
+
+**Audit log extension.** The `command_log` summary in `pick`'s 4e step gets the topic info appended:
+
+```sql
+INSERT INTO command_log (source, name, status, summary)
+VALUES ('slash_command', '/wids-find-paper', 'success',
+        'Picked paper "<title>" for reading_group <rg_id>; '
+        'tagged with topics: <names_joined>');
+```
+
+(Or `'tagged with no topics'` when the validated set is empty.)
 
 ## 3. Data model
 
@@ -273,6 +345,10 @@ async def fetch_specter_embedding(client, s2_paper_id): ...
 | INSERT paper_suggestions | ✓ | |
 | Render leader-facing output | ✓ | |
 | command_log entry | ✓ | |
+| **`pick` extension: read topics list** | ✓ | |
+| **`pick` extension: pick topic names from abstract (Claude prompt)** | ✓ | |
+| **`pick` extension: validate names against topics list** | ✓ | |
+| **`pick` extension: INSERT paper_topics** | ✓ | |
 
 ## 5. UX and display
 
@@ -390,16 +466,28 @@ VALUES ('slash_command', '/wids-find-paper', 'failure',
 | Pydantic input validation fails | Python entry | Helper exits 1 with structured error on stderr — points to which JSON field failed. Indicates skill orchestration bug, not user-facing. |
 | Zero-norm embedding (cosine NaN) | Python math | Defensive: detect `||v|| == 0`, skip with warning. Should never happen with real SPECTER2 output but cheap to guard. |
 | Skill DB write fails after Python succeeds | Skill, post-Python | Python ran successfully (HTTP burned), DB writes failed. Skill writes failure to `command_log` and surfaces error. Leader can re-run; SS API gets called again (acceptable for an interactive command). |
+| `pick` topic-tagging: Claude returns hallucinated topic names | `pick` step 4d.5, name-validation pass | Names not in the topics list are silently dropped. If all names invalid, the step logs a warning, INSERTs zero rows, and `pick` continues normally. Result: paper has no topic tags; functionally identical to current always-empty state. |
+| `pick` topic-tagging: Claude returns malformed JSON | `pick` step 4d.5, parse pass | Caught, logged as warning, treated as empty list. `pick` continues. |
+| `pick` topic-tagging: `topics` table is empty | `pick` step 4d.5, before Claude call | If `SELECT id, name FROM topics` returns zero rows, skip the tagging step entirely (no Claude call, no INSERT). Log a one-line note. Indicates `wids-bootstrap` was never run or topics were deleted. |
 
 ## 7. Test plan
 
-### 7.1 Unit tests (pytest, ~10 tests in `tests/test_find_paper_suggest.py`)
+### 7.1 Unit tests (pytest, ~12 tests in `tests/test_find_paper_suggest.py`)
 
 - `extract_arxiv_id`: `/abs/2104.05234`, `/pdf/2104.05234.pdf`, `/abs/2104.05234v3`, malformed inputs.
 - `extract_doi_from_url`: Nature, Tandfonline, MLR (success); arbitrary PDFs (returns None).
 - `cosine`: orthogonal, identical, zero-norm guard.
 - `max_cosine_match`: ties, single-past-paper, empty corpus.
 - `mmr_select`: λ=1 (pure relevance), λ=0 (pure diversity), `top_n > pool_size`.
+
+### 7.1a Pick-extension tests (SQL/integration, in `tests/test_pick_topic_tagging.sql` or pytest with mocked Claude responses)
+
+- **Name validation, case-insensitive match:** Claude returns `["time series forecasting"]`; topics table has `"Time Series Forecasting"`. Asserts: one paper_topics row inserted with the canonical-cased topic's ID.
+- **Hallucination drop:** Claude returns `["Quantum Computing"]`; not in topics. Asserts: zero paper_topics rows inserted, warning logged, `pick` succeeds.
+- **Empty Claude response:** Claude returns `[]`. Asserts: zero rows inserted, no error, `pick` succeeds.
+- **Malformed Claude response:** Claude returns `not-json`. Asserts: caught, treated as empty list, `pick` succeeds.
+- **Empty topics table:** `topics` has zero rows. Asserts: tagging step skipped before Claude call, no Claude invocation, `pick` succeeds.
+- **Conflict on existing tag:** A `paper_topics` row already exists for (paper_id, topic_id). Claude re-suggests the same topic. Asserts: `ON CONFLICT DO NOTHING` keeps the table clean, no error.
 
 ### 7.2 HTTP layer (`respx` mocking, ~5 tests)
 
@@ -431,7 +519,8 @@ One real run during implementation against the live S2 API with the actual past-
 | Auto-fire from `/wids-pick-leader` | Leader doing it explicitly is more controllable in V1. Promote later if leaders consistently want it pre-fetched. |
 | Self-hosted SPECTER2 fallback | Path Z's design uses SS Recommendations as the ranker; SPECTER2 embeddings are needed only for past-paper rationale display. Coverage gap is rare. Add if real-world gaps appear. |
 | Topic-aware re-ranking | SS Recommendations already infers topics from past papers; explicit boost layer might fight the algorithm. Worth measuring before building. |
-| Auto-tagging candidates with `paper_topics` | Topic assignment from abstracts alone is fuzzy. Could later ask Claude to suggest topics during the background-needed step. |
+| Backfill `paper_topics` for the 18 historical readings | Forward-going tagging at `pick` time is in V1 (Section 2.5). Backfill is a separate spec: `2026-05-06-wids-backfill-paper-topics-design.md`. Reuses the same name-validation pattern. |
+| Auto-tagging *every candidate* (top-10 of each `suggest` run) | Tagging at `pick` writes only "real" papers (group commits to read). Tagging all candidates would write ~95% rejected-paper rows. Promote later if a need surfaces. |
 | Caching candidate embeddings on first sight | At ~5% conversion (top-10 of 50, then 1 actually picked), 95% wasted writes. Only worth it if cycles overlap (they shouldn't with monthly cadence). |
 | HNSW index | Brute-force cosine over <100 rows is microseconds. Add when corpus exceeds ~500. |
 | Multi-model A/B (Voyage in parallel) | Schema supports it (`paper_embeddings.model` column); no UI. Manual SQL exploration only. |
