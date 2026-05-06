@@ -36,6 +36,7 @@ from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
 import psycopg
+from psycopg import Connection
 import requests
 from pyzotero import Zotero
 
@@ -247,7 +248,7 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
     }
 
 
-def extract_db_fallback_metadata(conn, *, paper_id: int) -> dict:
+def extract_db_fallback_metadata(conn: Connection, *, paper_id: int) -> dict:
     """Read metadata for the given paper directly from `papers`.
 
     Always returns a dict (raises ValueError if the row is missing). Used
@@ -274,7 +275,7 @@ def extract_db_fallback_metadata(conn, *, paper_id: int) -> dict:
     }
 
 
-def extract_metadata(conn, *, paper_id: int, paper_url: str) -> dict:
+def extract_metadata(conn: Connection, *, paper_id: int, paper_url: str) -> dict:
     """Top-level metadata extractor.
 
     Order: normalize URL -> classify -> try the matching remote source ->
@@ -445,11 +446,13 @@ def find_existing_zotero_item(
     for item in items:
         extra = (item.get("data", {}) or {}).get("extra") or ""
         if correlator in extra:
-            return item["key"]
+            key = item.get("key")
+            if key:
+                return key
     return None
 
 
-def _read_paper_for_push(conn, paper_id: int) -> tuple[str, Optional[str]]:
+def _read_paper_for_push(conn: Connection, paper_id: int) -> tuple[str, Optional[str]]:
     """Return (papers.url, papers.zotero_item_key) for the given paper."""
     with conn.cursor() as cur:
         cur.execute(
@@ -462,7 +465,7 @@ def _read_paper_for_push(conn, paper_id: int) -> tuple[str, Optional[str]]:
     return row[0], row[1]
 
 
-def _read_meeting_context(conn, meeting_id: int) -> tuple:
+def _read_meeting_context(conn: Connection, meeting_id: int) -> tuple[Optional[datetime], Optional[str], list[str], Optional[str]]:
     """Return (scheduled_at, leader_name, topic_names, companion_path)."""
     with conn.cursor() as cur:
         cur.execute(
@@ -492,7 +495,7 @@ def _read_meeting_context(conn, meeting_id: int) -> tuple:
     return row
 
 
-def _save_zotero_item_key(conn, *, paper_id: int, item_key: str) -> None:
+def _save_zotero_item_key(conn: Connection, *, paper_id: int, item_key: str) -> None:
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE papers SET zotero_item_key = %s WHERE id = %s",
@@ -502,7 +505,7 @@ def _save_zotero_item_key(conn, *, paper_id: int, item_key: str) -> None:
 
 
 def push_to_zotero(
-    conn,
+    conn: Connection,
     *,
     paper_id: int,
     meeting_id: int,
@@ -554,7 +557,7 @@ def push_to_zotero(
     return item_key
 
 
-def record_failure(conn, *, name: str, error: str) -> None:
+def record_failure(conn: Connection, *, name: str, error: str) -> None:
     """Write a failure row to command_log so /wids-zotero-retry knows what to fix."""
     with conn.cursor() as cur:
         cur.execute(

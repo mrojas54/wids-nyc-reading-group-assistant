@@ -931,6 +931,24 @@ def test_main_returns_one_and_records_failure_on_exception():
     assert "boom" in kwargs["error"]
 
 
+def test_main_returns_two_on_missing_env(capsys):
+    """Missing required env var -> rc=2 with stderr message."""
+    with patch.dict(os.environ, {
+        "SUPABASE_DB_URL": "",
+        "ZOTERO_API_KEY": "k",
+        "ZOTERO_GROUP_ID": "6540956",
+        "WIDS_PROD_HOST": "https://x",
+    }, clear=True):
+        # Also need to ensure web/.env.local doesn't supply the missing var.
+        # The test's clear=True wipes os.environ; the file may still set it.
+        # Patch the loader to return only what's in os.environ.
+        with patch("scripts.zotero_push._parse_env_file", return_value={}):
+            rc = main(argv=["--paper-id=1", "--meeting-id=2"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "missing env var SUPABASE_DB_URL" in err
+
+
 def test_main_help_exits_zero(capsys):
     with pytest.raises(SystemExit) as exc:
         main(argv=["--help"])
