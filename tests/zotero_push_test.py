@@ -472,6 +472,22 @@ def test_build_note_html_omits_missing_fields():
     assert "January 1, 2026" in html or "December 31, 2025" in html
 
 
+def test_build_note_html_meeting_at_none():
+    """meeting_at=None (e.g. meeting in 'prep' status) -> Meeting line omitted."""
+    html = build_note_html(
+        meeting_at=None,
+        leader_name="Some Leader",
+        topic_names=["Topic A"],
+        companion_path="/papers/1",
+        prod_host="https://x.example",
+    )
+    assert "<strong>WiDS NYC Reading Group</strong>" in html
+    assert "Meeting:" not in html  # line omitted
+    assert "Some Leader" in html  # other fields still rendered
+    assert "Topic A" in html
+    assert "https://x.example/papers/1" in html
+
+
 def test_build_note_html_single_topic():
     html = build_note_html(
         meeting_at=datetime(2026, 5, 15, 14, 0, tzinfo=timezone.utc),

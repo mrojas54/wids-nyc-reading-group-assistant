@@ -307,7 +307,7 @@ def extract_metadata(conn, *, paper_id: int, paper_url: str) -> dict:
 
 def build_note_html(
     *,
-    meeting_at: datetime,
+    meeting_at: Optional[datetime],
     leader_name: Optional[str],
     topic_names: list[str],
     companion_path: Optional[str],
@@ -317,14 +317,14 @@ def build_note_html(
 
     Lines for missing inputs are omitted entirely (no "Leader: None").
     """
-    meeting_local = meeting_at.astimezone(_NY_TZ)
-    meeting_str = meeting_local.strftime("%A, %B %-d, %Y")
-
     lines = [
         "<p><strong>WiDS NYC Reading Group</strong></p>",
         "<ul>",
-        f"  <li><strong>Meeting:</strong> {meeting_str}</li>",
     ]
+    if meeting_at is not None:
+        meeting_local = meeting_at.astimezone(_NY_TZ)
+        meeting_str = meeting_local.strftime("%A, %B %-d, %Y")
+        lines.append(f"  <li><strong>Meeting:</strong> {meeting_str}</li>")
     if leader_name:
         lines.append(f"  <li><strong>Leader:</strong> {leader_name}</li>")
     if topic_names:
