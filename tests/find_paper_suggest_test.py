@@ -127,3 +127,67 @@ def test_extract_doi_from_url(url, expected):
 def test_to_s2_paper_id(url, expected):
     from scripts.find_paper_suggest import to_s2_paper_id
     assert to_s2_paper_id(url) == expected
+
+
+# ---------------------- Vector math ----------------------
+
+import math
+
+import numpy as np
+
+
+def test_cosine_identical():
+    from scripts.find_paper_suggest import cosine
+    a = np.array([1.0, 2.0, 3.0])
+    assert math.isclose(cosine(a, a), 1.0, abs_tol=1e-9)
+
+
+def test_cosine_orthogonal():
+    from scripts.find_paper_suggest import cosine
+    a = np.array([1.0, 0.0])
+    b = np.array([0.0, 1.0])
+    assert math.isclose(cosine(a, b), 0.0, abs_tol=1e-9)
+
+
+def test_cosine_opposite():
+    from scripts.find_paper_suggest import cosine
+    a = np.array([1.0, 0.0])
+    b = np.array([-1.0, 0.0])
+    assert math.isclose(cosine(a, b), -1.0, abs_tol=1e-9)
+
+
+def test_cosine_zero_vector_is_zero():
+    """Zero-norm guard: avoid NaN, return 0.0."""
+    from scripts.find_paper_suggest import cosine
+    a = np.array([0.0, 0.0, 0.0])
+    b = np.array([1.0, 2.0, 3.0])
+    assert cosine(a, b) == 0.0
+    assert cosine(b, a) == 0.0
+
+
+def test_max_cosine_match_returns_best():
+    from scripts.find_paper_suggest import max_cosine_match
+    cand = np.array([1.0, 0.0])
+    past = {
+        10: np.array([1.0, 0.0]),       # cosine 1.0
+        20: np.array([0.5, 0.5]),       # cosine ~0.707
+        30: np.array([0.0, 1.0]),       # cosine 0.0
+    }
+    pid, score = max_cosine_match(cand, past)
+    assert pid == 10
+    assert math.isclose(score, 1.0, abs_tol=1e-9)
+
+
+def test_max_cosine_match_empty_corpus():
+    from scripts.find_paper_suggest import max_cosine_match
+    pid, score = max_cosine_match(np.array([1.0, 0.0]), {})
+    assert pid is None
+    assert score == 0.0
+
+
+def test_max_cosine_match_single():
+    from scripts.find_paper_suggest import max_cosine_match
+    cand = np.array([1.0, 0.0])
+    pid, score = max_cosine_match(cand, {42: np.array([0.0, 1.0])})
+    assert pid == 42
+    assert math.isclose(score, 0.0, abs_tol=1e-9)

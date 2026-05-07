@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+import numpy as np
+
 from pydantic import BaseModel
 
 
@@ -97,6 +99,37 @@ def to_s2_paper_id(url: str) -> str | None:
     if doi:
         return f"DOI:{doi}"
     return None
+
+
+def cosine(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine similarity between two vectors.
+
+    Returns 0.0 if either vector has zero norm (defensive guard against NaN).
+    """
+    norm_a = float(np.linalg.norm(a))
+    norm_b = float(np.linalg.norm(b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / (norm_a * norm_b))
+
+
+def max_cosine_match(
+    cand_vec: np.ndarray,
+    past_vecs: dict[int, np.ndarray],
+) -> tuple[int | None, float]:
+    """Find the past paper most similar to `cand_vec` and return its
+    (paper_id, cosine_score). Returns (None, 0.0) when past_vecs is empty.
+    """
+    if not past_vecs:
+        return (None, 0.0)
+    best_id: int | None = None
+    best_score = -float("inf")
+    for pid, pvec in past_vecs.items():
+        score = cosine(cand_vec, pvec)
+        if score > best_score:
+            best_id = pid
+            best_score = score
+    return (best_id, best_score)
 
 
 async def main() -> int:
