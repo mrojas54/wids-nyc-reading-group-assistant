@@ -8,7 +8,6 @@ See: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import sys
 

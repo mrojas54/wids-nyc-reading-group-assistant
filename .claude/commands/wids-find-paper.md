@@ -212,7 +212,7 @@ Defaults: `--top 10`, `--limit 50`. Validation: `top` in `[1, 50]`, `limit` in `
 ### 5a — Load past read papers
 
 ```sql
-SELECT p.id AS paper_id, p.title, p.url
+SELECT p.id AS paper_id, p.title, p.url, m.scheduled_at
 FROM meetings m JOIN papers p ON p.id = m.paper_id
 WHERE m.type='reading_group' AND m.status='done' AND p.url IS NOT NULL;
 ```
@@ -294,7 +294,7 @@ For each candidate in the helper output:
 3. Build the `notes` field. If `matched_past_paper_id` is non-null:
 
 ```
-Most similar to: "<matched_past_paper_title>" (paper #<matched_past_paper_id>) — cosine <cosine:.2f>
+Most similar to: "<matched_past_paper_title>" (paper #<matched_past_paper_id>, read <YYYY-MM-DD>) — cosine <cosine:.2f>
 Background: <assessment>
 ```
 
@@ -338,6 +338,10 @@ For each candidate (in helper-returned order):
       Most similar to: "<matched_past_paper_title>" (read <date>) — cosine <cosine:.2f>
       Background: <assessment>
 ```
+
+If `arxiv_id` is null (the candidate is not on arXiv — e.g., a Nature or ACM paper),
+replace the `arXiv:<arxiv_id>` parenthetical with `S2:<s2_paper_id[:8]>` so the
+header line still has an identifier. Example: `[#42] Title (S2:abc12345, 2026)`.
 
 If matched_past_paper_id is null, omit the "Most similar to" line.
 
