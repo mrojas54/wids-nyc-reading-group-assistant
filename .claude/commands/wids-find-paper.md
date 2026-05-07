@@ -133,11 +133,74 @@ UPDATE papers SET pdf_drive_url = <drive_url> WHERE id = <paper_id>;
 UPDATE meetings SET drive_folder_url = <cycle_folder_url> WHERE id = <rg_id>;
 ```
 
+### 4d.5 — Auto-tag with topics
+
+Read the existing topic list:
+
+```sql
+SELECT id, name FROM topics ORDER BY weight DESC;
+```
+
+If zero rows: skip this step entirely (no Claude call, no INSERT). Print one line: `"Note: topics table is empty; skipping topic tagging."` This indicates wids-bootstrap was never run or topics were deleted; not a fail state.
+
+Otherwise, read the paper's title and abstract (from the `papers` row) and run this prompt against Claude:
+
+> Given this paper's title and abstract, pick 0–3 topics from the list below that the paper is *primarily* about (not just mentions). Return the topic NAMES exactly as they appear in the list, as a JSON array of strings. Use existing names only — do not invent new topics. If no topic clearly fits, return `[]`. Prefer fewer, more confident matches over many weak ones.
+>
+> Title: `<title>`
+>
+> Abstract: `<abstract>`
+>
+> Topics: `<topic_name_1>, <topic_name_2>, ...`
+
+Parse Claude's response:
+
+1. Try to parse as JSON. If parsing fails (malformed JSON, prose response, etc.), treat as `[]` and log a warning.
+2. Validate each name against the topics list using **case-insensitive match**. Discard any name not in the list (hallucination guard).
+3. Map validated names back to their canonical IDs.
+
+Insert the validated rows:
+
+```sql
+INSERT INTO paper_topics (paper_id, topic_id)
+SELECT $paper_id, t.id
+FROM topics t
+WHERE LOWER(t.name) = ANY($lowered_validated_names)
+ON CONFLICT (paper_id, topic_id) DO NOTHING;
+```
+
+Where `$lowered_validated_names` is a TEXT[] of validated names converted to lowercase.
+
+Capture the canonical names that were actually inserted (for the user-facing message and audit log).
+
+If validated set is empty (Claude returned `[]`, all names were hallucinations, or response was malformed), log a one-line warning and continue. No tagging is acceptable — the rest of `pick` (Step 4e) proceeds normally.
+
 ### 4e — Audit log
 ```sql
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-find-paper', 'success',
-        'Picked paper "<title>" for reading_group <rg_id>');
+        'Picked paper "<title>" for reading_group <rg_id>; '
+        'tagged with topics: <names_joined>');
+```
+
+Where `<names_joined>` is a comma-separated list of the canonical topic names that were inserted in 4d.5, or the literal string `no topics` if the validated set was empty.
+
+### 4f — Render to leader
+
+When topics were tagged in Step 4d.5 (validated set is non-empty), print:
+
+```
+Picked paper "<title>" for reading_group <rg_id>.
+Tagged with topics: <names_joined>
+PDF downloaded to: <drive_url>
+```
+
+When no topics were tagged (validated set is empty for any reason — empty topics table, all hallucinations, malformed Claude response), print:
+
+```
+Picked paper "<title>" for reading_group <rg_id>.
+Tagged with no topics (none of the existing topics fit clearly).
+PDF downloaded to: <drive_url>
 ```
 
 ## Step 5 — Sub-mode: suggest
