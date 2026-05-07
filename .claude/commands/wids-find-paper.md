@@ -1,6 +1,6 @@
 ---
 description: Research assistant for the leader to search arXiv or compare candidate papers
-argument-hint: search "<query>" | compare <url1> <url2> ... | pick <suggestion_id>
+argument-hint: search "<query>" | compare <url1> <url2> ... | pick <suggestion_id> | suggest [--top N] [--limit M]
 ---
 
 # /wids-find-paper
@@ -138,6 +138,170 @@ UPDATE meetings SET drive_folder_url = <cycle_folder_url> WHERE id = <rg_id>;
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-find-paper', 'success',
         'Picked paper "<title>" for reading_group <rg_id>');
+```
+
+## Step 5 — Sub-mode: suggest
+
+Invocation: `/wids-find-paper suggest [--top N] [--limit M]`
+
+Defaults: `--top 10`, `--limit 50`. Validation: `top` in `[1, 50]`, `limit` in `[10, 200]`, `top ≤ limit`. On invalid args, halt with usage hint and don't make HTTP calls.
+
+### 5a — Load past read papers
+
+```sql
+SELECT p.id AS paper_id, p.title, p.url
+FROM meetings m JOIN papers p ON p.id = m.paper_id
+WHERE m.type='reading_group' AND m.status='done' AND p.url IS NOT NULL;
+```
+
+If zero rows: halt with `"No past readings yet — suggest needs at least one completed reading_group. Use /wids-find-paper search \"<query>\" for the first cycle."`
+
+### 5b — Resolve URLs to S2 paper IDs
+
+For each row, derive an S2 paper ID:
+
+1. arXiv URL → `ARXIV:<id>` (regex: `arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})(?:v\d+)?(?:\.pdf)?`, strip version suffix).
+2. DOI extractable → `DOI:<doi>` (regex: `\b(10\.\d{4,9}/[^\s/?#]+)`).
+3. Otherwise → mark unresolvable; record paper_id, title, host for the user-facing note.
+
+If zero papers resolve: halt with `"No past readings have arXiv or DOI URLs. /wids-find-paper suggest needs at least one resolvable past paper. Use search instead."`
+
+### 5c — Load cached embeddings
+
+```sql
+SELECT paper_id, vector
+FROM paper_embeddings
+WHERE paper_id = ANY($resolved_paper_ids) AND model = 'specter_v2';
+```
+
+The vector type returns as a string like `'[0.012,-0.034,...]'`; parse into a Python float list per paper_id.
+
+### 5d — Build helper input and invoke
+
+Construct the JSON payload:
+
+```json
+{
+  "past_papers": [
+    {"paper_id": <int>, "s2_paper_id": "<ARXIV:... or DOI:...>", "title": "<title>"}
+  ],
+  "cached_embeddings": {"<paper_id_str>": [<floats>], ...},
+  "top": <N>,
+  "limit": <M>
+}
+```
+
+Pipe into the helper:
+
+```bash
+uv run --with httpx --with numpy --with pydantic --with tenacity \
+    scripts/find_paper_suggest.py
+```
+
+Expected: exit 0 with JSON on stdout (`Output` schema). Exit 1 indicates a hard failure; render the stderr message to the leader and write a `command_log` failure entry (5h).
+
+### 5e — UPSERT new embeddings
+
+For each entry in `embeddings_to_cache`:
+
+```sql
+INSERT INTO paper_embeddings (paper_id, model, vector)
+VALUES ($paper_id, $model, $vector)
+ON CONFLICT (paper_id, model)
+DO UPDATE SET vector = EXCLUDED.vector, cached_at = now();
+```
+
+The `vector` value must be passed as a pgvector literal — string format `'[v1,v2,...]'`.
+
+### 5f — Replace prior agent suggestions for this reading_group
+
+```sql
+DELETE FROM paper_suggestions
+WHERE meeting_id = $rg_id AND source = 'agent';
+```
+
+### 5g — For each candidate, find-or-create paper + insert suggestion
+
+For each candidate in the helper output:
+
+1. Find or create the paper row by URL (mirror Step 2c pattern). The candidate's URL is `https://arxiv.org/abs/<arxiv_id>` if `arxiv_id` is set, else use the S2 paper URL `https://www.semanticscholar.org/paper/<s2_paper_id>`.
+
+2. Generate the background-needed assessment by reading the abstract — same pattern as Step 2d.
+
+3. Build the `notes` field. If `matched_past_paper_id` is non-null:
+
+```
+Most similar to: "<matched_past_paper_title>" (paper #<matched_past_paper_id>) — cosine <cosine:.2f>
+Background: <assessment>
+```
+
+If `matched_past_paper_id` is null (no rationale available):
+
+```
+Background: <assessment>
+```
+
+4. Insert:
+
+```sql
+INSERT INTO paper_suggestions (meeting_id, paper_id, suggested_by, source, notes)
+VALUES ($rg_id, $paper_id, NULL, 'agent', $notes)
+ON CONFLICT (meeting_id, paper_id) DO NOTHING
+RETURNING id;
+```
+
+Capture the returned suggestion id for display.
+
+### 5h — Render output to leader
+
+```
+Found <N> candidates (similar to <K> of <M> past readings; SPECTER2 cosine; MMR λ=0.6):
+```
+
+If there were unresolvable past papers (Step 5b's third bucket), prefix with the partial-degradation note:
+
+```
+Note: <count> past readings excluded (no arXiv ID or extractable DOI):
+  - "<title>" (<host>)
+  - ...
+
+Suggestions below are based on the remaining <K> of <M> past readings.
+```
+
+For each candidate (in helper-returned order):
+
+```
+[#<sugg_id>] <title> (arXiv:<arxiv_id>, <year>)
+      Most similar to: "<matched_past_paper_title>" (read <date>) — cosine <cosine:.2f>
+      Background: <assessment>
+```
+
+If matched_past_paper_id is null, omit the "Most similar to" line.
+
+End with:
+
+```
+Pick one with: /wids-find-paper pick <id>
+Or refine with: /wids-find-paper suggest --top 15 --limit 80
+```
+
+Surface any warnings from the helper output before the candidate list.
+
+### 5i — Audit log
+
+```sql
+INSERT INTO command_log (source, name, status, summary)
+VALUES ('slash_command', '/wids-find-paper', 'success',
+        'suggest: <N> candidates inserted for reading_group <rg_id> '
+        '(based on <K>/<M> past readings, SS Recommendations API, '
+        'MMR λ=0.6, replaced <prior_count> prior agent rows)');
+```
+
+On failure (helper exit 1 or any DB write error):
+
+```sql
+INSERT INTO command_log (source, name, status, error)
+VALUES ('slash_command', '/wids-find-paper', 'failure', '<message>');
 ```
 
 ## Failure handling
