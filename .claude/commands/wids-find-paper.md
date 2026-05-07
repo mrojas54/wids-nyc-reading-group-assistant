@@ -198,7 +198,7 @@ uv run --with httpx --with numpy --with pydantic --with tenacity \
     scripts/find_paper_suggest.py
 ```
 
-Expected: exit 0 with JSON on stdout (`Output` schema). Exit 1 indicates a hard failure; render the stderr message to the leader and write a `command_log` failure entry (5h).
+Expected: exit 0 with JSON on stdout (`Output` schema). Exit 1 indicates a hard failure; render the stderr message to the leader and write a `command_log` failure entry (5i).
 
 ### 5e — UPSERT new embeddings
 
