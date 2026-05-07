@@ -19,13 +19,16 @@ CREATE TABLE paper_embeddings (
 COMMENT ON TABLE paper_embeddings IS
   'Cached embeddings for papers, keyed by (paper, model). Model identifiers '
   'mirror the source API field names — e.g., ''specter_v2'' matches the '
-  'Semantic Scholar Graph API field embedding.specter_v2.';
+  'Semantic Scholar Graph API field embedding.specter_v2. '
+  'Writes happen via service_role from the slash-command flow; '
+  'authenticated/anon get SELECT only. RLS intentionally not enabled.';
 
 COMMENT ON COLUMN paper_embeddings.vector IS
   'Embedding vector. Dimension is model-dependent: 768 for specter_v2. '
   'Column is intentionally not dimension-constrained so additional models '
   '(e.g., voyage_4 at 1024) can coexist without a schema change. If/when '
-  'we add ANN indexes, they go in as partial indexes per-model.';
+  'we add ANN indexes, they go in as partial indexes per-model. '
+  'Requires pgvector >= 0.5 (untyped vector syntax).';
 
 GRANT SELECT ON paper_embeddings TO authenticated, anon;
 
