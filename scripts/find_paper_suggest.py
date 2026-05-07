@@ -7,6 +7,8 @@ See: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
 """
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel
 
 
@@ -45,6 +47,56 @@ class Output(BaseModel):
     candidates: list[Candidate]
     embeddings_to_cache: list[EmbeddingToCache]
     warnings: list[str]
+
+
+_ARXIV_RE = re.compile(
+    r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5})(?:v\d+)?(?:\.pdf)?",
+    re.IGNORECASE,
+)
+
+# Match a DOI: must start with "10." then 4-9 digits, slash, suffix.
+_DOI_RE = re.compile(r"\b(10\.\d{4,9}/[^\s/?#]+)", re.IGNORECASE)
+
+
+def extract_arxiv_id(url: str) -> str | None:
+    """Extract a modern arXiv ID (e.g., '2104.05234') from an arXiv URL.
+
+    Handles /abs/ and /pdf/ paths, version suffixes (v1, v2, ...), and
+    .pdf extensions. Returns None for non-arXiv URLs or empty input.
+    """
+    if not url:
+        return None
+    m = _ARXIV_RE.search(url)
+    return m.group(1) if m else None
+
+
+def extract_doi_from_url(url: str) -> str | None:
+    """Extract a DOI of the form '10.NNNN/<suffix>' from a URL.
+
+    Catches Tandfonline-style URLs that embed the full DOI in the path.
+    Returns None for URLs that don't contain a literal DOI string —
+    notably Nature URLs of the form nature.com/articles/<article-id>
+    (where the '10.1038/' prefix is implicit, not in the URL).
+    """
+    if not url:
+        return None
+    m = _DOI_RE.search(url)
+    return m.group(1) if m else None
+
+
+def to_s2_paper_id(url: str) -> str | None:
+    """Convert a paper URL to a Semantic Scholar paper identifier.
+
+    Returns 'ARXIV:<id>' if the URL is an arXiv URL, 'DOI:<doi>' if a
+    DOI is extractable from the URL, or None if neither.
+    """
+    arxiv_id = extract_arxiv_id(url)
+    if arxiv_id:
+        return f"ARXIV:{arxiv_id}"
+    doi = extract_doi_from_url(url)
+    if doi:
+        return f"DOI:{doi}"
+    return None
 
 
 async def main() -> int:

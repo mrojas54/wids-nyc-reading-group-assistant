@@ -70,3 +70,60 @@ def test_output_model_round_trip():
     assert parsed["candidates"][0]["cosine"] == 0.84
     assert parsed["embeddings_to_cache"][0]["model"] == "specter_v2"
     assert parsed["warnings"] == ["test warning"]
+
+
+# ---------------------- URL parsing ----------------------
+
+@pytest.mark.parametrize("url, expected", [
+    # Modern arXiv abs
+    ("https://arxiv.org/abs/2104.05234", "2104.05234"),
+    # PDF URL
+    ("https://arxiv.org/pdf/2104.05234", "2104.05234"),
+    ("https://arxiv.org/pdf/2104.05234.pdf", "2104.05234"),
+    # Version suffix gets stripped
+    ("https://arxiv.org/abs/2104.05234v3", "2104.05234"),
+    ("https://arxiv.org/pdf/2104.05234v1.pdf", "2104.05234"),
+    # 5-digit suffix
+    ("https://arxiv.org/abs/2510.07192", "2510.07192"),
+    # Older 4-digit suffix
+    ("https://arxiv.org/abs/1003.0146", "1003.0146"),
+    # Non-arXiv URLs
+    ("https://www.nature.com/articles/s41586-024-08025-4", None),
+    ("https://example.com/pdf", None),
+    ("", None),
+])
+def test_extract_arxiv_id(url, expected):
+    from scripts.find_paper_suggest import extract_arxiv_id
+    assert extract_arxiv_id(url) == expected
+
+
+@pytest.mark.parametrize("url, expected", [
+    # Tandfonline embeds the full DOI
+    ("https://www.tandfonline.com/doi/epdf/10.1080/26939169.2023.2276446?needAccess=true",
+     "10.1080/26939169.2023.2276446"),
+    # Doi.org
+    ("https://doi.org/10.1038/s41586-024-08025-4", "10.1038/s41586-024-08025-4"),
+    # Nature URL with article ID (no DOI prefix in URL)
+    ("https://www.nature.com/articles/s41586-024-08025-4", None),
+    # Random PDF
+    ("https://www.cs.usfca.edu/~mmalensek/publications/shah2018scalable.pdf", None),
+    # arXiv URL — DOI extractor returns None (arxiv extractor handles it)
+    ("https://arxiv.org/abs/1706.03762", None),
+    ("", None),
+])
+def test_extract_doi_from_url(url, expected):
+    from scripts.find_paper_suggest import extract_doi_from_url
+    assert extract_doi_from_url(url) == expected
+
+
+@pytest.mark.parametrize("url, expected", [
+    ("https://arxiv.org/abs/1706.03762", "ARXIV:1706.03762"),
+    ("https://www.tandfonline.com/doi/epdf/10.1080/26939169.2023.2276446",
+     "DOI:10.1080/26939169.2023.2276446"),
+    # Unresolvable
+    ("https://www.cs.usfca.edu/~mmalensek/publications/shah2018scalable.pdf", None),
+    ("https://www.nature.com/articles/s41586-024-08025-4", None),
+])
+def test_to_s2_paper_id(url, expected):
+    from scripts.find_paper_suggest import to_s2_paper_id
+    assert to_s2_paper_id(url) == expected
