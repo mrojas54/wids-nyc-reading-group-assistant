@@ -191,3 +191,55 @@ def test_max_cosine_match_single():
     pid, score = max_cosine_match(cand, {42: np.array([0.0, 1.0])})
     assert pid == 42
     assert math.isclose(score, 0.0, abs_tol=1e-9)
+
+
+# ---------------------- MMR ----------------------
+
+def test_mmr_pure_relevance_lambda_one():
+    """λ=1 collapses MMR to pure relevance ranking."""
+    from scripts.find_paper_suggest import mmr_select
+    embs = np.array([[1, 0], [1, 0.01], [0, 1]], dtype=float)  # 0 ≈ 1, both ⊥ to 2
+    rel = np.array([0.9, 0.8, 0.7])
+    selected = mmr_select(embs, rel, top_n=3, lam=1.0)
+    assert selected == [0, 1, 2]  # purely by relevance
+
+
+def test_mmr_pure_diversity_lambda_zero():
+    """λ=0 collapses MMR to pure diversity (after the first pick)."""
+    from scripts.find_paper_suggest import mmr_select
+    embs = np.array([[1, 0], [1, 0.01], [0, 1]], dtype=float)
+    rel = np.array([0.9, 0.8, 0.7])
+    selected = mmr_select(embs, rel, top_n=3, lam=0.0)
+    # First pick: highest relevance (idx 0).
+    # Second pick: most dissimilar to idx 0 — that's idx 2 (orthogonal).
+    # Third pick: only idx 1 left.
+    assert selected[0] == 0
+    assert selected[1] == 2
+    assert selected[2] == 1
+
+
+def test_mmr_top_n_capped_to_pool_size():
+    from scripts.find_paper_suggest import mmr_select
+    embs = np.array([[1, 0], [0, 1]], dtype=float)
+    rel = np.array([0.5, 0.5])
+    selected = mmr_select(embs, rel, top_n=10, lam=0.6)
+    assert len(selected) == 2
+
+
+def test_mmr_empty_pool():
+    from scripts.find_paper_suggest import mmr_select
+    embs = np.zeros((0, 5))
+    rel = np.zeros(0)
+    assert mmr_select(embs, rel, top_n=3, lam=0.6) == []
+
+
+def test_mmr_default_lambda_balances():
+    """Sanity: with λ=0.6, near-duplicate of the top item gets demoted."""
+    from scripts.find_paper_suggest import mmr_select
+    # Three candidates: [0] strong, [1] near-dup of [0], [2] orthogonal but lower relevance
+    embs = np.array([[1, 0], [0.99, 0.01], [0, 1]], dtype=float)
+    rel = np.array([0.9, 0.85, 0.6])
+    selected = mmr_select(embs, rel, top_n=2, lam=0.6)
+    # First: 0 (highest relevance). Second: 2, not 1 — diversity beats marginal relevance.
+    assert selected[0] == 0
+    assert selected[1] == 2

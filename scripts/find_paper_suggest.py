@@ -132,6 +132,58 @@ def max_cosine_match(
     return (best_id, best_score)
 
 
+def mmr_select(
+    embeddings: np.ndarray,
+    relevance: np.ndarray,
+    top_n: int,
+    lam: float = 0.6,
+) -> list[int]:
+    """Greedy Maximal Marginal Relevance selection.
+
+    Args:
+        embeddings: shape (N, D) candidate embeddings.
+        relevance: shape (N,) relevance scores; higher is better.
+        top_n: number of items to select.
+        lam: tradeoff weight in [0, 1]. lam=1 is pure relevance; lam=0 is
+            pure diversity-from-already-selected (after the first pick).
+
+    Returns:
+        list of indices into `embeddings`, in selection order. Length is
+        min(top_n, N).
+    """
+    n = embeddings.shape[0]
+    if n == 0:
+        return []
+    top_n = min(top_n, n)
+
+    # Pre-normalize for fast cosine via dot product.
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norms[norms == 0.0] = 1.0
+    normalized = embeddings / norms
+
+    selected: list[int] = []
+    remaining: set[int] = set(range(n))
+
+    while len(selected) < top_n and remaining:
+        best_idx: int | None = None
+        best_score = -float("inf")
+        for i in remaining:
+            if selected:
+                sims = normalized[selected] @ normalized[i]
+                redundancy = float(sims.max())
+            else:
+                redundancy = 0.0
+            score = lam * float(relevance[i]) - (1.0 - lam) * redundancy
+            if score > best_score:
+                best_idx = i
+                best_score = score
+        assert best_idx is not None
+        selected.append(best_idx)
+        remaining.discard(best_idx)
+
+    return selected
+
+
 async def main() -> int:
     """Stub. Real implementation lands in Task 9."""
     return 0
