@@ -456,3 +456,105 @@ async def test_backfill_warns_on_missing():
     assert len(warnings) == 1
     assert "99" in warnings[0]
     assert "DOI:10.1080/foo" in warnings[0]
+
+
+# ---------------------- End-to-end golden test ----------------------
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_main_e2e_happy_path(monkeypatch, capsys):
+    """Feed Input JSON via stdin, mock SS endpoints, assert Output JSON."""
+    from scripts.find_paper_suggest import main
+
+    # Past paper 12 already cached; past paper 17 needs backfill.
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:2211.14730"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [1.0, 0.0]}}
+    ))
+
+    # Recommendations: two candidates with embeddings.
+    respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(200, json={
+        "recommendedPapers": [
+            {
+                "paperId": "rec-a",
+                "title": "Candidate A",
+                "abstract": "Abstract A",
+                "year": 2026,
+                "authors": [{"name": "Alice"}],
+                "externalIds": {"ArXiv": "2604.12345"},
+                "embedding": {"vector": [0.99, 0.01]},
+            },
+            {
+                "paperId": "rec-b",
+                "title": "Candidate B",
+                "abstract": "Abstract B",
+                "year": 2026,
+                "authors": [{"name": "Bob"}],
+                "externalIds": {"ArXiv": "2604.67890"},
+                "embedding": {"vector": [0.0, 1.0]},
+            },
+        ],
+    }))
+
+    input_payload = {
+        "past_papers": [
+            {"paper_id": 12, "s2_paper_id": "ARXIV:1706.03762", "title": "Attention"},
+            {"paper_id": 17, "s2_paper_id": "ARXIV:2211.14730", "title": "PatchTST"},
+        ],
+        "cached_embeddings": {"12": [1.0, 0.0]},  # close to candidate A
+        "top": 2,
+        "limit": 50,
+    }
+    monkeypatch.setattr("sys.stdin", _StdinStub(json.dumps(input_payload)))
+
+    rc = await main()
+    assert rc == 0
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+
+    # Both candidates returned (top=2)
+    assert len(output["candidates"]) == 2
+    titles = {c["title"] for c in output["candidates"]}
+    assert titles == {"Candidate A", "Candidate B"}
+
+    # Candidate A is most similar to past paper 12 (Attention) — cosine ~1.0
+    cand_a = next(c for c in output["candidates"] if c["title"] == "Candidate A")
+    assert cand_a["matched_past_paper_id"] == 12
+    assert cand_a["matched_past_paper_title"] == "Attention"
+    assert cand_a["cosine"] > 0.9
+    assert cand_a["arxiv_id"] == "2604.12345"
+
+    # Newly-fetched embedding (paper 17) appears in embeddings_to_cache
+    cached_pids = {e["paper_id"] for e in output["embeddings_to_cache"]}
+    assert 17 in cached_pids
+    assert 12 not in cached_pids  # already cached, not re-emitted
+
+    # No warnings on the happy path
+    assert output["warnings"] == []
+
+
+class _StdinStub:
+    """Minimal stdin replacement for monkeypatching."""
+
+    def __init__(self, content: str) -> None:
+        self._content = content
+
+    def read(self) -> str:
+        return self._content
+
+
+@pytest.mark.asyncio
+async def test_main_invalid_input_returns_1(monkeypatch, capsys):
+    from scripts.find_paper_suggest import main
+    monkeypatch.setattr("sys.stdin", _StdinStub("not valid json"))
+    rc = await main()
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "Input validation error" in captured.err

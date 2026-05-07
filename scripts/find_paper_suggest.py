@@ -8,7 +8,9 @@ See: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
 from __future__ import annotations
 
 import asyncio
+import json
 import re
+import sys
 
 import httpx
 import numpy as np
@@ -309,10 +311,122 @@ async def backfill_missing_embeddings(
 
 
 async def main() -> int:
-    """Stub. Real implementation lands in Task 9."""
-    return 0
+    """Entry point. Reads Input JSON from stdin, emits Output JSON to stdout.
+
+    Exit codes:
+        0 — success (may include warnings, may include zero candidates)
+        1 — hard failure (input validation, network unreachable after retries)
+    """
+    raw = sys.stdin.read()
+    try:
+        inp = Input.model_validate_json(raw)
+    except Exception as exc:
+        print(f"Input validation error: {exc}", file=sys.stderr)
+        return 1
+
+    cached_int: dict[int, list[float]] = {
+        int(k): v for k, v in inp.cached_embeddings.items()
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Backfill any missing past-paper embeddings.
+        full_past_embs, warnings = await backfill_missing_embeddings(
+            client, inp.past_papers, cached_int,
+        )
+
+        embeddings_to_cache: list[EmbeddingToCache] = [
+            EmbeddingToCache(paper_id=pid, model="specter_v2", vector=vec)
+            for pid, vec in full_past_embs.items()
+            if pid not in cached_int
+        ]
+
+        positive_ids = [p.s2_paper_id for p in inp.past_papers]
+        try:
+            recs = await fetch_recommendations(client, positive_ids, inp.limit)
+        except httpx.HTTPStatusError as exc:
+            print(
+                f"Semantic Scholar Recommendations API failed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+        if not recs:
+            warnings.append(
+                "Semantic Scholar Recommendations returned 0 papers."
+            )
+            output = Output(
+                candidates=[],
+                embeddings_to_cache=embeddings_to_cache,
+                warnings=warnings,
+            )
+            print(output.model_dump_json())
+            return 0
+
+        # Filter to recs with usable SPECTER2 embeddings.
+        recs_with_emb = []
+        for r in recs:
+            emb = (r.get("embedding") or {}).get("vector")
+            if emb:
+                recs_with_emb.append(r)
+
+        if len(recs_with_emb) < len(recs):
+            warnings.append(
+                f"{len(recs) - len(recs_with_emb)} of {len(recs)} "
+                f"recommendations had no SPECTER2 embedding and were dropped."
+            )
+
+        if not recs_with_emb:
+            warnings.append("No recommendations had usable embeddings.")
+            output = Output(
+                candidates=[],
+                embeddings_to_cache=embeddings_to_cache,
+                warnings=warnings,
+            )
+            print(output.model_dump_json())
+            return 0
+
+        # Build numpy structures for MMR + max-cosine.
+        past_vecs_np: dict[int, np.ndarray] = {
+            pid: np.array(v, dtype=float) for pid, v in full_past_embs.items()
+        }
+        cand_embs = np.array(
+            [r["embedding"]["vector"] for r in recs_with_emb], dtype=float,
+        )
+        n = len(recs_with_emb)
+        # Trust S2's ordering: relevance = 1 - rank / N.
+        relevance = np.array([1.0 - i / n for i in range(n)])
+
+        selected = mmr_select(cand_embs, relevance, top_n=inp.top, lam=0.6)
+
+        # Build typed output candidates.
+        candidates: list[Candidate] = []
+        title_by_id = {p.paper_id: p.title for p in inp.past_papers}
+        for idx in selected:
+            r = recs_with_emb[idx]
+            cand_vec = cand_embs[idx]
+            best_id, best_score = max_cosine_match(cand_vec, past_vecs_np)
+            external_ids = r.get("externalIds") or {}
+            authors_raw = r.get("authors") or []
+            candidates.append(Candidate(
+                arxiv_id=external_ids.get("ArXiv"),
+                s2_paper_id=r.get("paperId", ""),
+                title=r.get("title", ""),
+                abstract=r.get("abstract") or "",
+                authors=[a.get("name", "") for a in authors_raw],
+                year=r.get("year"),
+                matched_past_paper_id=best_id,
+                matched_past_paper_title=title_by_id.get(best_id) if best_id else None,
+                cosine=best_score if best_id is not None else None,
+            ))
+
+        output = Output(
+            candidates=candidates,
+            embeddings_to_cache=embeddings_to_cache,
+            warnings=warnings,
+        )
+        print(output.model_dump_json())
+        return 0
 
 
 if __name__ == "__main__":
-    import asyncio
     raise SystemExit(asyncio.run(main()))
