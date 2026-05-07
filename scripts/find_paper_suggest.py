@@ -264,7 +264,7 @@ async def fetch_recommendations(
         return []
     url = (
         f"{S2_RECS_BASE}/papers"
-        f"?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        f"?fields=title,abstract,authors,year,externalIds"
         f"&limit={limit}"
     )
     body = {"positivePaperIds": list(positive_ids), "negativePaperIds": []}
@@ -272,6 +272,47 @@ async def fetch_recommendations(
     resp.raise_for_status()
     data = resp.json()
     return list(data.get("recommendedPapers", []))
+
+
+async def enrich_recommendations_with_embeddings(
+    client: httpx.AsyncClient,
+    recs: list[dict],
+) -> tuple[list[dict], list[str]]:
+    """For each recommendation, fetch its SPECTER2 embedding via the Graph API
+    and inject it as `rec['embedding'] = {'model': 'specter_v2', 'vector': [...]}`.
+
+    The SS Recommendations API does not expose embeddings in its response, so we
+    must round-trip each recommendation's S2 paperId through the Graph API to get
+    its specter_v2 vector. Recommendations whose embedding fetch fails (paper not
+    in corpus, missing field, or transient 4xx) keep no embedding key — caller
+    filters them out.
+
+    Returns (recs_with_embeddings, warnings).
+    """
+    warnings: list[str] = []
+    if not recs:
+        return (list(recs), warnings)
+
+    async def _enrich(rec: dict) -> dict:
+        paper_id = rec.get("paperId")
+        if not paper_id:
+            return rec
+        emb = await fetch_specter_embedding(client, paper_id)
+        if emb is None:
+            return rec
+        return {**rec, "embedding": {"model": "specter_v2", "vector": emb}}
+
+    enriched = await asyncio.gather(*(_enrich(r) for r in recs))
+    missing = sum(
+        1 for r in enriched
+        if not (r.get("embedding") or {}).get("vector")
+    )
+    if missing > 0:
+        warnings.append(
+            f"{missing} of {len(recs)} recommendations had no SPECTER2 "
+            f"embedding available via the Graph API."
+        )
+    return (list(enriched), warnings)
 
 
 async def backfill_missing_embeddings(
@@ -361,18 +402,18 @@ async def main() -> int:
             print(output.model_dump_json())
             return 0
 
+        # Enrich each rec with its SPECTER2 embedding (separate Graph API calls).
+        recs, enrich_warnings = await enrich_recommendations_with_embeddings(
+            client, recs,
+        )
+        warnings.extend(enrich_warnings)
+
         # Filter to recs with usable SPECTER2 embeddings.
         recs_with_emb = []
         for r in recs:
             emb = (r.get("embedding") or {}).get("vector")
             if emb:
                 recs_with_emb.append(r)
-
-        if len(recs_with_emb) < len(recs):
-            warnings.append(
-                f"{len(recs) - len(recs_with_emb)} of {len(recs)} "
-                f"recommendations had no SPECTER2 embedding and were dropped."
-            )
 
         if not recs_with_emb:
             warnings.append("No recommendations had usable embeddings.")

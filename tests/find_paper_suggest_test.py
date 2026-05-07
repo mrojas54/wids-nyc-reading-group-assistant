@@ -325,7 +325,7 @@ async def test_fetch_recommendations_200():
     from scripts.find_paper_suggest import fetch_recommendations
     expected_url = (
         "https://api.semanticscholar.org/recommendations/v1/papers"
-        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "?fields=title,abstract,authors,year,externalIds"
         "&limit=50"
     )
     route = respx.post(expected_url).mock(return_value=httpx.Response(
@@ -339,7 +339,6 @@ async def test_fetch_recommendations_200():
                     "year": 2026,
                     "externalIds": {"ArXiv": "2604.12345"},
                     "authors": [{"name": "Alice"}],
-                    "embedding": {"vector": [0.1] * 768},
                 },
             ],
         },
@@ -362,7 +361,7 @@ async def test_fetch_recommendations_empty_response():
     from scripts.find_paper_suggest import fetch_recommendations
     respx.post(
         "https://api.semanticscholar.org/recommendations/v1/papers"
-        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "?fields=title,abstract,authors,year,externalIds"
         "&limit=50"
     ).mock(return_value=httpx.Response(200, json={"recommendedPapers": []}))
     async with httpx.AsyncClient() as client:
@@ -385,7 +384,7 @@ async def test_fetch_recommendations_5xx_retries_exhaust():
     from scripts.find_paper_suggest import fetch_recommendations
     route = respx.post(
         "https://api.semanticscholar.org/recommendations/v1/papers"
-        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "?fields=title,abstract,authors,year,externalIds"
         "&limit=50"
     ).mock(return_value=httpx.Response(503, json={"error": "unavailable"}))
     async with httpx.AsyncClient() as client:
@@ -458,6 +457,58 @@ async def test_backfill_warns_on_missing():
     assert "DOI:10.1080/foo" in warnings[0]
 
 
+# ---------------------- Recommendation enrichment ----------------------
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_enrich_recommendations_happy_path():
+    from scripts.find_paper_suggest import enrich_recommendations_with_embeddings
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/abc?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [0.1, 0.2]}}
+    ))
+    recs = [{"paperId": "abc", "title": "Rec A"}]
+    async with httpx.AsyncClient() as client:
+        enriched, warnings = await enrich_recommendations_with_embeddings(client, recs)
+    assert enriched[0]["embedding"]["vector"] == [0.1, 0.2]
+    assert enriched[0]["embedding"]["model"] == "specter_v2"
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_enrich_recommendations_some_missing():
+    from scripts.find_paper_suggest import enrich_recommendations_with_embeddings
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/found?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [0.5]}}
+    ))
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/missing?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(404))
+    recs = [
+        {"paperId": "found", "title": "Found"},
+        {"paperId": "missing", "title": "Missing"},
+    ]
+    async with httpx.AsyncClient() as client:
+        enriched, warnings = await enrich_recommendations_with_embeddings(client, recs)
+    assert enriched[0]["embedding"]["vector"] == [0.5]
+    assert "embedding" not in enriched[1]
+    assert len(warnings) == 1
+    assert "1 of 2" in warnings[0]
+
+
+@pytest.mark.asyncio
+async def test_enrich_recommendations_empty_short_circuits():
+    from scripts.find_paper_suggest import enrich_recommendations_with_embeddings
+    async with httpx.AsyncClient() as client:
+        enriched, warnings = await enrich_recommendations_with_embeddings(client, [])
+    assert enriched == []
+    assert warnings == []
+
+
 # ---------------------- End-to-end golden test ----------------------
 
 @pytest.mark.asyncio
@@ -474,10 +525,10 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
         200, json={"embedding": {"vector": [1.0, 0.0]}}
     ))
 
-    # Recommendations: two candidates with embeddings.
+    # Recommendations: two candidates without embeddings (recs API doesn't return them).
     respx.post(
         "https://api.semanticscholar.org/recommendations/v1/papers"
-        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "?fields=title,abstract,authors,year,externalIds"
         "&limit=50"
     ).mock(return_value=httpx.Response(200, json={
         "recommendedPapers": [
@@ -488,7 +539,6 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
                 "year": 2026,
                 "authors": [{"name": "Alice"}],
                 "externalIds": {"ArXiv": "2604.12345"},
-                "embedding": {"vector": [0.99, 0.01]},
             },
             {
                 "paperId": "rec-b",
@@ -497,10 +547,20 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
                 "year": 2026,
                 "authors": [{"name": "Bob"}],
                 "externalIds": {"ArXiv": "2604.67890"},
-                "embedding": {"vector": [0.0, 1.0]},
             },
         ],
     }))
+    # Per-rec embedding fetches via Graph API
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/rec-a?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [0.99, 0.01]}}
+    ))
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/rec-b?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [0.0, 1.0]}}
+    ))
 
     input_payload = {
         "past_papers": [
