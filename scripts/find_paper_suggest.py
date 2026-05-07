@@ -7,6 +7,7 @@ See: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
 """
 from __future__ import annotations
 
+import asyncio
 import re
 
 import httpx
@@ -270,6 +271,41 @@ async def fetch_recommendations(
     resp.raise_for_status()
     data = resp.json()
     return list(data.get("recommendedPapers", []))
+
+
+async def backfill_missing_embeddings(
+    client: httpx.AsyncClient,
+    past_papers: list[PastPaper],
+    cached: dict[int, list[float]],
+) -> tuple[dict[int, list[float]], list[str]]:
+    """Fetch SPECTER2 embeddings for past papers not present in `cached`.
+
+    Returns (full_embeddings, warnings) where:
+      - full_embeddings is `cached` plus any newly-fetched embeddings,
+        keyed by paper_id.
+      - warnings is a list of human-readable strings describing past
+        papers that returned no embedding (excluded from full).
+    """
+    missing = [p for p in past_papers if p.paper_id not in cached]
+    warnings: list[str] = []
+    if not missing:
+        return (dict(cached), warnings)
+
+    async def _fetch(paper: PastPaper) -> tuple[PastPaper, list[float] | None]:
+        emb = await fetch_specter_embedding(client, paper.s2_paper_id)
+        return (paper, emb)
+
+    results = await asyncio.gather(*(_fetch(p) for p in missing))
+    full = dict(cached)
+    for paper, emb in results:
+        if emb is None:
+            warnings.append(
+                f"Past paper id={paper.paper_id} ({paper.s2_paper_id}) "
+                f"returned no embedding; excluded from rationale."
+            )
+            continue
+        full[paper.paper_id] = emb
+    return (full, warnings)
 
 
 async def main() -> int:

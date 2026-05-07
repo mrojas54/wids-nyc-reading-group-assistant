@@ -392,3 +392,67 @@ async def test_fetch_recommendations_5xx_retries_exhaust():
         with pytest.raises(httpx.HTTPStatusError):
             await fetch_recommendations(client, ["ARXIV:1706.03762"], limit=50)
     assert route.call_count == 3  # 3 attempts total
+
+
+# ---------------------- Embedding backfill ----------------------
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_backfill_no_missing():
+    """If everything is cached, no HTTP calls are made."""
+    from scripts.find_paper_suggest import (
+        PastPaper, backfill_missing_embeddings,
+    )
+    past = [
+        PastPaper(paper_id=1, s2_paper_id="ARXIV:1706.03762", title="t1"),
+        PastPaper(paper_id=2, s2_paper_id="ARXIV:2211.14730", title="t2"),
+    ]
+    cached = {1: [0.1, 0.2], 2: [0.3, 0.4]}
+    async with httpx.AsyncClient() as client:
+        full, warnings = await backfill_missing_embeddings(client, past, cached)
+    assert full == cached
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_backfill_fetches_only_missing():
+    from scripts.find_paper_suggest import (
+        PastPaper, backfill_missing_embeddings,
+    )
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:2211.14730"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200, json={"embedding": {"vector": [0.7, 0.8]}}
+    ))
+    past = [
+        PastPaper(paper_id=1, s2_paper_id="ARXIV:1706.03762", title="t1"),
+        PastPaper(paper_id=2, s2_paper_id="ARXIV:2211.14730", title="t2"),
+    ]
+    cached = {1: [0.1, 0.2]}
+    async with httpx.AsyncClient() as client:
+        full, warnings = await backfill_missing_embeddings(client, past, cached)
+    assert full[1] == [0.1, 0.2]
+    assert full[2] == [0.7, 0.8]
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_backfill_warns_on_missing():
+    """When S2 has no embedding, we warn and exclude that past paper from `full`."""
+    from scripts.find_paper_suggest import (
+        PastPaper, backfill_missing_embeddings,
+    )
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1080/foo"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(404))
+    past = [PastPaper(paper_id=99, s2_paper_id="DOI:10.1080/foo", title="missing")]
+    async with httpx.AsyncClient() as client:
+        full, warnings = await backfill_missing_embeddings(client, past, {})
+    assert 99 not in full
+    assert len(warnings) == 1
+    assert "99" in warnings[0]
+    assert "DOI:10.1080/foo" in warnings[0]
