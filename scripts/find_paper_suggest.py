@@ -248,6 +248,30 @@ async def fetch_specter_embedding(
     return list(vector)
 
 
+async def fetch_recommendations(
+    client: httpx.AsyncClient,
+    positive_ids: list[str],
+    limit: int,
+) -> list[dict]:
+    """POST to the S2 Recommendations API and return the recommendedPapers list.
+
+    Returns [] if positive_ids is empty (short-circuits, no HTTP call).
+    Raises httpx.HTTPStatusError if all retries exhaust on 5xx/429.
+    """
+    if not positive_ids:
+        return []
+    url = (
+        f"{S2_RECS_BASE}/papers"
+        f"?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        f"&limit={limit}"
+    )
+    body = {"positivePaperIds": list(positive_ids), "negativePaperIds": []}
+    resp = await _request_with_retry(client, "POST", url, json=body)
+    resp.raise_for_status()
+    data = resp.json()
+    return list(data.get("recommendedPapers", []))
+
+
 async def main() -> int:
     """Stub. Real implementation lands in Task 9."""
     return 0

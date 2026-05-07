@@ -315,3 +315,80 @@ async def test_fetch_specter_embedding_429_retries_then_succeeds():
         vec = await fetch_specter_embedding(client, "ARXIV:1706.03762")
     assert vec == [0.5, 0.5]
     assert route.call_count == 2
+
+
+# ---------------------- SS recommendations ----------------------
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_recommendations_200():
+    from scripts.find_paper_suggest import fetch_recommendations
+    expected_url = (
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "&limit=50"
+    )
+    route = respx.post(expected_url).mock(return_value=httpx.Response(
+        200,
+        json={
+            "recommendedPapers": [
+                {
+                    "paperId": "abc",
+                    "title": "Rec 1",
+                    "abstract": "abs1",
+                    "year": 2026,
+                    "externalIds": {"ArXiv": "2604.12345"},
+                    "authors": [{"name": "Alice"}],
+                    "embedding": {"vector": [0.1] * 768},
+                },
+            ],
+        },
+    ))
+    async with httpx.AsyncClient() as client:
+        recs = await fetch_recommendations(
+            client, ["ARXIV:1706.03762", "ARXIV:2211.14730"], limit=50,
+        )
+    assert len(recs) == 1
+    assert recs[0]["title"] == "Rec 1"
+    assert route.call_count == 1
+    # Verify request body contained the positive ids.
+    sent = route.calls[0].request
+    assert b'"positivePaperIds":["ARXIV:1706.03762","ARXIV:2211.14730"]' in sent.content
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_recommendations_empty_response():
+    from scripts.find_paper_suggest import fetch_recommendations
+    respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(200, json={"recommendedPapers": []}))
+    async with httpx.AsyncClient() as client:
+        recs = await fetch_recommendations(client, ["ARXIV:1706.03762"], limit=50)
+    assert recs == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_recommendations_no_positives_short_circuits():
+    """No HTTP call is made when positive list is empty."""
+    from scripts.find_paper_suggest import fetch_recommendations
+    async with httpx.AsyncClient() as client:
+        recs = await fetch_recommendations(client, [], limit=50)
+    assert recs == []
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_recommendations_5xx_retries_exhaust():
+    from scripts.find_paper_suggest import fetch_recommendations
+    route = respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds,embedding.specter_v2"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(503, json={"error": "unavailable"}))
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await fetch_recommendations(client, ["ARXIV:1706.03762"], limit=50)
+    assert route.call_count == 3  # 3 attempts total
