@@ -243,3 +243,75 @@ def test_mmr_default_lambda_balances():
     # First: 0 (highest relevance). Second: 2, not 1 — diversity beats marginal relevance.
     assert selected[0] == 0
     assert selected[1] == 2
+
+
+# ---------------------- SS embedding fetch ----------------------
+
+import respx
+import httpx
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embedding_200():
+    from scripts.find_paper_suggest import fetch_specter_embedding
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(
+        200,
+        json={
+            "paperId": "abc123",
+            "embedding": {"model": "specter_v2", "vector": [0.1, 0.2, 0.3]},
+        },
+    ))
+    async with httpx.AsyncClient() as client:
+        vec = await fetch_specter_embedding(client, "ARXIV:1706.03762")
+    assert vec == [0.1, 0.2, 0.3]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embedding_404_returns_none():
+    """Paper not in S2 corpus — return None, do not retry."""
+    from scripts.find_paper_suggest import fetch_specter_embedding
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:9999.99999"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(404, json={"error": "Paper not found"}))
+    async with httpx.AsyncClient() as client:
+        vec = await fetch_specter_embedding(client, "ARXIV:9999.99999")
+    assert vec is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embedding_no_embedding_field():
+    """200 OK but the paper has no embedding indexed yet — return None."""
+    from scripts.find_paper_suggest import fetch_specter_embedding
+    respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1234.56789"
+        "?fields=embedding.specter_v2"
+    ).mock(return_value=httpx.Response(200, json={"paperId": "xyz", "embedding": None}))
+    async with httpx.AsyncClient() as client:
+        vec = await fetch_specter_embedding(client, "ARXIV:1234.56789")
+    assert vec is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embedding_429_retries_then_succeeds():
+    """One 429, then 200 — tenacity retry path exercises."""
+    from scripts.find_paper_suggest import fetch_specter_embedding
+    route = respx.get(
+        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762"
+        "?fields=embedding.specter_v2"
+    )
+    route.side_effect = [
+        httpx.Response(429, json={"error": "rate limited"}),
+        httpx.Response(200, json={"embedding": {"vector": [0.5, 0.5]}}),
+    ]
+    async with httpx.AsyncClient() as client:
+        vec = await fetch_specter_embedding(client, "ARXIV:1706.03762")
+    assert vec == [0.5, 0.5]
+    assert route.call_count == 2

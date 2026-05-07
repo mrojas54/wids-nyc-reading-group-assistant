@@ -9,9 +9,22 @@ from __future__ import annotations
 
 import re
 
+import httpx
 import numpy as np
-
 from pydantic import BaseModel
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
+
+S2_GRAPH_BASE = "https://api.semanticscholar.org/graph/v1"
+S2_RECS_BASE = "https://api.semanticscholar.org/recommendations/v1"
+
+# Status codes to retry. 429 (rate limit) and 5xx (server). 4xx other than 429
+# are not retryable; 200 and 404 are returned to caller for handling.
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 class PastPaper(BaseModel):
@@ -182,6 +195,57 @@ def mmr_select(
         remaining.discard(best_idx)
 
     return selected
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TransportError)),
+    reraise=True,
+)
+async def _request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    **kwargs,
+) -> httpx.Response:
+    """Issue an HTTP request with exponential-backoff retry on retryable
+    statuses (429, 5xx) and transport errors. Non-retryable statuses
+    (including 200 and 404) are returned to the caller without raising.
+    """
+    resp = await client.request(method, url, **kwargs)
+    if resp.status_code in _RETRYABLE_STATUS:
+        # Raise so tenacity retries.
+        resp.raise_for_status()
+    return resp
+
+
+async def fetch_specter_embedding(
+    client: httpx.AsyncClient,
+    s2_paper_id: str,
+) -> list[float] | None:
+    """Fetch the SPECTER2 embedding for a paper from the S2 Graph API.
+
+    Returns None if the paper is not in the S2 corpus (404), the response
+    has no embedding field, or the embedding vector is empty.
+    """
+    url = f"{S2_GRAPH_BASE}/paper/{s2_paper_id}?fields=embedding.specter_v2"
+    try:
+        resp = await _request_with_retry(client, "GET", url)
+    except httpx.HTTPStatusError:
+        return None
+    if resp.status_code == 404:
+        return None
+    if resp.status_code != 200:
+        return None
+    data = resp.json()
+    embedding = data.get("embedding")
+    if not embedding:
+        return None
+    vector = embedding.get("vector")
+    if not vector:
+        return None
+    return list(vector)
 
 
 async def main() -> int:
