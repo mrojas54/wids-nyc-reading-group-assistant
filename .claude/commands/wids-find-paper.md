@@ -289,6 +289,8 @@ For each candidate in the helper output:
 
 1. Find or create the paper row by URL (mirror Step 2c pattern). The candidate's URL is `https://arxiv.org/abs/<arxiv_id>` if `arxiv_id` is set, else use the S2 paper URL `https://www.semanticscholar.org/paper/<s2_paper_id>`.
 
+   **Escaping note:** SS-supplied abstracts and titles routinely contain apostrophes (`q-net`, `we've`, `arms' embedding`, `LLM's`) that break naïve single-quoted SQL. **Use PostgreSQL dollar-quoting** for `title`, `abstract`, and any other free-text fields — pick a tag unlikely to appear in academic text (e.g., `$wids_text$<value>$wids_text$`). The 2026-05-07 smoke test lost 6 of 10 abstracts to single-quoting; dollar-quoting prevents this entirely.
+
 2. Generate the background-needed assessment by reading the abstract — same pattern as Step 2d.
 
 3. Build the `notes` field. If `matched_past_paper_id` is non-null:
