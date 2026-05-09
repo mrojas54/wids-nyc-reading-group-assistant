@@ -300,6 +300,7 @@ Filter `event:suggest_request fallback_used:>0` for fallback usage; `cold_start:
 - Exposing alternate embedding models (Voyage, OpenAI) through the route.
 - Background pre-warming via Vercel cron.
 - Replacing the `/wids-find-paper` Claude Code skill.
+- **Corpus-ingestion / system-surfaced candidates** — a future "leader hits Submit with no input, system uses pgvector to find top-K diverse papers from a pre-ingested arXiv corpus" UX. Most of the modules in this spec (auth, MMR, WASM fallback, `paper_embeddings` schema) are reusable; what's missing is a cron-driven arXiv batch-ingestion pipeline and a pgvector ANN index. Track as a follow-up after Phase 4 ships.
 
 ## Operator setup checklist (one-time)
 
