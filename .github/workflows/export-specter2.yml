@@ -55,6 +55,7 @@ jobs:
                  --with numpy \
                  --with onnxruntime \
                  --with onnx \
+                 --with onnxscript \
                  python scripts/export_specter2_onnx.py
 
       - name: Compute SHA-256 and write summary
