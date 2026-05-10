@@ -4,25 +4,37 @@ One-time export: fuse specter2_base + specter2 (proximity adapter) into a
 single ONNX graph, INT8-quantize, verify cosine >= 0.997 against S2's
 canonical vectors for fixture papers, print the SHA-256 of the output.
 
-Run (NOTE the python and torch pins, both required):
+Run — pick the right command for your platform:
+
+  Apple Silicon Mac, Linux x86_64, Linux aarch64, Windows:
 
     uv run --python 3.11 \\
            --with 'optimum[onnxruntime]' \\
            --with adapters \\
            --with 'torch>=2.6' \\
            --with transformers \\
-           --with numpy \\
-           --with onnxruntime \\
-           --with onnx \\
+           --with numpy --with onnxruntime --with onnx \\
+           python scripts/export_specter2_onnx.py
+
+  Intel Mac (macOS x86_64) — torch dropped Intel wheels at 2.3, so the
+  CVE-2025-32434 path doesn't apply (we have to stay on older torch),
+  and we pin transformers<4.51 to skip the check it added in 4.51:
+
+    uv run --python 3.11 \\
+           --with 'optimum[onnxruntime]' \\
+           --with adapters \\
+           --with 'torch<2.6' \\
+           --with 'transformers<4.51' \\
+           --with numpy --with onnxruntime --with onnx \\
            python scripts/export_specter2_onnx.py
 
 Why the pins:
   - Python 3.11: HuggingFace optimum + adapters + torch wheels are most
     consistent here. Newer Python (3.13) causes uv's resolver to silently
     fall back to an unrelated 2018 namesake package 'optimum 0.1.0'.
-  - torch>=2.6: transformers requires torch >= 2.6 to load .bin state
-    dicts safely (CVE-2025-32434 patch). Without the pin, uv may resolve
-    to an older torch and you'll see a ValueError about torch.load.
+  - torch>=2.6 OR transformers<4.51: transformers 4.51+ requires
+    torch >= 2.6 to load .bin state dicts safely (CVE-2025-32434 patch).
+    Pick the strategy that matches your platform's available wheels.
   - On zsh, the brackets in optimum[onnxruntime] need single-quoting
     because zsh treats [...] as a glob pattern.
 
