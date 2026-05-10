@@ -4,14 +4,33 @@ One-time export: fuse specter2_base + specter2 (proximity adapter) into a
 single ONNX graph, INT8-quantize, verify cosine >= 0.997 against S2's
 canonical vectors for fixture papers, print the SHA-256 of the output.
 
-Run: uv run --with optimum[onnxruntime] --with adapters --with torch \\
-        --with transformers --with numpy python scripts/export_specter2_onnx.py
+Run (NOTE the python and torch pins, both required):
 
-Prerequisite: scripts/specter2_parity_fixtures.json must exist. It is
-populated separately by an operator-run command that fetches ~20 papers
-with their canonical S2 vectors. See the plan
+    uv run --python 3.11 \\
+           --with 'optimum[onnxruntime]' \\
+           --with adapters \\
+           --with 'torch>=2.6' \\
+           --with transformers \\
+           --with numpy \\
+           --with onnxruntime \\
+           --with onnx \\
+           python scripts/export_specter2_onnx.py
+
+Why the pins:
+  - Python 3.11: HuggingFace optimum + adapters + torch wheels are most
+    consistent here. Newer Python (3.13) causes uv's resolver to silently
+    fall back to an unrelated 2018 namesake package 'optimum 0.1.0'.
+  - torch>=2.6: transformers requires torch >= 2.6 to load .bin state
+    dicts safely (CVE-2025-32434 patch). Without the pin, uv may resolve
+    to an older torch and you'll see a ValueError about torch.load.
+  - On zsh, the brackets in optimum[onnxruntime] need single-quoting
+    because zsh treats [...] as a glob pattern.
+
+Prerequisite: scripts/specter2_parity_fixtures.json must exist. Generate
+it via scripts/collect_specter2_fixtures.py (also one-shot, also
+operator-run). See the plan
 (docs/superpowers/plans/2026-05-09-vercel-suggest-wasm-specter2-implementation.md)
-Task 1.1 Step 1 for the fixtures-collection command.
+Task 1.1 for the full setup sequence.
 """
 import hashlib
 import json
