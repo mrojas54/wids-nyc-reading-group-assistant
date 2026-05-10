@@ -38,8 +38,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     parsed = SuggestRequestSchema.parse(body);
 
-    const apiKey = process.env.S2_API_KEY;
-    if (!apiKey) throw new S2AuthError("S2_API_KEY env var not set");
+    const apiKey = process.env.S2_API_KEY ?? null;
+    if (!apiKey) {
+      console.warn(JSON.stringify({
+        event: "s2_api_key_absent",
+        message: "S2_API_KEY env var not set; calling S2 unauthenticated. Set it for higher rate limits.",
+      }));
+    }
 
     // Lazy-import the service-role client so we don't pull in @supabase/* at the route module
     // load time; this is fine because the function is dynamic-only.

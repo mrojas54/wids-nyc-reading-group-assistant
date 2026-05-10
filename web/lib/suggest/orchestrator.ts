@@ -9,14 +9,14 @@ import type {
 } from "./types";
 
 export type OrchestratorDeps = {
-  apiKey: string;
+  apiKey: string | null;
   client?: SupabaseClient;
   getCached: (client: SupabaseClient | undefined, ids: number[]) => Promise<Map<number, Float32Array>>;
   cacheMany: (
     client: SupabaseClient | undefined,
     rows: Array<{ paperId: number; vector: Float32Array }>,
   ) => Promise<void>;
-  fetchPaperWithEmbedding: (s2PaperId: string, apiKey: string) => Promise<S2Result>;
+  fetchPaperWithEmbedding: (s2PaperId: string, apiKey: string | null) => Promise<S2Result>;
   embedBatch: (items: Array<{ title: string; abstract: string }>) => Promise<Float32Array[]>;
   isModelWarm: () => boolean;
 };

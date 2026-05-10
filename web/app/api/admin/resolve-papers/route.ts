@@ -33,11 +33,13 @@ const S2_BASE = "https://api.semanticscholar.org/graph/v1";
 
 async function fetchS2Metadata(
   s2Id: string,
-  apiKey: string,
+  apiKey: string | null,
 ): Promise<{ paperId: string; title: string; abstract: string } | null> {
   const url = `${S2_BASE}/paper/${encodeURIComponent(s2Id)}?fields=paperId,title,abstract`;
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["x-api-key"] = apiKey;
   const res = await fetch(url, {
-    headers: { "x-api-key": apiKey },
+    headers,
     signal: AbortSignal.timeout(15_000),
   });
   if (res.status === 401 || res.status === 403) throw new S2AuthError(`s2 ${res.status}`);
@@ -74,8 +76,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = process.env.S2_API_KEY;
-    if (!apiKey) throw new S2AuthError("S2_API_KEY env var not set");
+    const apiKey = process.env.S2_API_KEY ?? null;
+    if (!apiKey) {
+      console.warn(JSON.stringify({
+        event: "s2_api_key_absent",
+        message: "S2_API_KEY env var not set; calling S2 unauthenticated.",
+      }));
+    }
 
     const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
     const client = createSupabaseServiceClient();

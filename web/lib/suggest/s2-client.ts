@@ -3,17 +3,19 @@ import { S2AuthError, S2RequestError, type S2Result } from "./types";
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";
 const FIELDS = "paperId,title,abstract,embedding.specter_v2";
 
-async function fetchOnce(paperId: string, apiKey: string): Promise<Response> {
+async function fetchOnce(paperId: string, apiKey: string | null): Promise<Response> {
   const url = `${S2_BASE}/paper/${encodeURIComponent(paperId)}?fields=${FIELDS}`;
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["x-api-key"] = apiKey;
   return fetch(url, {
-    headers: { "x-api-key": apiKey },
+    headers,
     signal: AbortSignal.timeout(15_000),
   });
 }
 
 const TRANSIENT = new Set([408, 429, 500, 502, 503, 504]);
 
-export async function fetchPaperWithEmbedding(paperId: string, apiKey: string): Promise<S2Result> {
+export async function fetchPaperWithEmbedding(paperId: string, apiKey: string | null): Promise<S2Result> {
   let res: Response;
   try {
     res = await fetchOnce(paperId, apiKey);

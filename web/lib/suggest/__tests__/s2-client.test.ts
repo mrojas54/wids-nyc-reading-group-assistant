@@ -70,4 +70,15 @@ describe("fetchPaperWithEmbedding", () => {
     server.use(http.get(`${S2}/paper/p7`, () => new HttpResponse(null, { status: 400 })));
     await expect(fetchPaperWithEmbedding("p7", "key")).rejects.toBeInstanceOf(S2RequestError);
   });
+
+  it("omits the x-api-key header when apiKey is null", async () => {
+    let receivedKey: string | null = null;
+    server.use(http.get(`${S2}/paper/p8`, ({ request }) => {
+      receivedKey = request.headers.get("x-api-key");
+      return HttpResponse.json({ paperId: "p8", title: "T", abstract: "A", embedding: { vector: [1] } });
+    }));
+    const r = await fetchPaperWithEmbedding("p8", null);
+    expect(r.kind).toBe("hit");
+    expect(receivedKey).toBeNull();
+  });
 });
