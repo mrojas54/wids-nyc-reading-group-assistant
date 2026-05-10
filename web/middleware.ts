@@ -27,7 +27,8 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession();
   const protectedPath = request.nextUrl.pathname.startsWith("/dashboard")
-    || request.nextUrl.pathname.startsWith("/availability");
+    || request.nextUrl.pathname.startsWith("/availability")
+    || request.nextUrl.pathname.startsWith("/admin");
 
   if (protectedPath && !session) {
     const redirect = new URL("/", request.url);
