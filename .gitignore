@@ -22,3 +22,9 @@ dist/
 build/
 .vercel
 .env*.local
+
+# ONNX model artifacts (large binary, stored in Vercel Blob)
+specter2_int8.onnx
+
+# Claude agent worktrees
+.claude/worktrees/

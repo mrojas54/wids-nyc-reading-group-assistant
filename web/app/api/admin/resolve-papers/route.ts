@@ -7,6 +7,7 @@ import {
   S2AuthError,
   S2RequestError,
 } from "@/lib/suggest/types";
+import { toS2PaperId, fetchArxivBatch } from "@/lib/suggest/resolve-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,20 +15,6 @@ export const dynamic = "force-dynamic";
 const ResolveRequestSchema = z.object({
   urls: z.array(z.string().min(1)).min(1).max(10),
 });
-
-const ARXIV_RE = /arxiv\.org\/(?:abs|pdf)\/([0-9]{4}\.[0-9]{4,5})(?:v\d+)?(?:\.pdf)?/i;
-const DOI_RE = /\b(10\.\d{4,9}\/[^\s/?#]+)/i;
-const CANONICAL_RE = /^[A-Z]+:/;
-
-function toS2PaperId(url: string): string | null {
-  const s = url.trim();
-  if (CANONICAL_RE.test(s)) return s;
-  const arxiv = s.match(ARXIV_RE);
-  if (arxiv) return `ARXIV:${arxiv[1]}`;
-  const doi = s.match(DOI_RE);
-  if (doi) return `DOI:${doi[1]}`;
-  return null;
-}
 
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";
 
@@ -108,10 +95,15 @@ export async function POST(req: Request) {
     const missingIds = validIds.filter(id => !resolvedMap.has(id));
     if (missingIds.length > 0) {
       const s2Results = await Promise.all(missingIds.map(id => fetchS2Metadata(id, apiKey)));
+
+      // Collect ARXIV: IDs that S2 didn't have — batch-fetch from arXiv export API
+      const s2Misses = missingIds.filter((id, i) => !s2Results[i] && id.startsWith("ARXIV:"));
+      const arxivFallback = s2Misses.length > 0 ? await fetchArxivBatch(s2Misses) : new Map();
+
       const insertRows: Array<{ s2_paper_id: string; title: string; abstract: string }> = [];
       for (let i = 0; i < missingIds.length; i++) {
-        const meta = s2Results[i];
-        if (!meta) continue; // S2 didn't have it; drop from result
+        const meta = s2Results[i] ?? arxivFallback.get(missingIds[i]) ?? null;
+        if (!meta) continue; // neither S2 nor arXiv had it; drop
         insertRows.push({
           s2_paper_id: meta.paperId,
           title: meta.title || "(untitled)",
