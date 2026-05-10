@@ -1,0 +1,89 @@
+# SPECTER2 ONNX export — manual fallback for platforms where the export
+# script can't run locally (e.g., Intel Mac, where torch>=2.6 has no wheels).
+#
+# Trigger: gh workflow run export-specter2.yml
+# Output:  the resulting INT8 ONNX file is uploaded as an artifact named
+#          `specter2-onnx`, retained for 7 days. SHA-256 is printed in the
+#          run summary so the operator can pin it into
+#          web/lib/suggest/specter2-wasm.ts.
+#
+# Security note: this workflow is workflow_dispatch only (no event-driven
+# triggers), uses no github.event.* inputs in run: blocks, and references
+# only static strings + outputs of trusted commands. Safe by the criteria
+# at https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+
+name: Export SPECTER2 ONNX
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache uv archives
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py311-specter2-v1
+
+      - name: Run export script
+        run: |
+          uv run --python 3.11 \
+                 --with 'optimum[onnxruntime]' \
+                 --with adapters \
+                 --with 'torch>=2.6' \
+                 --with transformers \
+                 --with numpy \
+                 --with onnxruntime \
+                 --with onnx \
+                 python scripts/export_specter2_onnx.py
+
+      - name: Compute SHA-256 and write summary
+        if: success()
+        run: |
+          ONNX=scripts/_specter2_export/specter2_int8.onnx
+          SHA=$(sha256sum "$ONNX" | awk '{print $1}')
+          SIZE_MB=$(du -m "$ONNX" | awk '{print $1}')
+          {
+            echo "## SPECTER2 ONNX export — PASS"
+            echo ""
+            echo "**File:** \`$ONNX\` (${SIZE_MB} MB)"
+            echo ""
+            echo "**SHA-256:**"
+            echo ""
+            echo "    $SHA"
+            echo ""
+            echo "### Next steps"
+            echo "1. Download the \`specter2-onnx\` artifact from this run."
+            echo "2. \`vercel blob put specter2_int8.onnx --pathname specter2/specter2_int8.onnx\`"
+            echo "3. Replace \`EXPECTED_MODEL_SHA256\` in \`web/lib/suggest/specter2-wasm.ts\` with the SHA above."
+            echo "4. Set \`SPECTER2_MODEL_BLOB_URL\` in Vercel project env vars."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ONNX artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: specter2-onnx
+          path: scripts/_specter2_export/specter2_int8.onnx
+          retention-days: 7
+          if-no-files-found: error
