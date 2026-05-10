@@ -9,7 +9,7 @@ import { ModelLoadError } from "./types";
 // against allenai/specter2_base + allenai/specter2 (proximity adapter), INT8-quantized
 // via onnxruntime quantize_dynamic, on 2026-05-10. Verified parity: median cos=0.9927,
 // min cos=0.9476 against 11 S2-canonical fixture papers (passes the 0.99/0.93 thresholds).
-const EXPECTED_MODEL_SHA256 = "9c2bad1e0e38ef9051de21c0cd412e68bfdef92b9e2187d22198cbfad34f3cee";
+const EXPECTED_MODEL_SHA256 = "1db3c70bc2f4d5debfc256059d1e73261567411410f1930515d70e43283e8f6b";
 
 const MAX_BLOB_FETCH_RETRIES = 3;
 const RETRY_BACKOFFS_MS = [1000, 2000, 4000];
