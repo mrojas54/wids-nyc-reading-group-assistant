@@ -31,3 +31,8 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 ### Supabase auth callback
 
 `<vercel-url>/auth/callback` must be in the Supabase project's allowed redirect URLs (Supabase dashboard → Authentication → URL Configuration). Without this, magic-link sign-in returns a 404 and the user is stuck on the callback page.
+
+## Tests
+
+- `npm test` — runs unit tests with vitest. Fast.
+- `RUN_PARITY=1 SPECTER2_MODEL_BLOB_URL=https://... npm test -- parity` — runs the WASM parity check against Semantic Scholar. Slow (loads ONNX from Vercel Blob, runs ~20 inferences). Requires the blob URL env var and `scripts/specter2_parity_fixtures.json` to exist.
