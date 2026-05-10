@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   myAvailabilitySubmitted,
@@ -6,7 +7,7 @@ import {
   myStats,
   nextMeeting,
 } from "@/lib/queries";
-import { Brandmark } from "@/components/ui";
+import { Brandmark, Icon } from "@/components/ui";
 import { NextMeetingCard } from "@/components/NextMeetingCard";
 import { AvailabilityBanner } from "@/components/AvailabilityBanner";
 import { YourStats } from "@/components/YourStats";
@@ -38,6 +39,15 @@ export default async function DashboardPage() {
   const stats = await myStats(sb, submitted);
   const history = await myHistory(sb, 10);
 
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  const { data: member } = user
+    ? await sb.from("members").select("role").eq("id", user.id).single()
+    : { data: null };
+  const isLeaderOrAdmin =
+    member?.role === "leader" || member?.role === "admin";
+
   return (
     <div className="shell">
       <header className="shell-header">
@@ -58,6 +68,16 @@ export default async function DashboardPage() {
 
         {prepMeeting && !submitted && (
           <AvailabilityBanner meetingType={prepMeeting.type} />
+        )}
+
+        {isLeaderOrAdmin && (
+          <Link href="/admin/suggest" className="banner banner-info">
+            <div className="availability-banner-body">
+              <strong className="banner-title">Find a paper</strong>
+              <span>Search and rank papers for the next meeting</span>
+            </div>
+            <Icon name="arrowRight" size={16} aria-hidden />
+          </Link>
         )}
 
         <YourStats stats={stats} />
