@@ -1,9 +1,15 @@
 import { ModelLoadError } from "./types";
 
 // IMPORTANT: This SHA-256 must equal the hash of the file at SPECTER2_MODEL_BLOB_URL.
-// See spec section "SHA-256 integrity pin" — value comes from Task 1.2 output.
-// REPLACE THIS LITERAL with the hex string the export script printed.
-const EXPECTED_MODEL_SHA256 = "REPLACE_WITH_SHA_FROM_TASK_1_2";
+// If the operator re-quantizes (e.g., HF Hub republishes the proximity adapter,
+// or the script's quantization mode changes), update this value in the same commit
+// that pushes the new model to Vercel Blob.
+//
+// Current value: hash of specter2_int8.onnx produced by scripts/export_specter2_onnx.py
+// against allenai/specter2_base + allenai/specter2 (proximity adapter), INT8-quantized
+// via onnxruntime quantize_dynamic, on 2026-05-10. Verified parity: median cos=0.9927,
+// min cos=0.9476 against 11 S2-canonical fixture papers (passes the 0.99/0.93 thresholds).
+const EXPECTED_MODEL_SHA256 = "9c2bad1e0e38ef9051de21c0cd412e68bfdef92b9e2187d22198cbfad34f3cee";
 
 const MAX_BLOB_FETCH_RETRIES = 3;
 const RETRY_BACKOFFS_MS = [1000, 2000, 4000];
