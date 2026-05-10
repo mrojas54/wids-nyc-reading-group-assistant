@@ -120,7 +120,7 @@ export async function fetchArxivBatch(
     const hit =
       parsed.get(arxivId) ??
       parsed.get(baseId) ??
-      [...parsed.entries()].find(([k]) => k.replace(/v\d+$/, "") === baseId)?.[1];
+      Array.from(parsed.entries()).find(([k]) => k.replace(/v\d+$/, "") === baseId)?.[1];
     if (hit) {
       out.set(s2Id, { paperId: s2Id, title: hit.title, abstract: hit.abstract });
     }
