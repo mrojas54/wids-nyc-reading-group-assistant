@@ -11,7 +11,6 @@ import {
   ForbiddenError,
   S2AuthError,
   S2RequestError,
-  S2OutageError,
   ModelLoadError,
   TimeoutError,
 } from "@/lib/suggest/types";
@@ -97,7 +96,6 @@ export async function POST(req: Request) {
     if (e instanceof z.ZodError) { errorLog("invalid_request", 400); return NextResponse.json({ error: "invalid_request", issues: e.issues }, { status: 400 }); }
     if (e instanceof S2AuthError) { errorLog("s2_auth", 502); return NextResponse.json({ error: "s2_auth" }, { status: 502 }); }
     if (e instanceof S2RequestError) { errorLog("s2_request", 502); return NextResponse.json({ error: "s2_request" }, { status: 502 }); }
-    if (e instanceof S2OutageError) { errorLog("s2_unreachable_fallback_failed", 502); return NextResponse.json({ error: "s2_unreachable_fallback_failed" }, { status: 502 }); }
     if (e instanceof ModelLoadError) { errorLog("wasm_model_load_failed", 502); return NextResponse.json({ error: "wasm_model_load_failed", detail: (e as Error).message }, { status: 502 }); }
     if (e instanceof TimeoutError) { errorLog("timeout", 504); return NextResponse.json({ error: "timeout", elapsed_ms: TIMEOUT_MS }, { status: 504 }); }
 

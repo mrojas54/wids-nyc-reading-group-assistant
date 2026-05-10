@@ -39,14 +39,24 @@ export default async function DashboardPage() {
   const stats = await myStats(sb, submitted);
   const history = await myHistory(sb, 10);
 
+  // Decide whether to show the "Find a paper" link. members.id is SERIAL INT;
+  // user.id is a UUID — the bridge column is members.auth_user_id. Today the
+  // role CHECK constraint only permits 'member' and 'operator', but the set
+  // below is forward-compatible for if/when 'leader' / 'admin' are added.
   const {
     data: { user },
   } = await sb.auth.getUser();
   const { data: member } = user
-    ? await sb.from("members").select("role").eq("id", user.id).single()
+    ? await sb
+        .from("members")
+        .select("role")
+        .eq("auth_user_id", user.id)
+        .single()
     : { data: null };
-  const isLeaderOrAdmin =
-    member?.role === "leader" || member?.role === "admin";
+  const canFindPaper =
+    member?.role === "operator" ||
+    member?.role === "leader" ||
+    member?.role === "admin";
 
   return (
     <div className="shell">
@@ -70,7 +80,7 @@ export default async function DashboardPage() {
           <AvailabilityBanner meetingType={prepMeeting.type} />
         )}
 
-        {isLeaderOrAdmin && (
+        {canFindPaper && (
           <Link href="/admin/suggest" className="banner banner-info">
             <div className="availability-banner-body">
               <strong className="banner-title">Find a paper</strong>

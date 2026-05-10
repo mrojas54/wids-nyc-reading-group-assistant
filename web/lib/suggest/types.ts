@@ -64,12 +64,6 @@ export class S2RequestError extends Error {
     this.name = "S2RequestError";
   }
 }
-export class S2OutageError extends Error {
-  constructor(m: string) {
-    super(m);
-    this.name = "S2OutageError";
-  }
-}
 export class ModelLoadError extends Error {
   constructor(m: string) {
     super(m);

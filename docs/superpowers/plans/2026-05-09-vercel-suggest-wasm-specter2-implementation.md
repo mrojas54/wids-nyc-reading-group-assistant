@@ -10,6 +10,15 @@
 
 **Tech Stack:** TypeScript, Next.js 14 App Router, Node serverless function, `@xenova/transformers` (WASM transformers), `onnxruntime-web` (WASM-SIMD backend), `@vercel/blob`, `@supabase/ssr`, `zod`, vitest.
 
+> **⚠️ Post-implementation correction:** Parity threshold values in this plan
+> (`PARITY_THRESHOLD = 0.997`, `cos ≥ 0.997`) were the original brainstorm
+> guess. Real INT8 dynamic quantization of a 110M-param transformer delivers
+> median cos ≈ 0.99 with occasional 0.94 outliers, not 0.997. The shipped
+> implementation uses `PARITY_MEDIAN_THRESHOLD = 0.99` + `PARITY_MIN_THRESHOLD = 0.93`
+> (see commits `17589da` and `d7c0d7d`, design spec, and the teaching guide
+> at `docs/admin-suggest.md`). The 0.997 references throughout this plan
+> reflect the historical implementation intent, not the empirical reality.
+
 ---
 
 ## ⚠️ Pre-execution clarifications required
