@@ -56,11 +56,13 @@ async function initModel() {
   }
 
   // Lazy-import onnxruntime + tokenizer at first use to avoid penalizing cold paths
-  // that never need WASM (the all-cache-hit case).
+  // that never need the model (the all-cache-hit case).
   const ort = await import("onnxruntime-web");
-  const { AutoTokenizer } = await import("@xenova/transformers");
+  const transformers = await import("@xenova/transformers");
+  // Vercel's /var/task/ is read-only; redirect the HF model cache to /tmp.
+  transformers.env.cacheDir = "/tmp/transformers-cache";
   const session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
-  const tokenizer = await AutoTokenizer.from_pretrained("allenai/specter2_base");
+  const tokenizer = await transformers.AutoTokenizer.from_pretrained("allenai/specter2_base");
   return { session, tokenizer };
 }
 
@@ -96,10 +98,12 @@ export async function embedBatch(
     const texts = chunk.map(it => `${it.title}${tokenizer.sep_token}${it.abstract}`);
     const enc = await tokenizer(texts, { padding: "max_length", truncation: true, max_length: 512, return_tensors: "np" });
 
-    const outputs = await session.run({
-      input_ids: enc.input_ids,
-      attention_mask: enc.attention_mask,
-    });
+    // @xenova/transformers tensors have an undefined .location that
+    // onnxruntime-web rejects. Build plain ORT tensors from the raw data.
+    const { Tensor } = await import("onnxruntime-web");
+    const inputIds = new Tensor("int64", enc.input_ids.data, enc.input_ids.dims);
+    const attMask = new Tensor("int64", enc.attention_mask.data, enc.attention_mask.dims);
+    const outputs = await session.run({ input_ids: inputIds, attention_mask: attMask });
     const lhs = outputs.last_hidden_state.data as Float32Array;  // shape: (B, 512, 768)
     const dim = 768;
     const seq = 512;
