@@ -23,11 +23,16 @@ async function sha256Hex(buf: ArrayBuffer): Promise<string> {
 }
 
 async function fetchBlobWithRetries(url: string): Promise<ArrayBuffer> {
+  const { get } = await import("@vercel/blob");
   let lastErr: unknown;
   for (let i = 0; i < MAX_BLOB_FETCH_RETRIES; i++) {
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`blob fetch ${res.status}`);
+      const result = await get(url, { access: "private" });
+      if (result?.statusCode !== 200 || !result.stream) {
+        throw new Error(`blob fetch ${result?.statusCode ?? "no response"}`);
+      }
+      // Read the stream into an ArrayBuffer for SHA-256 verification + ONNX load
+      const res = new Response(result.stream);
       return await res.arrayBuffer();
     } catch (e) {
       lastErr = e;
