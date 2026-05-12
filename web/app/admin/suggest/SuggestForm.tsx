@@ -31,11 +31,14 @@ export function SuggestForm() {
 
     const messageTimers = [
       window.setTimeout(() => setMessage("Embedding paper(s) locally (first run can be slow)…"), 8_000),
-      window.setTimeout(() => setMessage("Still working — cold start can take up to 30 s…"), 18_000),
+      window.setTimeout(() => setMessage("Still working — cold start can take up to ~55 s…"), 18_000),
     ];
 
+    // Client budget = server `TIMEOUT_MS` (55s) + small transport buffer.
+    // Must stay <= Vercel's `maxDuration` (60s) so the server still gets to
+    // return its own JSON 504 before we abort.
     const ac = new AbortController();
-    const hardTimeout = window.setTimeout(() => ac.abort(), 30_000);
+    const hardTimeout = window.setTimeout(() => ac.abort(), 60_000);
 
     try {
       // Step A: resolve candidate URLs to ResolvedPaper objects
@@ -87,7 +90,7 @@ export function SuggestForm() {
       setStatus("error");
       setMessage(
         err.name === "AbortError"
-          ? "Timed out after 30 s. Try again."
+          ? "Timed out after 60 s. Try again."
           : `Error: ${err.message}`,
       );
     } finally {
