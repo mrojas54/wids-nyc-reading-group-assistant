@@ -49,20 +49,26 @@ async function initModel() {
   const url = process.env.SPECTER2_MODEL_BLOB_URL;
   if (!url) throw new ModelLoadError("SPECTER2_MODEL_BLOB_URL env var is not set");
 
-  const buf = await fetchBlobWithRetries(url);
+  // Run all independent I/O in parallel: blob fetch, onnxruntime-web ESM load,
+  // @xenova/transformers ESM load, and (chained off transformers) the tokenizer
+  // fetch from huggingface.co. On a cold container the tokenizer fetch alone is
+  // ~1–3s and the blob fetch ~3–10s; running them sequentially is wasted time.
+  const bufPromise = fetchBlobWithRetries(url);
+  const ortPromise = import("onnxruntime-web");
+  const tokenizerPromise = (async () => {
+    const transformers = await import("@xenova/transformers");
+    // Vercel's /var/task/ is read-only; redirect the HF model cache to /tmp.
+    transformers.env.cacheDir = "/tmp/transformers-cache";
+    return transformers.AutoTokenizer.from_pretrained("allenai/specter2_base");
+  })();
+
+  const [buf, ort] = await Promise.all([bufPromise, ortPromise]);
   const actualSha = await sha256Hex(buf);
   if (actualSha !== EXPECTED_MODEL_SHA256) {
     throw new ModelLoadError(`integrity mismatch: expected ${EXPECTED_MODEL_SHA256}, got ${actualSha}`);
   }
-
-  // Lazy-import onnxruntime + tokenizer at first use to avoid penalizing cold paths
-  // that never need the model (the all-cache-hit case).
-  const ort = await import("onnxruntime-web");
-  const transformers = await import("@xenova/transformers");
-  // Vercel's /var/task/ is read-only; redirect the HF model cache to /tmp.
-  transformers.env.cacheDir = "/tmp/transformers-cache";
   const session = await ort.InferenceSession.create(buf, { executionProviders: ["wasm"] });
-  const tokenizer = await transformers.AutoTokenizer.from_pretrained("allenai/specter2_base");
+  const tokenizer = await tokenizerPromise;
   return { session, tokenizer };
 }
 
@@ -79,6 +85,16 @@ async function getModel() {
     modelPromise = initModel();
   }
   return modelPromise;
+}
+
+/**
+ * Fire-and-forget model warmup. Safe to call repeatedly; subsequent calls
+ * are no-ops once load is in flight. Errors are swallowed here because the
+ * actual request will re-await via embedBatch -> getModel and surface a
+ * proper ModelLoadError there.
+ */
+export function prewarmModel(): void {
+  void getModel().catch(() => {});
 }
 
 /**

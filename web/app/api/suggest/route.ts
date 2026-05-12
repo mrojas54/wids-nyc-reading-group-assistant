@@ -4,7 +4,7 @@ import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
 import { orchestrate, type OrchestratorDeps } from "@/lib/suggest/orchestrator";
 import { getCached, cacheMany } from "@/lib/suggest/embedding-cache";
 import { fetchPaperWithEmbedding } from "@/lib/suggest/s2-client";
-import { embedBatch, isModelWarm } from "@/lib/suggest/specter2-wasm";
+import { embedBatch, isModelWarm, prewarmModel } from "@/lib/suggest/specter2-wasm";
 import {
   SuggestRequestSchema,
   UnauthorizedError,
@@ -19,7 +19,11 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-const TIMEOUT_MS = 30_000;
+// Soft race timeout: must stay strictly under `maxDuration` so the route gets
+// to return a clean 504 JSON body instead of being killed by the platform.
+// On cold starts the WASM SPECTER2 init (blob fetch + WASM compile + tokenizer
+// fetch) can take 15–25s by itself; 55s leaves headroom for S2 and inference.
+const TIMEOUT_MS = 55_000;
 
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => setTimeout(() => reject(new TimeoutError()), ms));
@@ -49,6 +53,11 @@ export async function POST(req: Request) {
     // load time; this is fine because the function is dynamic-only.
     const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
     const client = createSupabaseServiceClient();
+
+    // Fire model warmup before the orchestrator runs. The orchestrator's first
+    // two phases (cache lookup, S2 fetches) don't need the model, so this hides
+    // most of the ~5–15s WASM cold-start cost behind work we'd be doing anyway.
+    prewarmModel();
 
     const deps: OrchestratorDeps = {
       apiKey,
