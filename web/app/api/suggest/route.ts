@@ -4,7 +4,7 @@ import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
 import { orchestrate, type OrchestratorDeps } from "@/lib/suggest/orchestrator";
 import { getCached, cacheMany } from "@/lib/suggest/embedding-cache";
 import { fetchPaperWithEmbedding } from "@/lib/suggest/s2-client";
-import { embedBatch, isModelWarm, prewarmModel } from "@/lib/suggest/specter2-wasm";
+import { embedBatch, ensureModelLoaded, isModelWarm, prewarmModel } from "@/lib/suggest/specter2-wasm";
 import {
   SuggestRequestSchema,
   UnauthorizedError,
@@ -27,6 +27,38 @@ const TIMEOUT_MS = 55_000;
 
 function timeoutAfter(ms: number): Promise<never> {
   return new Promise((_, reject) => setTimeout(() => reject(new TimeoutError()), ms));
+}
+
+/**
+ * Warmup endpoint. The client fires this in parallel with /api/admin/resolve-papers
+ * so the WASM SPECTER2 model is loaded by the time the user's POST arrives.
+ *
+ * MUST stay in this same route file: Vercel runs each route as a separate
+ * serverless function, so module-scope `modelPromise` is only shared between
+ * GET and POST when they live in the same file (same Lambda container).
+ */
+export async function GET() {
+  // Fire warmup before auth so the WASM init starts ASAP. Auth check (~100ms)
+  // runs in parallel with the first ~100ms of the model load.
+  prewarmModel();
+  try {
+    await requireLeaderRole();
+  } catch (e) {
+    if (e instanceof UnauthorizedError) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (e instanceof ForbiddenError) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    throw e;
+  }
+
+  const t0 = Date.now();
+  try {
+    await ensureModelLoaded();
+  } catch (e) {
+    return NextResponse.json(
+      { error: "wasm_model_load_failed", detail: (e as Error).message },
+      { status: 502 },
+    );
+  }
+  return NextResponse.json({ warm: true, load_ms: Date.now() - t0 });
 }
 
 export async function POST(req: Request) {

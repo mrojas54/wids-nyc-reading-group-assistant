@@ -49,6 +49,30 @@ describe("fetchPaperWithEmbedding", () => {
     if (r.kind === "fallback_needed") expect(r.reason).toBe("s2_transient");
   });
 
+  it("does NOT retry on 429 — falls back immediately as 'rate_limited'", async () => {
+    let calls = 0;
+    server.use(http.get(`${S2}/paper/p4b`, () => {
+      calls++;
+      return new HttpResponse(null, { status: 429 });
+    }));
+    const r = await fetchPaperWithEmbedding("p4b", "key");
+    expect(calls).toBe(1);
+    expect(r.kind).toBe("fallback_needed");
+    if (r.kind === "fallback_needed") expect(r.reason).toBe("rate_limited");
+  });
+
+  it("falls back as 'rate_limited' if a 5xx retry resolves to 429", async () => {
+    let calls = 0;
+    server.use(http.get(`${S2}/paper/p4c`, () => {
+      calls++;
+      return new HttpResponse(null, { status: calls === 1 ? 503 : 429 });
+    }));
+    const r = await fetchPaperWithEmbedding("p4c", "key");
+    expect(calls).toBe(2);
+    expect(r.kind).toBe("fallback_needed");
+    if (r.kind === "fallback_needed") expect(r.reason).toBe("rate_limited");
+  });
+
   it("treats successful retry-after-5xx as a hit", async () => {
     let calls = 0;
     server.use(http.get(`${S2}/paper/p5`, () => {

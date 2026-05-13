@@ -37,7 +37,7 @@ export type SuggestResponse = {
 
 export type S2Result =
   | { kind: "hit"; paperId: string; vector: Float32Array; title: string; abstract: string }
-  | { kind: "fallback_needed"; paperId: string; reason: "no_embedding" | "not_in_corpus" | "s2_transient"; title: string; abstract: string }
+  | { kind: "fallback_needed"; paperId: string; reason: "no_embedding" | "not_in_corpus" | "s2_transient" | "rate_limited"; title: string; abstract: string }
   | { kind: "error"; paperId: string; status: number; message: string };
 
 export class UnauthorizedError extends Error {

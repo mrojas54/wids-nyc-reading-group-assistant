@@ -4,6 +4,7 @@ import type { SuggestResponse, ResolvedPaper } from "@/lib/suggest/types";
 
 type Status = "idle" | "pending" | "done" | "error";
 type PastPicksWindow = "all" | "last6m";
+type BackfillStatus = "idle" | "running" | "done" | "error";
 
 export function SuggestForm() {
   const [candidatesText, setCandidatesText] = useState("");
@@ -12,6 +13,8 @@ export function SuggestForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
   const [results, setResults] = useState<SuggestResponse | null>(null);
+  const [backfillStatus, setBackfillStatus] = useState<BackfillStatus>("idle");
+  const [backfillMessage, setBackfillMessage] = useState("");
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,30 +43,36 @@ export function SuggestForm() {
     const ac = new AbortController();
     const hardTimeout = window.setTimeout(() => ac.abort(), 60_000);
 
+    // Fire WASM warmup against the same Lambda function as the eventual POST,
+    // intentionally NOT using ac.signal — the warmup may legitimately outlive
+    // the form interaction, and aborting it would also cancel the in-flight
+    // model load in the container we're about to POST to.
+    void fetch("/api/suggest", { method: "GET" }).catch(() => {});
+
     try {
-      // Step A: resolve candidate URLs to ResolvedPaper objects
-      setMessage("Resolving candidates against Semantic Scholar…");
-      const resolveRes = await fetch("/api/admin/resolve-papers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls }),
-        signal: ac.signal,
-      });
+      // Steps A+B in parallel: resolve candidate URLs and load past picks.
+      // They have no data dependency on each other.
+      setMessage("Resolving candidates and loading past picks…");
+      const [resolveRes, ppRes] = await Promise.all([
+        fetch("/api/admin/resolve-papers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls }),
+          signal: ac.signal,
+        }),
+        fetch(`/api/admin/past-picks?window=${pastPicks}`, { signal: ac.signal }),
+      ]);
       if (!resolveRes.ok) {
         const t = await resolveRes.text();
         throw new Error(`resolve failed (${resolveRes.status}): ${t}`);
       }
-      const { resolved: candidates } = (await resolveRes.json()) as { resolved: ResolvedPaper[] };
-      if (candidates.length === 0) {
-        throw new Error("None of the URLs could be resolved to a paper. Check the format.");
-      }
-
-      // Step B: load past picks
-      setMessage("Loading past picks…");
-      const ppRes = await fetch(`/api/admin/past-picks?window=${pastPicks}`, { signal: ac.signal });
       if (!ppRes.ok) {
         const t = await ppRes.text();
         throw new Error(`past-picks failed (${ppRes.status}): ${t}`);
+      }
+      const { resolved: candidates } = (await resolveRes.json()) as { resolved: ResolvedPaper[] };
+      if (candidates.length === 0) {
+        throw new Error("None of the URLs could be resolved to a paper. Check the format.");
       }
       const { past_picks: pastPicksList } = (await ppRes.json()) as { past_picks: ResolvedPaper[] };
       if (pastPicksList.length === 0) {
@@ -96,6 +105,45 @@ export function SuggestForm() {
     } finally {
       messageTimers.forEach(window.clearTimeout);
       window.clearTimeout(hardTimeout);
+    }
+  }
+
+  // Embed any papers that don't yet have a cached SPECTER2 vector. Loops
+  // through batches so each call fits inside the 60s function budget.
+  // Run this once after a deploy (or when adding many new papers) to keep
+  // /admin/suggest cold-starts fast.
+  async function onBackfill() {
+    setBackfillStatus("running");
+    setBackfillMessage("Starting backfill…");
+    let totalEmbedded = 0;
+    try {
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const res = await fetch("/api/admin/backfill-embeddings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batch_size: 10 }),
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(`backfill failed (${res.status}): ${t}`);
+        }
+        const data = (await res.json()) as { embedded: number; remaining: number; total_eligible: number };
+        totalEmbedded += data.embedded;
+        if (data.remaining === 0) {
+          setBackfillStatus("done");
+          setBackfillMessage(
+            totalEmbedded === 0
+              ? `Cache already warm (${data.total_eligible} eligible papers, all embedded).`
+              : `Embedded ${totalEmbedded} papers. Cache is now warm.`,
+          );
+          return;
+        }
+        setBackfillMessage(`Embedded ${totalEmbedded} so far · ${data.remaining} remaining…`);
+      }
+      throw new Error("backfill did not converge after 50 batches");
+    } catch (e) {
+      setBackfillStatus("error");
+      setBackfillMessage(`Backfill error: ${(e as Error).message}`);
     }
   }
 
@@ -163,6 +211,27 @@ export function SuggestForm() {
 
       {status === "pending" && <p className="mt-4 text-sm text-gray-600">⏳ {message}</p>}
       {status === "error" && <p className="mt-4 text-sm text-red-700">{message}</p>}
+
+      <details className="mt-8 border-t pt-4 text-sm">
+        <summary className="cursor-pointer text-gray-600">Cache warmup (admin)</summary>
+        <p className="mt-2 text-xs text-gray-500">
+          Pre-embed every paper that has an S2 ID. Run this once after a deploy or after
+          adding many new papers — it makes future Suggest calls fast by hydrating the
+          embedding cache instead of forcing a cold-start request to embed everything.
+        </p>
+        <button
+          type="button"
+          onClick={onBackfill}
+          disabled={backfillStatus === "running"}
+          className="mt-3 rounded bg-slate-700 px-3 py-1.5 text-white text-sm disabled:opacity-50"
+        >
+          {backfillStatus === "running" ? "Embedding…" : "Warm embedding cache"}
+        </button>
+        {backfillStatus === "running" && <p className="mt-2 text-xs text-gray-600">⏳ {backfillMessage}</p>}
+        {backfillStatus === "done" && <p className="mt-2 text-xs text-emerald-700">✓ {backfillMessage}</p>}
+        {backfillStatus === "error" && <p className="mt-2 text-xs text-red-700">{backfillMessage}</p>}
+      </details>
+
       {status === "done" && results && (
         <section className="mt-6">
           <h2 className="text-lg font-semibold">Suggested ranking</h2>
