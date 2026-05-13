@@ -1,4 +1,5 @@
-import { ModelLoadError } from "./types";
+import { runChunkedWithAbort } from "./abortable";
+import { ModelLoadError, TimeoutError } from "./types";
 
 // IMPORTANT: This SHA-256 must equal the hash of the file at SPECTER2_MODEL_BLOB_URL.
 // If the operator re-quantizes (e.g., HF Hub republishes the proximity adapter,
@@ -111,16 +112,22 @@ export async function ensureModelLoaded(): Promise<void> {
  * Embed a batch of {title, abstract} pairs via the WASM SPECTER2 model.
  * Chunks at 10 per forward pass to stay inside Lambda memory headroom.
  * Returns Float32Arrays in the same order as inputs.
+ *
+ * When `signal` is provided, throws `TimeoutError` if the signal is already
+ * aborted after the model resolves and at each chunk boundary inside
+ * `runChunkedWithAbort`. The helper yields via `setImmediate` between chunks
+ * so a pending `AbortSignal.timeout(...)` can actually fire — `setTimeout`
+ * alone cannot preempt the synchronous WASM `session.run` call.
  */
 export async function embedBatch(
-  items: Array<{ title: string; abstract: string }>
+  items: Array<{ title: string; abstract: string }>,
+  signal?: AbortSignal,
 ): Promise<Float32Array[]> {
   const { session, tokenizer } = await getModel();
+  if (signal?.aborted) throw new TimeoutError();
   const CHUNK = 10;
-  const results: Float32Array[] = [];
 
-  for (let start = 0; start < items.length; start += CHUNK) {
-    const chunk = items.slice(start, start + CHUNK);
+  return runChunkedWithAbort(items, CHUNK, signal, async (chunk) => {
     const texts = chunk.map(it => `${it.title}${tokenizer.sep_token}${it.abstract}`);
     const enc = await tokenizer(texts, { padding: "max_length", truncation: true, max_length: 512, return_tensors: "np" });
 
@@ -133,10 +140,11 @@ export async function embedBatch(
     const lhs = outputs.last_hidden_state.data as Float32Array;  // shape: (B, 512, 768)
     const dim = 768;
     const seq = 512;
+    const out: Float32Array[] = [];
     for (let b = 0; b < chunk.length; b++) {
       const offset = b * seq * dim;  // CLS at seq position 0
-      results.push(lhs.slice(offset, offset + dim));
+      out.push(lhs.slice(offset, offset + dim));
     }
-  }
-  return results;
+    return out;
+  });
 }

@@ -19,15 +19,20 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
-// Soft race timeout: must stay strictly under `maxDuration` so the route gets
-// to return a clean 504 JSON body instead of being killed by the platform.
-// On cold starts the WASM SPECTER2 init (blob fetch + WASM compile + tokenizer
-// fetch) can take 15–25s by itself; 55s leaves headroom for S2 and inference.
+// Cooperative cancellation deadline: must stay strictly under `maxDuration` so
+// the route gets to return a clean 504 JSON body instead of being killed by the
+// platform. On cold starts the WASM SPECTER2 init (blob fetch + WASM compile +
+// tokenizer fetch) can take 15–25s by itself; 55s leaves headroom for S2 and
+// inference.
+//
+// The previous implementation raced the orchestrator against `setTimeout`, but
+// `setTimeout` callbacks cannot preempt CPU-bound WASM (`session.run`) — the
+// timer stays queued until the WASM call yields the event loop. Vercel's hard
+// 60s kill then fires before our soft 504 can return. AbortSignal threaded
+// through `orchestrate` -> `embedBatch` -> `runChunkedWithAbort` lets the
+// chunked WASM loop check `signal.aborted` between chunks (and yield via
+// setImmediate so the timer can actually fire).
 const TIMEOUT_MS = 55_000;
-
-function timeoutAfter(ms: number): Promise<never> {
-  return new Promise((_, reject) => setTimeout(() => reject(new TimeoutError()), ms));
-}
 
 /**
  * Warmup endpoint. The client fires this in parallel with /api/admin/resolve-papers
@@ -101,7 +106,8 @@ export async function POST(req: Request) {
       isModelWarm,
     };
 
-    const result = await Promise.race([orchestrate(parsed, deps), timeoutAfter(TIMEOUT_MS)]);
+    const signal = AbortSignal.timeout(TIMEOUT_MS);
+    const result = await orchestrate(parsed, deps, signal);
 
     console.log(JSON.stringify({
       event: "suggest_request",

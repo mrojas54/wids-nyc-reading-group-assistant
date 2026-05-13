@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { orchestrate, type OrchestratorDeps } from "@/lib/suggest/orchestrator";
-import { S2AuthError } from "@/lib/suggest/types";
+import { S2AuthError, TimeoutError } from "@/lib/suggest/types";
 
 const v = (n: number) => Float32Array.from(Array(768).fill(n));
 const paper = (id: number, s2: string, title = "T", abstract = "A") => ({
@@ -141,5 +141,50 @@ describe("orchestrate", () => {
         deps,
       ),
     ).rejects.toBeInstanceOf(S2AuthError);
+  });
+
+  it("throws TimeoutError without invoking any phase when signal is pre-aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const deps = {
+      ...baseDeps,
+      getCached: vi.fn().mockResolvedValue(new Map()),
+    };
+    await expect(
+      orchestrate(
+        {
+          candidates: [paper(1, "s2-1")],
+          past_picks: [paper(2, "s2-2")],
+          lambda: 0.6,
+          k: 1,
+        },
+        deps,
+        controller.signal,
+      ),
+    ).rejects.toBeInstanceOf(TimeoutError);
+    expect(deps.getCached).not.toHaveBeenCalled();
+  });
+
+  it("forwards signal to embedBatch when WASM fallback runs", async () => {
+    const controller = new AbortController();
+    const deps = {
+      ...baseDeps,
+      getCached: vi.fn().mockResolvedValue(new Map()),
+      fetchPaperWithEmbedding: vi.fn().mockImplementation(async (s2id: string) => ({
+        kind: "fallback_needed", paperId: s2id, reason: "no_embedding", title: "T", abstract: "A",
+      })),
+      embedBatch: vi.fn().mockResolvedValue([v(0.5), v(0.5)]),
+    };
+    await orchestrate(
+      {
+        candidates: [paper(1, "s2-1")],
+        past_picks: [paper(2, "s2-2")],
+        lambda: 0.6,
+        k: 1,
+      },
+      deps,
+      controller.signal,
+    );
+    expect(deps.embedBatch).toHaveBeenCalledWith(expect.any(Array), controller.signal);
   });
 });
