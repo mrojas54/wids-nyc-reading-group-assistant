@@ -2,34 +2,25 @@ import type { Stats } from "@/lib/queries";
 
 export function YourStats({ stats }: { stats: Stats }) {
   return (
-    <section className="stats">
-      <h3 className="section-eyebrow">Your year</h3>
-      <dl className="stats-grid">
-        <Stat label="Meetings attended" value={String(stats.meetingsAttended)} />
+    <section>
+      <div className="section-h-soft">Since you joined</div>
+      <dl className="stats-v2">
+        <Stat label="Attended" value={String(stats.meetingsAttended)} />
         <Stat label="Papers led" value={String(stats.papersLed)} />
         <Stat
           label="Availability"
-          value={stats.availabilitySubmitted ? "Submitted" : "Pending"}
-          tone={stats.availabilitySubmitted ? "ok" : "pending"}
+          value={stats.availabilitySubmitted ? "In" : "Pending"}
         />
       </dl>
     </section>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "ok" | "pending";
-}) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`stat${tone ? ` stat-${tone}` : ""}`}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
+    <div className="stat-cell">
+      <dt className="stat-num">{value}</dt>
+      <dd className="stat-lbl">{label}</dd>
     </div>
   );
 }

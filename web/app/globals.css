@@ -1064,3 +1064,328 @@ html, body {
 @layer utilities {
   .text-balance { text-wrap: balance; }
 }
+
+/* ============================================================
+   Member portal v2 redesign (2026-05-13)
+   Per docs design bundle eSl8A89keWOMBA-FcSPN6Q (member-portal/v2).
+   Added classes — none of the v1 classes above were modified.
+   ============================================================ */
+
+/* Header: small "Hi, <name>" greet beside Brandmark */
+.greet { color: var(--color-paper-700); font-size: 14px; }
+.greet b { color: var(--color-paper-900); font-weight: 600; }
+
+/* Hero card — the light protagonist (replaces dark inverted hero) */
+.card-hero {
+  background: #ffffff;
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-xl);
+  padding: var(--space-5) calc(var(--space-5) + 2px);
+  box-shadow:
+    0 12px 24px -8px rgba(21, 42, 35, 0.10),
+    0 4px 8px -2px rgba(21, 42, 35, 0.05);
+}
+.card-hero .hero-eyebrow {
+  font-size: 11px;
+  color: var(--color-paper-500);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.card-hero .hero-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-paper-900);
+  line-height: 1.15;
+  margin-bottom: 10px;
+  text-wrap: balance;
+}
+.card-hero .hero-meta {
+  font-size: 13px;
+  color: var(--color-paper-600);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.card-hero .hero-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-hero .hero-meta .hero-meta-soft { color: var(--color-paper-500); }
+
+/* Hero-nudge — secondary CTA that folds INTO the hero card */
+.hero-nudge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--space-4);
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-sage-50);
+  border: 1px solid var(--color-sage-200);
+  font-size: 13px;
+  color: var(--color-sage-800);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+.hero-nudge:hover {
+  background: #e6efe9;
+  border-color: var(--color-sage-300);
+}
+.hero-nudge .nudge-text { flex: 1; }
+.hero-nudge .nudge-text b { color: var(--color-sage-900); font-weight: 600; }
+.hero-nudge .nudge-sub { color: var(--color-sage-700); }
+.hero-nudge .nudge-arrow { color: var(--color-sage-600); flex-shrink: 0; }
+.hero-nudge.confirmed {
+  background: var(--color-paper-100);
+  border-color: var(--color-paper-200);
+  color: var(--color-paper-700);
+  cursor: default;
+}
+.hero-nudge.confirmed:hover {
+  background: var(--color-paper-100);
+  border-color: var(--color-paper-200);
+}
+.hero-nudge.confirmed .nudge-text b { color: var(--color-paper-900); }
+
+/* Companion card — promoted reading prompt below the hero */
+.companion-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px var(--space-5);
+}
+.companion-card .companion-body { flex: 1; }
+.companion-card .companion-eyebrow {
+  font-size: 11px;
+  color: var(--color-magenta-700);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.companion-card .companion-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-paper-900);
+  letter-spacing: -0.01em;
+}
+.companion-card .companion-meta {
+  font-size: 12.5px;
+  color: var(--color-paper-500);
+  margin-top: 3px;
+}
+
+/* Demoted section header for the secondary stack */
+.section-h-soft {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-paper-400);
+  margin: var(--space-2) 0 -4px 4px;
+}
+
+/* Stats — v2 numeric demotion (~19px num) + 3-col grid */
+.stats-v2 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+.stats-v2 .stat-cell {
+  background: #ffffff;
+  border: 1px solid var(--border-1);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.stats-v2 .stat-num {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-paper-900);
+}
+.stats-v2 .stat-lbl {
+  font-size: 11px;
+  color: var(--color-paper-500);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+/* Empty / error state primitive */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 10px;
+}
+.empty-state .es-glyph {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-paper-100);
+  border: 1px solid var(--color-paper-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-paper-500);
+  margin-bottom: 4px;
+}
+.empty-state .es-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-paper-900);
+}
+.empty-state .es-body {
+  font-size: 14px;
+  color: var(--color-paper-600);
+  line-height: 1.55;
+  max-width: 32ch;
+  text-wrap: pretty;
+}
+.empty-state .es-action { margin-top: 8px; }
+.empty-state.error .es-glyph {
+  background: var(--color-danger-50);
+  border-color: #e2a59c;
+  color: var(--color-danger-700);
+}
+
+/* Loading skeleton (reserved for follow-up loading states) */
+.skel {
+  background: linear-gradient(
+    90deg,
+    var(--color-paper-100) 0%,
+    var(--color-paper-200) 50%,
+    var(--color-paper-100) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skel-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Month calendar (availability v2) */
+.cal-stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.cal-month { display: flex; flex-direction: column; gap: var(--space-2); }
+.cal-month-h {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-paper-700);
+  letter-spacing: 0.02em;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.cal-wkhead {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-paper-500);
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 0;
+}
+.day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--color-paper-300);
+  background: #ffffff;
+  color: var(--color-paper-700);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 60ms;
+  font-family: inherit;
+  padding: 0;
+}
+.day:hover:not(.dis):not(.empty) {
+  border-color: var(--color-paper-400);
+  background: var(--color-paper-100);
+}
+.day:active:not(.dis):not(.empty) { transform: scale(0.94); }
+.day.on {
+  background: var(--color-magenta-500);
+  color: #ffffff;
+  border-color: var(--color-magenta-700);
+  box-shadow: 0 2px 4px rgba(200, 34, 109, 0.28);
+}
+.day.on:hover { background: var(--color-magenta-600); }
+.day.dis {
+  background: var(--color-paper-100);
+  color: var(--color-paper-400);
+  border-color: var(--color-paper-200);
+  cursor: not-allowed;
+}
+.day.empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+.day.today {
+  border-color: var(--color-sage-500);
+  box-shadow: inset 0 0 0 1px var(--color-sage-500);
+}
+.day.today::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-sage-600);
+}
+.day.on.today {
+  box-shadow:
+    inset 0 0 0 1px #ffffff,
+    0 2px 4px rgba(200, 34, 109, 0.28);
+}
+.day.on.today::after { background: #ffffff; }
+.day:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring-accent);
+}
+
+/* Sticky bottom summary bar (availability submit) */
+.cal-summary {
+  position: sticky;
+  bottom: 0;
+  margin: 0 calc(-1 * var(--space-4)) 0;
+  padding: 14px var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+  background: var(--color-paper-50);
+  border-top: 1px solid var(--color-paper-200);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+.cal-summary .count {
+  font-size: 13.5px;
+  color: var(--color-paper-700);
+  flex: 1;
+}
+.cal-summary .count b {
+  color: var(--color-paper-900);
+  font-weight: 600;
+}

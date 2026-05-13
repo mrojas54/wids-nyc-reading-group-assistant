@@ -8,8 +8,7 @@ import {
   nextMeeting,
 } from "@/lib/queries";
 import { Brandmark, Icon } from "@/components/ui";
-import { NextMeetingCard } from "@/components/NextMeetingCard";
-import { AvailabilityBanner } from "@/components/AvailabilityBanner";
+import { NextMeetingCard, type AvailabilityStatus } from "@/components/NextMeetingCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
 import { signOut } from "./actions";
@@ -39,17 +38,16 @@ export default async function DashboardPage() {
   const stats = await myStats(sb, submitted);
   const history = await myHistory(sb, 10);
 
-  // Decide whether to show the "Find a paper" link. members.id is SERIAL INT;
-  // user.id is a UUID — the bridge column is members.auth_user_id. Today the
-  // role CHECK constraint only permits 'member' and 'operator', but the set
-  // below is forward-compatible for if/when 'leader' / 'admin' are added.
+  // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
+  // The role CHECK currently permits 'member' and 'operator'; the set below is
+  // forward-compatible for if/when 'leader' / 'admin' are added.
   const {
     data: { user },
   } = await sb.auth.getUser();
   const { data: member } = user
     ? await sb
         .from("members")
-        .select("role")
+        .select("name, role")
         .eq("auth_user_id", user.id)
         .single()
     : { data: null };
@@ -58,26 +56,53 @@ export default async function DashboardPage() {
     member?.role === "leader" ||
     member?.role === "admin";
 
+  const firstName = member?.name ? String(member.name).split(/\s+/)[0] : null;
+
+  const availabilityStatus: AvailabilityStatus = prepMeeting
+    ? submitted
+      ? "submitted"
+      : "needed"
+    : null;
+
   return (
     <div className="shell">
       <header className="shell-header">
         <Brandmark />
-        <form action={signOut}>
-          <button type="submit" className="signout">
-            Sign out
-          </button>
-        </form>
+        {firstName ? (
+          <div className="greet">
+            Hi, <b>{firstName}</b>
+          </div>
+        ) : (
+          <form action={signOut}>
+            <button type="submit" className="signout">
+              Sign out
+            </button>
+          </form>
+        )}
       </header>
 
       <main className="shell-main dashboard">
-        <header className="dashboard-head">
-          <h1>Dashboard</h1>
-        </header>
+        <NextMeetingCard
+          meeting={meeting}
+          myRsvp={rsvp}
+          availabilityStatus={availabilityStatus}
+        />
 
-        <NextMeetingCard meeting={meeting} myRsvp={rsvp} />
-
-        {prepMeeting && !submitted && (
-          <AvailabilityBanner meetingType={prepMeeting.type} />
+        {meeting?.companion_url && (
+          <a
+            href={meeting.companion_url}
+            className="card companion-card"
+            style={{ textDecoration: "none", color: "inherit" }}
+          >
+            <div className="companion-body">
+              <div className="companion-eyebrow">Companion</div>
+              <div className="companion-title">
+                {meeting.paper_title ?? "Companion reading"}
+              </div>
+              <div className="companion-meta">Open the paper guide</div>
+            </div>
+            <Icon name="chevronRight" size={16} aria-hidden />
+          </a>
         )}
 
         {canFindPaper && (
@@ -92,6 +117,14 @@ export default async function DashboardPage() {
 
         <YourStats stats={stats} />
         <YourHistory items={history} />
+
+        {firstName && (
+          <form action={signOut} style={{ marginTop: 8 }}>
+            <button type="submit" className="signout">
+              Sign out
+            </button>
+          </form>
+        )}
       </main>
     </div>
   );

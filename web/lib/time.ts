@@ -10,6 +10,14 @@ export function formatDateTimeNY(iso: string | Date): string {
   }).format(d);
 }
 
+export function formatTimeNY(iso: string | Date): string {
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: NYC,
+    hour: "numeric", minute: "2-digit",
+  }).format(d);
+}
+
 export function formatDateNY(iso: string | Date): string {
   const d = typeof iso === "string" ? new Date(iso) : iso;
   return new Intl.DateTimeFormat("en-US", {
