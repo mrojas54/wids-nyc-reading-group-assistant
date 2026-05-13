@@ -13,7 +13,10 @@ async function fetchOnce(paperId: string, apiKey: string | null): Promise<Respon
   });
 }
 
-const TRANSIENT = new Set([408, 429, 500, 502, 503, 504]);
+// 429 is excluded: an unauthenticated S2 rate-limit window is per-minute, so a
+// 500ms retry usually hits the same 429 and just burns a round-trip. Fall back
+// to WASM immediately on 429.
+const TRANSIENT_5XX = new Set([408, 500, 502, 503, 504]);
 
 export async function fetchPaperWithEmbedding(paperId: string, apiKey: string | null): Promise<S2Result> {
   let res: Response;
@@ -28,10 +31,17 @@ export async function fetchPaperWithEmbedding(paperId: string, apiKey: string | 
     }
   }
 
-  if (TRANSIENT.has(res.status)) {
+  if (res.status === 429) {
+    return { kind: "fallback_needed", paperId, reason: "rate_limited", title: "", abstract: "" };
+  }
+
+  if (TRANSIENT_5XX.has(res.status)) {
     await new Promise(r => setTimeout(r, 500));
     res = await fetchOnce(paperId, apiKey);
-    if (TRANSIENT.has(res.status)) {
+    if (res.status === 429) {
+      return { kind: "fallback_needed", paperId, reason: "rate_limited", title: "", abstract: "" };
+    }
+    if (TRANSIENT_5XX.has(res.status)) {
       return { kind: "fallback_needed", paperId, reason: "s2_transient", title: "", abstract: "" };
     }
   }

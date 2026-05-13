@@ -98,6 +98,16 @@ export function prewarmModel(): void {
 }
 
 /**
+ * Awaitable model warmup. Returns once the WASM session + tokenizer are
+ * fully loaded, or throws ModelLoadError. Used by the GET /api/suggest
+ * warmup endpoint so the Lambda container stays alive until the model
+ * promise is resolved (preventing freeze-mid-load).
+ */
+export async function ensureModelLoaded(): Promise<void> {
+  await getModel();
+}
+
+/**
  * Embed a batch of {title, abstract} pairs via the WASM SPECTER2 model.
  * Chunks at 10 per forward pass to stay inside Lambda memory headroom.
  * Returns Float32Arrays in the same order as inputs.
