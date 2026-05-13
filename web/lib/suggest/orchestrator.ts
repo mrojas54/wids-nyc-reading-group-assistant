@@ -98,10 +98,10 @@ export async function orchestrate(
   const order = mmr(queryVec, candidateVecs, req.lambda, req.k);
 
   // 6. Build response
-  const ranked: RankedResult[] = order.map(idx => ({
-    paper_id: req.candidates[idx].id,
-    title: req.candidates[idx].title,
-    mmr_score: 0,
+  const ranked: RankedResult[] = order.map(({ index, score }) => ({
+    paper_id: req.candidates[index].id,
+    title: req.candidates[index].title,
+    mmr_score: score,
   }));
 
   return {
