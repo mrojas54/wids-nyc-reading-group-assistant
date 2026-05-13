@@ -13,25 +13,26 @@
     Magic-link sign-in email — WiDS NYC AI Reading Group Planner.
     Variant: C · Tight.
     Subject:  Sign in and keep reading
-    Preheader: One-tap link. Works once, expires in 15 minutes.
+    Preheader: One-tap link. Works once, expires in 60 minutes.
 
-    Template tokens to swap server-side before send. The placeholders
-    are shown filled in below so the file previews cleanly — search and
-    replace before wiring to your mailer:
-      maya.r@gmail.com
-                       → {{EMAIL}}
-      https://planner.widsnyc.org/auth/v?t=8f3c1a9b-2d4e-4f87-91ab-c0de7e6f4321
-                       → {{MAGIC_URL}}
-      The most dangerous phrase...
-                       → {{QUOTE_TEXT}}
-      Grace Hopper      → {{QUOTE_BY}}
+    History: the source HTML used four placeholder tokens
+    ({{EMAIL}}, {{MAGIC_URL}}, {{QUOTE_TEXT}}, {{QUOTE_BY}}) intended
+    for server-side replacement. The cleanup pass replaced them with:
+      - {{EMAIL}}      → {{ .Email }}              (Supabase Go-template)
+      - {{MAGIC_URL}}  → {{ .ConfirmationURL }}    (Supabase Go-template)
+      - {{QUOTE_TEXT}} → hardcoded Grace Hopper quote (manual monthly rotation
+                          per docs/email-quotes.md; see spec §6)
+      - {{QUOTE_BY}}   → hardcoded "Grace Hopper"
+
+    The <img src="https://YOUR-DEPLOY-URL/..."> placeholder is intentional;
+    the operator replaces it with the live Vercel deployment URL during
+    runbook step (e) — see docs/runbooks/smtp-auth-setup.md.
 
     Compatibility: tested-shape for Gmail (web/iOS/Android), Apple Mail
     (macOS/iOS), Outlook for Mac, Outlook.com, and Outlook 2016+ on Windows
-    via the VML fallback for the button. The inline SVG mark renders in
-    every modern client; Outlook on Windows shows a clean blank space in
-    its place — engineer should host a 96-px PNG of the mark and swap the
-    <svg> for an <img> if a brand glyph in Outlook is required.
+    via the VML fallback for the button. The <img> tag renders the mark in
+    every modern client including Outlook Windows (resolved the earlier
+    inline-SVG blank-space limitation).
   -->
 
   <!--[if mso]>
@@ -85,6 +86,10 @@
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="center" style="padding-bottom:10px;line-height:0;">
+                    <!-- REPLACE BEFORE PASTING: swap YOUR-DEPLOY-URL below
+                         with the live Vercel deployment URL (or custom-domain
+                         URL once wired). See docs/runbooks/smtp-auth-setup.md
+                         step (e) for full instructions. -->
                     <img src="https://YOUR-DEPLOY-URL/branding/mark-reader-192.png"
                          width="48" height="48" alt="Reading Group Planner"
                          style="display:block;border:0;outline:none;text-decoration:none;">
