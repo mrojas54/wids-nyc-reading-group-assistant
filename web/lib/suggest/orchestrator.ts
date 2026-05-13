@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { TimeoutError } from "./types";
 import { mmr } from "./mmr";
 import type {
   S2Result,
@@ -17,7 +18,10 @@ export type OrchestratorDeps = {
     rows: Array<{ paperId: number; vector: Float32Array }>,
   ) => Promise<void>;
   fetchPaperWithEmbedding: (s2PaperId: string, apiKey: string | null) => Promise<S2Result>;
-  embedBatch: (items: Array<{ title: string; abstract: string }>) => Promise<Float32Array[]>;
+  embedBatch: (
+    items: Array<{ title: string; abstract: string }>,
+    signal?: AbortSignal,
+  ) => Promise<Float32Array[]>;
   isModelWarm: () => boolean;
 };
 
@@ -33,7 +37,9 @@ function meanVec(vectors: Float32Array[]): Float32Array {
 export async function orchestrate(
   req: SuggestRequest,
   deps: OrchestratorDeps,
+  signal?: AbortSignal,
 ): Promise<SuggestResponse> {
+  if (signal?.aborted) throw new TimeoutError();
   const t0 = Date.now();
   const wasWarm = deps.isModelWarm();
 
@@ -76,6 +82,7 @@ export async function orchestrate(
   if (fallbackQueue.length > 0) {
     const vecs = await deps.embedBatch(
       fallbackQueue.map(f => ({ title: f.title, abstract: f.abstract })),
+      signal,
     );
     for (let i = 0; i < fallbackQueue.length; i++) {
       cached.set(fallbackQueue[i].id, vecs[i]);
