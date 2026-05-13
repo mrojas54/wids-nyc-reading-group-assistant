@@ -2519,3 +2519,36 @@ After Phase 4 ships and one real cycle has used the deployed route:
 ## Self-review notes (for the plan author)
 
 The plan deviates from the spec in one place: the spec's Section 4 calls for a "vitest + local Postgres" integration test layer, which the plan replaces with an orchestrator-level integration test against mocked Supabase + a real-DB-coverage smoke test. Rationale: the project has no existing local-Postgres dev infrastructure, and adding it for one test layer is high-cost. If a real-DB regression slips through smoke testing, the follow-up is to add a docker-compose pgvector service for CI.
+
+---
+
+## Post-implementation amendments
+
+Recorded after the plan was executed. These document where the as-shipped code diverged from the plan's snippets and why. **The original plan text above is preserved as the design snapshot — read this section for what actually got deployed.**
+
+### 2026-05-13 — Task 2.9 soft-race rewritten as AbortSignal cancellation
+
+**What changed.** The Task 2.9 snippet (lines ~1500–1576 above) shows a `setTimeout`-based `timeoutAfter` helper raced against `orchestrate` via `Promise.race`. That code shipped and ran, but the soft-504 path never actually fired on cold starts — Vercel killed the function at 60s first. As of commits `44d9f05` (RED), `6116441` (GREEN), `68e2347` (DOCS):
+
+- `timeoutAfter` and the `Promise.race(...)` are deleted from `web/app/api/suggest/route.ts`.
+- The route creates `AbortSignal.timeout(TIMEOUT_MS)` and passes it as a third arg to `orchestrate(parsed, deps, signal)`.
+- `orchestrate` checks `signal?.aborted` at entry and forwards the signal to `embedBatch`.
+- `embedBatch` delegates its chunked loop to a new helper, `runChunkedWithAbort` in `web/lib/suggest/abortable.ts`, which:
+  1. Checks `signal.aborted` at each chunk boundary and throws `TimeoutError` if set.
+  2. Yields via `await new Promise(setImmediate)` between chunks so the timer queue can drain — without this, `AbortSignal.timeout` cannot fire while WASM is running.
+
+**Why.** `setTimeout` callbacks sit in the timer queue behind synchronous WebAssembly execution. Once a SPECTER2 chunk is mid-`session.run`, the JS event loop is blocked until WASM returns. `Promise.race([orchestrate, timeoutAfter])` therefore couldn't preempt — the timer fired only after the WASM call yielded, by which point Vercel's hard 60s kill had already invoked.
+
+**Why not `worker_threads`.** The textbook answer is "move WASM to a worker so the main thread can fire the timeout and `worker.terminate()` cleanly." Rejected for this codebase: the SPECTER2 ONNX model is ~430MB, doubling the resident set in a worker flirts with Vercel's memory caps, and worker-side state defeats the module-scope `modelPromise` cache on every cold start. Cooperative cancellation via chunked yield is sufficient because `embedBatch` already chunks at `CHUNK = 10` (~1–2s WASM time per chunk on Vercel), so the worst-case overshoot is one chunk past deadline rather than 60s+.
+
+**New cancellation contract.**
+
+- **`orchestrate(req, deps, signal?)`** — Honors the signal at entry. Does **not** actively cancel async I/O phases (cache lookup, S2 fetch); those rely on their own per-request timeouts inside Supabase / `fetch`.
+- **`embedBatch(items, signal?)`** — Honors the signal after `getModel()` resolves and at every chunk boundary. Throws `TimeoutError` on abort.
+- **`runChunkedWithAbort(items, chunkSize, signal, processChunk)`** — Pure helper, unit-tested in `web/lib/suggest/__tests__/abortable.test.ts`. The currently-executing chunk is allowed to complete (no preemption), so abort granularity equals chunk granularity.
+
+**Constant.** `TIMEOUT_MS` is 55_000 in production (the plan snippet at line 1500 shows `30_000`, which was bumped during an earlier cold-start hardening pass — commit `526d0a6`).
+
+**Tests added.** 5 unit tests for `runChunkedWithAbort` (no-signal pass-through, pre-abort short-circuit, mid-iteration abort, `setImmediate` yield under `AbortSignal.timeout`) and 2 tests on `orchestrate` (pre-abort and signal forwarding to `embedBatch`). Full suite: 71 passed / 1 skipped (existing parity test is on-demand).
+
+**Open follow-up.** If `initModel` itself ever exceeds `TIMEOUT_MS` (e.g., blob fetch stalls), the signal won't preempt the model load — it'll only fire after `getModel()` resolves. Mitigated in practice because `fetchBlobWithRetries` has bounded backoffs and `prewarmModel` runs ahead of orchestration.
