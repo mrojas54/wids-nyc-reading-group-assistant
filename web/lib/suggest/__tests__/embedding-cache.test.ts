@@ -40,6 +40,21 @@ describe("getCached", () => {
     expect(m.size).toBe(0);
   });
 
+  it("parses pgvector string form '[v1,v2,...]' returned by PostgREST", async () => {
+    // pgvector columns come back from PostgREST as text literals, not JSON arrays.
+    // Regression test for: dim mismatch errors when reading cached embeddings.
+    const client = makeMockClient([
+      { paper_id: 7, vector: "[0.1,0.2,0.3]" as unknown as number[] },
+    ]) as any;
+    const m = await getCached(client, [7]);
+    expect(m.size).toBe(1);
+    const arr = Array.from(m.get(7)!);
+    expect(arr).toHaveLength(3);
+    expect(arr[0]).toBeCloseTo(0.1, 5);
+    expect(arr[1]).toBeCloseTo(0.2, 5);
+    expect(arr[2]).toBeCloseTo(0.3, 5);
+  });
+
   it("returns empty Map when given empty input", async () => {
     const client = makeMockClient([]) as any;
     const m = await getCached(client, []);
