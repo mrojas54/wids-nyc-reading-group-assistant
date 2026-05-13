@@ -2,6 +2,23 @@
 
 Next.js 14 portal for the WiDS NYC AI Reading Group.
 
+## Routes
+
+| Route | What it does |
+| --- | --- |
+| `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
+| `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability`. Once submitted, the nudge flips to a confirmed state. A promoted Companion card sits below the hero when the paper has a `companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
+| `/availability` | 30-day month-grid date picker (`MonthCalendar`). Tap days to toggle; today is sage-ringed, selected days flip magenta. A sticky `cal-summary` bar at the bottom holds the live count and the submit button (label morphs "Choose dates" → "Submit availability"). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
+| `/papers/[id]` | Public companion reading page — serif Newsreader prose with Mermaid diagrams and code blocks. No auth. |
+| `/admin/suggest` | Operator-only paper search/rank tool. Linked from the dashboard as "Find a paper" when the member's role is `operator` / `leader` / `admin`. |
+
+## UI conventions
+
+- **Single CSS file:** all tokens and component classes live in [`app/globals.css`](app/globals.css). Sage-led palette (`--color-sage-*` for brand surfaces), warm paper neutrals (`--color-paper-*`), magenta accent (`--color-magenta-*`) used sparingly for the selected-state day-toggle, history badges, and the Companion eyebrow.
+- **Mobile-first.** The `.shell` is `max-width: 480px` and pages stack in one column. No two-column desktop layouts.
+- **No icon library.** Inline 1.5-px-stroke SVG paths live in [`components/ui/Icon.tsx`](components/ui/Icon.tsx) (`arrowRight`, `check`, `calendar`, `clock`, `mapPin`, `external`, `chevronDown`, `chevronRight`, `mail`).
+- **Design system source of truth:** the upstream Claude Design export (`wids-nyc-design-system`, `ui_kits/member-portal/v2/`). Key v2 classes added in the May 2026 redesign: `card-hero`, `hero-nudge`, `companion-card`, `section-h-soft`, `stats-v2`, `empty-state`, `skel`, `cal-stack` / `cal-month` / `cal-grid` / `day` / `cal-summary`.
+
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
