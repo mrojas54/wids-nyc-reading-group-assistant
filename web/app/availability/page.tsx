@@ -5,11 +5,6 @@ import { AvailabilityForm } from "./AvailabilityForm";
 
 export const dynamic = "force-dynamic";
 
-const TYPE_LABEL: Record<string, string> = {
-  admin: "admin",
-  reading_group: "reading group",
-};
-
 export default async function AvailabilityPage() {
   const sb = createSupabaseServerClient();
 
@@ -25,17 +20,22 @@ export default async function AvailabilityPage() {
     return (
       <div className="shell">
         <header className="shell-header">
+          <Link href="/dashboard" className="btn btn-ghost btn-sm" aria-label="Back to dashboard">
+            <Icon name="chevronRight" size={14} style={{ transform: "rotate(180deg)" }} />
+            Back
+          </Link>
           <Brandmark />
         </header>
-        <main className="shell-main availability">
-          <header className="availability-head">
-            <h1>Availability</h1>
-            <p>Nothing to schedule right now — check back when you get an email.</p>
-          </header>
-          <Link href="/dashboard" className="back-link">
-            <Icon name="chevronRight" size={14} style={{ transform: "rotate(180deg)" }} />
-            Dashboard
-          </Link>
+        <main className="shell-main">
+          <div className="empty-state">
+            <div className="es-glyph">
+              <Icon name="calendar" size={22} />
+            </div>
+            <div className="es-title">Sit tight.</div>
+            <div className="es-body">
+              Nothing to schedule right now — check back when you get an email.
+            </div>
+          </div>
         </main>
       </div>
     );
@@ -50,25 +50,35 @@ export default async function AvailabilityPage() {
     new Date(r.range_start).toISOString().slice(0, 10),
   );
 
-  const typeLabel = TYPE_LABEL[prep.type] ?? prep.type.replace("_", " ");
-
   return (
     <div className="shell">
       <header className="shell-header">
+        <Link href="/dashboard" className="btn btn-ghost btn-sm" aria-label="Back to dashboard">
+          <Icon name="chevronRight" size={14} style={{ transform: "rotate(180deg)" }} />
+          Back
+        </Link>
         <Brandmark />
       </header>
-      <main className="shell-main availability">
-        <header className="availability-head">
-          <h1>Availability — {typeLabel}</h1>
-          <p>Tap the days you can attend. We&rsquo;ll match against everyone&rsquo;s picks to land a date.</p>
-        </header>
+      <main className="shell-main">
+        <div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "var(--color-paper-900)",
+              marginBottom: 4,
+            }}
+          >
+            We&rsquo;re scheduling the next meeting.
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--color-paper-600)", lineHeight: 1.5 }}>
+            Your taps help us pick the date. We&rsquo;ll go with whatever works for the
+            most people. Default window: 6–9 PM ET.
+          </p>
+        </div>
 
         <AvailabilityForm meetingId={prep.id} initialDays={initialDays} />
-
-        <Link href="/dashboard" className="back-link">
-          <Icon name="chevronRight" size={14} style={{ transform: "rotate(180deg)" }} />
-          Dashboard
-        </Link>
       </main>
     </div>
   );

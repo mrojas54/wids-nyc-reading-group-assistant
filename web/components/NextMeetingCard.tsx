@@ -1,4 +1,5 @@
-import { formatDateTimeNY } from "@/lib/time";
+import Link from "next/link";
+import { formatDateNY, formatTimeNY } from "@/lib/time";
 import type { NextMeeting, RsvpStatus } from "@/lib/queries";
 import { Icon } from "@/components/ui";
 import { RsvpButtons } from "@/components/RsvpButtons";
@@ -8,68 +9,87 @@ const TYPE_LABEL: Record<NextMeeting["type"], string> = {
   reading_group: "reading group",
 };
 
+export type AvailabilityStatus = "needed" | "submitted" | null;
+
 export function NextMeetingCard({
   meeting,
   myRsvp,
-  inverted = true,
+  availabilityStatus = null,
 }: {
   meeting: NextMeeting | null;
   myRsvp: RsvpStatus | null;
-  /** Render as the dark inverted hero (default) or the light card. */
-  inverted?: boolean;
+  /** Folds the availability prompt INTO the hero as a secondary CTA. */
+  availabilityStatus?: AvailabilityStatus;
 }) {
   if (!meeting) {
     return (
-      <div className="next-meeting next-meeting-empty">
-        <p>No meetings on the calendar yet — sit tight.</p>
-      </div>
+      <article className="card-hero">
+        <div className="hero-eyebrow">Next meeting</div>
+        <p style={{ color: "var(--color-paper-600)", fontSize: 14 }}>
+          No meetings on the calendar yet — sit tight.
+        </p>
+      </article>
     );
   }
 
-  const date = meeting.scheduled_at ? formatDateTimeNY(meeting.scheduled_at) : "Date TBD";
-  const location = meeting.location ?? "Location TBD";
+  const dateLabel = meeting.scheduled_at ? formatDateNY(meeting.scheduled_at) : null;
+  const timeLabel = meeting.scheduled_at ? formatTimeNY(meeting.scheduled_at) : null;
+  const place = meeting.location ?? "Location TBD";
   const leader = meeting.leader_name ?? "Leader TBD";
-  const className = inverted
-    ? "next-meeting next-meeting-inverted"
-    : "next-meeting";
+  // Reading-group is ~95% of meetings — only badge the exceptions.
+  const showBadge = meeting.type !== "reading_group";
+  const title =
+    meeting.paper_title ?? (meeting.type === "admin" ? "Admin meeting" : "Next meeting");
 
   return (
-    <article className={className}>
-      <header className="next-meeting-head">
-        <h2 className="next-meeting-eyebrow">Next meeting</h2>
-        <span className="next-meeting-badge">{TYPE_LABEL[meeting.type]}</span>
-      </header>
-
-      <div className="next-meeting-when">{date}</div>
-
-      <dl className="next-meeting-meta">
-        <div>
-          <dt>Location</dt>
-          <dd>{location}</dd>
-        </div>
-        <div>
-          <dt>Leader</dt>
-          <dd>{leader}</dd>
-        </div>
-        {meeting.paper_title && (
-          <div>
-            <dt>Paper</dt>
-            <dd>{meeting.paper_title}</dd>
-          </div>
+    <article className="card-hero">
+      <div className="hero-eyebrow">
+        Next meeting{dateLabel ? ` · ${dateLabel}` : ""}
+        {showBadge && (
+          <span style={{ marginLeft: 8 }} className="badge badge-reading">
+            {TYPE_LABEL[meeting.type]}
+          </span>
         )}
-      </dl>
+      </div>
 
-      {meeting.companion_url && (
-        <a href={meeting.companion_url} className="btn btn-primary btn-sm next-meeting-cta">
-          Open paper companion
-          <Icon name="arrowRight" size={14} />
-        </a>
-      )}
+      <h2 className="hero-title">{title}</h2>
+
+      <div className="hero-meta">
+        {timeLabel && (
+          <span>
+            <Icon name="clock" size={13} />
+            {timeLabel}
+          </span>
+        )}
+        <span>
+          <Icon name="mapPin" size={13} />
+          {place}
+        </span>
+        <span className="hero-meta-soft">Led by {leader}</span>
+      </div>
 
       {meeting.status === "scheduled" && (
-        <section className="next-meeting-rsvp">
-          <RsvpButtons meetingId={meeting.id} current={myRsvp} />
-        </section>
+        <RsvpButtons meetingId={meeting.id} current={myRsvp} />
+      )}
+
+      {availabilityStatus === "needed" && (
+        <Link href="/availability" className="hero-nudge">
+          <span className="nudge-text">
+            <b>We&rsquo;re scheduling the next meeting.</b>
+            <br />
+            <span className="nudge-sub">Tap to vote on a date</span>
+          </span>
+          <Icon name="chevronRight" size={16} className="nudge-arrow" />
+        </Link>
+      )}
+      {availabilityStatus === "submitted" && (
+        <div className="hero-nudge confirmed">
+          <span className="nudge-text">
+            <b>Thanks — got your dates.</b>
+            <br />
+            We&rsquo;ll confirm the meeting time by Tuesday.
+          </span>
+        </div>
       )}
     </article>
   );
