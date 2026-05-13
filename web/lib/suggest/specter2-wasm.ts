@@ -112,6 +112,12 @@ export async function ensureModelLoaded(): Promise<void> {
  * Embed a batch of {title, abstract} pairs via the WASM SPECTER2 model.
  * Chunks at 10 per forward pass to stay inside Lambda memory headroom.
  * Returns Float32Arrays in the same order as inputs.
+ *
+ * When `signal` is provided, throws `TimeoutError` if the signal is already
+ * aborted after the model resolves and at each chunk boundary inside
+ * `runChunkedWithAbort`. The helper yields via `setImmediate` between chunks
+ * so a pending `AbortSignal.timeout(...)` can actually fire — `setTimeout`
+ * alone cannot preempt the synchronous WASM `session.run` call.
  */
 export async function embedBatch(
   items: Array<{ title: string; abstract: string }>,

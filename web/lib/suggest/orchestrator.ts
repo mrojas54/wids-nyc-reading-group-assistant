@@ -34,6 +34,13 @@ function meanVec(vectors: Float32Array[]): Float32Array {
   return out;
 }
 
+/**
+ * Cancellation: when `signal` is provided, this function throws `TimeoutError`
+ * if the signal is already aborted at entry and forwards the signal to
+ * `embedBatch`, which checks it between WASM chunks. Async I/O phases (cache
+ * lookup, S2 fetch) are not actively cancelled here — they have their own
+ * per-request timeouts inside their respective clients.
+ */
 export async function orchestrate(
   req: SuggestRequest,
   deps: OrchestratorDeps,
