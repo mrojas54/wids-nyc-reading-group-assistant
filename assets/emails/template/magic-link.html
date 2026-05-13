@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>Sign in and keep reading</title>
+
+  <!--
+    Magic-link sign-in email — WiDS NYC AI Reading Group Planner.
+    Variant: C · Tight.
+    Subject:  Sign in and keep reading
+    Preheader: One-tap link. Works once, expires in 15 minutes.
+
+    Template tokens to swap server-side before send. The placeholders
+    are shown filled in below so the file previews cleanly — search and
+    replace before wiring to your mailer:
+      maya.r@gmail.com
+                       → {{EMAIL}}
+      https://planner.widsnyc.org/auth/v?t=8f3c1a9b-2d4e-4f87-91ab-c0de7e6f4321
+                       → {{MAGIC_URL}}
+      The most dangerous phrase...
+                       → {{QUOTE_TEXT}}
+      Grace Hopper      → {{QUOTE_BY}}
+
+    Compatibility: tested-shape for Gmail (web/iOS/Android), Apple Mail
+    (macOS/iOS), Outlook for Mac, Outlook.com, and Outlook 2016+ on Windows
+    via the VML fallback for the button. The inline SVG mark renders in
+    every modern client; Outlook on Windows shows a clean blank space in
+    its place — engineer should host a 96-px PNG of the mark and swap the
+    <svg> for an <img> if a brand glyph in Outlook is required.
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, p { font-family: Arial, Helvetica, sans-serif !important; }
+    .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    /* Resets — kept tiny, only what survives client mangling. */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #355c4b; }
+
+    /* Mobile — narrow the card, drop side padding. */
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 24px !important; padding-right: 24px !important; }
+      .pad-x-tight { padding-left: 20px !important; padding-right: 20px !important; }
+      .btn-cell a { padding: 14px 18px !important; font-size: 15px !important; }
+      .h-body { font-size: 16px !important; line-height: 1.6 !important; }
+      .quote-text { font-size: 16px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#1a160f;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a160f;">
+
+  <!-- Hidden preheader (the inbox-preview text). 100+ trailing spaces push
+       any leaked first-paragraph snippet out of view. -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    One-tap link. Works once, expires in 60 minutes.
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (gives dark margins on desktop) ===== -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a160f" style="background-color:#1a160f;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+
+        <!-- ===== Email card ===== -->
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#fefcef;border:1px solid #ddd4be;border-radius:6px;">
+
+          <!-- ── Lockup (mark + wordmark, centered) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:44px 52px 0 52px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding-bottom:10px;line-height:0;">
+                    <img src="https://YOUR-DEPLOY-URL/branding/mark-reader-192.png"
+                         width="48" height="48" alt="Reading Group Planner"
+                         style="display:block;border:0;outline:none;text-decoration:none;">
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#152a23;line-height:1.1;">
+                    Reading Group Planner
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding:10px 0;line-height:0;">
+                    <div style="width:24px;height:2px;background-color:#c8226d;font-size:0;line-height:0;">&nbsp;</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;">
+                    WiDS · NYC AI Reading Group
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Body copy ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:32px 52px 0 52px;">
+              <p class="h-body" style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1a160f;text-align:center;max-width:440px;">
+                Hey curious friend — your sign-in link is below. It opens as
+                <b style="font-weight:600;">{{ .Email }}</b>,
+                works once, and expires in <b style="font-weight:600;">60 minutes</b>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Button (bulletproof) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:24px 52px 8px 52px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td class="btn-cell" align="center" bgcolor="#467560" style="border-radius:10px;background-color:#467560;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ .ConfirmationURL }}" style="height:48px;v-text-anchor:middle;width:260px;" arcsize="20%" stroke="f" fillcolor="#467560">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;">Sign in and keep reading &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block;padding:14px 22px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;border-radius:10px;background-color:#467560;">
+                      Sign in and keep reading &rarr;
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Fallback URL ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:14px 52px 0 52px;">
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11.5px;line-height:1.5;color:#7e6f55;text-align:center;">
+                Or paste this into your browser:<br>
+                <a href="{{ .ConfirmationURL }}" style="color:#355c4b;text-decoration:none;font-family:'Courier New',Courier,monospace;font-size:11.5px;word-break:break-all;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Aside ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:24px 52px 0 52px;">
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.55;color:#594d3b;text-align:center;max-width:440px;">
+                Didn't ask for this? Sit tight — without the link, no one signs in as you.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Quote (rotated per send) ── -->
+          <tr>
+            <td class="pad-x" style="padding:32px 52px 0 52px;">
+              <!-- Hairline rule -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td height="1" width="36" style="height:1px;width:36px;background-color:#c8226d;font-size:0;line-height:0;">&nbsp;</td>
+                </tr>
+              </table>
+              <p class="quote-text" style="margin:14px 0 10px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:17px;line-height:1.45;color:#152a23;letter-spacing:-0.005em;">
+                &ldquo;The most dangerous phrase in the language is, ‘we’ve always done it this way.’&rdquo;
+              </p>
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#594d3b;">
+                &mdash; <b style="font-weight:600;color:#29241b;">Grace Hopper</b>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td class="pad-x-tight" align="center" style="padding:32px 44px 28px 44px;">
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;line-height:1.55;color:#7e6f55;text-align:center;">
+                WiDS NYC AI Reading Group
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- ===== /Email card ===== -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
