@@ -60,6 +60,18 @@ After running `/wids-bootstrap`, register the scheduled task prompts (output by 
 - In Supabase → Authentication → URL Configuration, add `<vercel-url>/auth/callback` to the allowed redirect list.
 - See [web/README.md](web/README.md) for full deployment notes.
 
+### 7. Custom SMTP for magic-link auth
+
+Supabase's built-in SMTP is rate-limited to ~2 emails/hour, which
+throttles members during sign-in bursts. Before going live with the
+member portal, configure **Resend** as a custom SMTP provider using
+a Cloudflare-registered domain.
+
+See the step-by-step runbook: [`docs/runbooks/smtp-auth-setup.md`](docs/runbooks/smtp-auth-setup.md)
+
+One-time cost: ~$10/year for the `.org` domain. Resend's free tier
+(3,000 emails/month, 100/day) covers this group's volume.
+
 ## Running
 
 Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this directory.
