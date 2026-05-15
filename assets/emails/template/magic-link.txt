@@ -1,0 +1,19 @@
+WiDS NYC AI Reading Group
+
+Hey curious friend,
+
+Sign in to the WiDS NYC member portal:
+{{ .ConfirmationURL }}
+
+This link expires in 60 minutes and works only once.
+
+Didn't ask for this? Sit tight — without the link, no one signs in
+as you.
+
+“The most dangerous phrase in the language is, ‘we’ve always done
+it this way.’”
+— Grace Hopper
+
+---
+WiDS NYC AI Reading Group — a community for women and non-binary
+data scientists in NYC.

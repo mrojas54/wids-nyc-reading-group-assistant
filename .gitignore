@@ -28,3 +28,11 @@ specter2_int8.onnx
 
 # Claude agent worktrees
 .claude/worktrees/
+
+# Agent tool scratch (per-developer, not part of the repo)
+# claude-mem auto-injects empty CLAUDE.md context markers on directory reads
+CLAUDE.md
+# Firecrawl CLI / MCP scratch dir
+.firecrawl/
+# Serena MCP scratch dir
+.serena/
