@@ -1,0 +1,294 @@
+/* Inbox screen — ported from design_handoff/design/ideas.css (.inbox-*). */
+
+.inbox-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+.inbox-hero {
+  display: flex;
+  gap: 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-1);
+  padding-bottom: 22px;
+}
+.inbox-hero-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.inbox-hero-eyebrow .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-magenta-400);
+}
+.inbox-hero h1 {
+  font-family: var(--font-serif);
+  font-size: 40px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  max-width: 22ch;
+  text-wrap: balance;
+  margin: 8px 0 0;
+}
+.inbox-hero .sub {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--fg-3);
+  margin-top: 8px;
+  max-width: 50ch;
+  line-height: 1.45;
+}
+.inbox-hero .right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: right;
+}
+.inbox-hero .meeting {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-fg);
+}
+.inbox-hero .when {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.inbox-hero .lead {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-3);
+}
+
+.inbox-section {
+  margin-top: 6px;
+}
+.inbox-section .h-section {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.inbox-section .h-section .count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+  text-transform: none;
+}
+.inbox-section .h-section-sub {
+  margin-top: 2px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--fg-3);
+  line-height: 1.5;
+}
+
+.inbox-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+@media (max-width: 900px) {
+  .inbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.inbox-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all var(--duration-2) var(--ease-out);
+  text-align: left;
+  color: inherit;
+  text-decoration: none;
+}
+.inbox-card:hover {
+  border-color: var(--color-sage-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+.inbox-card.is-current {
+  background: var(--bg-inverse);
+  color: white;
+  border-color: var(--color-sage-800);
+}
+.inbox-card.is-current:hover {
+  background: var(--color-sage-800);
+}
+.inbox-card .title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-wrap: balance;
+  max-width: 28ch;
+}
+.inbox-card.is-current .title {
+  color: white;
+}
+.inbox-card .authors {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--fg-3);
+}
+.inbox-card.is-current .authors {
+  color: var(--color-sage-200);
+}
+.inbox-card .meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.inbox-card.is-current .meta {
+  color: var(--color-sage-300);
+}
+.inbox-card .status {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+.inbox-card .meeting-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-magenta-700);
+}
+.inbox-card.is-current .meeting-line {
+  color: var(--color-magenta-300);
+}
+.inbox-card .pick-line {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-2);
+}
+.inbox-card .pick-line strong {
+  color: var(--fg-1);
+  font-weight: 600;
+}
+.inbox-card .pick-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-magenta-700);
+  background: var(--color-magenta-50);
+  border: 1px solid var(--color-magenta-200);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+.inbox-card .pick-pill.ghost {
+  color: var(--fg-3);
+  background: var(--bg-page-warm);
+  border-color: var(--border-1);
+}
+.inbox-card.is-queued {
+  border-left: 3px solid var(--color-magenta-300);
+}
+.inbox-card.is-proposed {
+  border-left: 3px dashed var(--border-1);
+}
+.inbox-card .proposed-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg-2);
+  background: var(--bg-page-warm);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-1);
+}
+.inbox-card .score-line {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--color-sage-700);
+}
+
+.inbox-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-1);
+  background: var(--bg-page-warm);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.inbox-badge.sage {
+  color: var(--color-sage-800);
+  background: var(--color-sage-50);
+  border-color: var(--color-sage-200);
+}
+.inbox-badge.warning {
+  color: var(--color-warning-700);
+  background: var(--color-warning-50);
+  border-color: #e0c084;
+}
+.inbox-badge.magenta {
+  color: var(--color-magenta-700);
+  background: var(--color-magenta-50);
+  border-color: var(--color-magenta-200);
+}
+
+.inbox-empty {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--fg-3);
+  padding: 18px 22px;
+  border: 1px dashed var(--border-1);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface-sunken);
+}
