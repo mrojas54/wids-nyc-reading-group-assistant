@@ -1,9 +1,19 @@
 ---
-schedule: daily
-description: Email leader directly when paper not picked, guide not drafted, or packets not sent
+schedule: deprecated
+description: DEPRECATED — superseded by Paper Pal companion. Do not register.
 ---
 
-# scheduled_tasks/leader-nudge
+# scheduled_tasks/leader-nudge — DEPRECATED (2026-05-16)
+
+**Status:** Deprecated. Do NOT register with the scheduled-tasks MCP.
+
+**Replacement:** The Paper Pal companion (in active development) absorbs all three nudge conditions — paper selection, guide drafting, and packet send — into the leader's interactive workflow rather than out-of-band email. Email nudges from a separate daily job would duplicate or contradict Paper Pal's in-flow prompts.
+
+**If you need to revert:** Remove this notice and restore the original frontmatter (`schedule: daily`). The full original spec is preserved below for reference.
+
+---
+
+## Original spec (kept for reference only)
 
 Three nudge conditions. Fires at most once per 5 days per leader per condition. CC operator on the third.
 
