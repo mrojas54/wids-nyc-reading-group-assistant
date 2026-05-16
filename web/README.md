@@ -52,4 +52,21 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 ## Tests
 
 - `npm test` — runs unit tests with vitest. Fast.
-- `RUN_PARITY=1 SPECTER2_MODEL_BLOB_URL=https://... npm test -- parity` — runs the WASM parity check against Semantic Scholar. Slow (loads ONNX from Vercel Blob, runs ~20 inferences). Requires the blob URL env var and `scripts/specter2_parity_fixtures.json` to exist.
+- **Parity test** (slow, ~30s; loads 113 MB ONNX from private Vercel Blob):
+
+  Two env vars are required: `SPECTER2_MODEL_BLOB_URL` (the private blob URL) and
+  `BLOB_READ_WRITE_TOKEN` (the Vercel Blob write token, stored in 1Password).
+  Use `op run` to inject the token without it touching your shell history:
+
+  ```sh
+  op run --env-file <(printf 'BLOB_READ_WRITE_TOKEN=op://Personal/4vsjnrbjyhlqju5mbtw2kcf3ba/credential\nSPECTER2_MODEL_BLOB_URL=https://dzoasz69j2a1a7lp.private.blob.vercel-storage.com/specter2/specter2_int8.onnx\nRUN_PARITY=1\n') -- \
+    /Users/michellerojas/.nvm/versions/node/v20.18.0/bin/npm --prefix . test -- lib/suggest/__tests__/parity.test.ts
+  ```
+
+  **Why the explicit npm path?** macOS has a stale system npm at `/usr/local` that
+  predates `node:path` support. The nvm binary at the path above is the correct one.
+  If you've updated Node via nvm since this was written, adjust the path.
+
+  Thresholds: median cos ≥ 0.99, min cos ≥ 0.93. Last verified: 2026-05-16,
+  median=0.9914, min=0.9908 (all 11 fixtures). Requires
+  `scripts/specter2_parity_fixtures.json` to exist.
