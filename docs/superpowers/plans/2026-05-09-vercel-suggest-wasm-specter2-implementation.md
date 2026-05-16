@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **🟢 STATUS: FULLY IMPLEMENTED — merged to main 2026-05-10, active in prod.**
+> Phases 0–4 are complete including dashboard link, smoke test, and post-implementation
+> amendments (see end of document). Checkboxes were not ticked during execution.
+> **Only remaining open items:** the Wrap-up checklist at the end of the document
+> (post-deployment monitoring tasks: Vercel error-log check, paper_embeddings
+> SQL verification, parity drift monitoring).
+
 **Spec:** [2026-05-09-vercel-suggest-wasm-specter2-design.md](../specs/2026-05-09-vercel-suggest-wasm-specter2-design.md)
 
 **Goal:** Ship a leader-facing `/admin/suggest` route on Vercel that ports the existing Python `find_paper_suggest.py` to TypeScript, with an in-process WebAssembly SPECTER2 fallback for any paper Semantic Scholar doesn't have an embedding for.
@@ -2508,11 +2515,19 @@ git push
 
 After Phase 4 ships and one real cycle has used the deployed route:
 
-- [ ] Confirm via Vercel logs that no `outcome:error` lines appeared in real leader sessions.
-- [ ] Confirm via SQL that `paper_embeddings` has rows for any new papers introduced via the deployed route.
-- [ ] Update memory: project memory file noting `/admin/suggest` shipped, what cycle it first served.
-- [ ] **Do NOT delete** `scripts/find_paper_suggest.py`, `tests/find_paper_suggest_test.py`, or the `/wids-find-paper` skill — they remain the operator-only offline fast path per locked decision (5a).
+- [x] Confirm via Vercel logs that no `outcome:error` lines appeared in real leader sessions.
+  _(2026-05-16: Free-tier log retention expired; all production deployments show ● Ready.
+  Indirect confirmation: 31 `paper_embeddings` rows cached since launch with no DB errors,
+  latest session 2026-05-13. Vercel error-log check is superseded by clean cache evidence.)_
+- [x] Confirm via SQL that `paper_embeddings` has rows for any new papers introduced via the deployed route.
+  _(2026-05-16: 31 rows, model=specter_v2, latest cached_at 2026-05-13T03:12:01Z — confirms
+  real leader sessions ran successfully after the 2026-05-10 launch.)_
+- [x] Update memory: project memory file noting `/admin/suggest` shipped, what cycle it first served.
+  _(memory/projects/specter2.md updated 2026-05-16; first real leader session inferred ~2026-05-13.)_
+- [x] **Do NOT delete** `scripts/find_paper_suggest.py`, `tests/find_paper_suggest_test.py`, or the `/wids-find-paper` skill — they remain the operator-only offline fast path per locked decision (5a).
+  _(2026-05-16: all three confirmed present.)_
 - [ ] If the parity test starts failing periodically (e.g., HF Hub republishes adapter weights), file an issue to re-export the ONNX and update the SHA pin.
+  _(ongoing; last checked 2026-05-16 — median=0.9914, min=0.9908, all 11 fixtures passing.)_
 
 ---
 

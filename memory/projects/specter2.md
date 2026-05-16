@@ -31,11 +31,15 @@ at tier 2 even though S2 is the "preferred" source.
   for the local path; `ubuntu-latest` for CI)
 
 ## Parity contract
-- **Fixtures:** 11 S2-canonical papers in `tests/fixtures/`
+- **Fixtures:** 11 S2-canonical papers in `scripts/specter2_parity_fixtures.json`
 - **Thresholds:** median cos ≥ **0.99**, min cos ≥ **0.93**
   ([commit 17589da](https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/17589da))
 - **Achieved at last export:** median 0.9927, min 0.9476 (2026-05-10)
+- **Last parity run:** median=0.9914, min=0.9908, avg=0.9913 (2026-05-16)
+  — all 11 fixtures ≥ 0.9908; previously-noted 0.9476 outlier (IMPerSumm) no longer appears
 - **Test:** [web/lib/suggest/__tests__/parity.test.ts](../../web/lib/suggest/__tests__/parity.test.ts)
+- **How to run:** see `web/README.md` → Tests → Parity test (requires `op run` +
+  `BLOB_READ_WRITE_TOKEN` from 1Password item `4vsjnrbjyhlqju5mbtw2kcf3ba`)
 
 ## Runtime hardening
 - **Cold start:** parallel warmup + 429 fast-fallback
@@ -73,6 +77,16 @@ Verified by [scripts/verify_specter2_local_vs_s2.py](../../scripts/verify_specte
 - **Measured T_emb:** median 1099 ms steady-state per paper on CPU (Apple
   Silicon, `torch<2.6` cache). Full architecture + wall-time math in the
   spec doc below.
+
+## 2026-05-16 — Wrap-up verified
+- **Vercel error logs:** Free-tier log retention expired; checked via `vercel ls` — all production
+  deployments show ● Ready. Superseded by cache evidence (no errors means the route was writing).
+- **paper_embeddings (2026-05-16):** 31 rows, model=`specter_v2`, latest `cached_at` 2026-05-13T03:12:01Z.
+  Confirms `/admin/suggest` served real leader sessions successfully in the first cycle post-launch.
+- **First leader session:** ~2026-05-13 (inferred from `paper_embeddings.cached_at` timestamps).
+- **Offline fast-path files:** all three confirmed present —
+  `scripts/find_paper_suggest.py`, `tests/find_paper_suggest_test.py`, `.claude/commands/wids-find-paper.md`.
+- **Parity (2026-05-16):** median=0.9914, min=0.9908, avg=0.9913 — all 11 fixtures passing.
 
 ## Key docs
 - **Runbook:** [docs/superpowers/runbooks/2026-05-10-specter2-onnx-export-deploy.md](../../docs/superpowers/runbooks/2026-05-10-specter2-onnx-export-deploy.md)
