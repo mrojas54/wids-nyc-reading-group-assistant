@@ -1,5 +1,13 @@
 ---
-description: Create a Gmail draft addressed to active members with members-packet.pdf attached
+description: "[DEPRECATED — superseded by Paper Pal] Create a Gmail draft with members-packet.pdf attached."
+---
+
+# /wids-send-packets — DEPRECATED
+
+> **Superseded by Paper Pal.** Packets aren't mailed anymore. The pre-meeting reminder email now links members to `/papers/<id>` (the live Paper Pal surface) instead of attaching a PDF. The leader's responsibility is to make sure the companion is generated (one click on `/new` in the portal) before the reminder fires.
+>
+> This command is kept for rollback. The legacy implementation below is preserved unchanged.
+
 ---
 
 # /wids-send-packets

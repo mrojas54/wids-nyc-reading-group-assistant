@@ -1,5 +1,15 @@
 ---
-description: Generate members' packet + leader's packet via 3-stage subagent dispatch
+description: "[DEPRECATED — superseded by Paper Pal] Generate members' packet + leader's packet PDFs."
+---
+
+# /wids-make-guide — DEPRECATED
+
+> **Superseded by Paper Pal.** Members no longer receive a static PDF packet; instead, the Paper Pal Synthesis surface at `/papers/<id>` in the member portal renders the same material interactively (abstract, terminology, math, architecture, takeaways, resources, code) plus an Assessment tab (MCQ + Socratic) the packets never had. The leader's "extras" (presenter slides, deeper notes) are produced by Paper Pal's Presenter surface (`/papers/<id>/present`) on demand.
+>
+> This command is kept for rollback only. Day-to-day, operators generate a companion once per paper via the portal's `/new` route; members open `/papers/<id>` whenever they want.
+>
+> The legacy implementation below is preserved unchanged.
+
 ---
 
 # /wids-make-guide
