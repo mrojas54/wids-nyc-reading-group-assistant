@@ -215,6 +215,7 @@
       <div class="panel intro">
         <h2>What this playground is</h2>
         <p>The WiDS reading-group assistant has a <strong>3-tier embedding pipeline</strong> for paper similarity. When Semantic Scholar (S2) is rate-limited or down, the suggest endpoint falls back to running SPECTER2 locally — as ONNX-quantized weights in a WASM runtime inside a Vercel Function.</p>
+        <p style="font-size: 12px; color: var(--muted);">Tiers below are in <strong>preference</strong> order (canonical → derived → local). At runtime the orchestrator checks the pgvector cache first, calls S2 only on cache misses, and falls back to WASM when S2 fails.</p>
         <div style="margin: 12px 0;">
           <div class="tier"><div class="tier-num">Tier 1</div><div class="tier-body"><strong>Semantic Scholar API</strong> — canonical embeddings, but rate-limited (429s) and occasionally down.</div></div>
           <div class="tier"><div class="tier-num">Tier 2</div><div class="tier-body"><strong>pgvector cache</strong> (<code>paper_embeddings</code>) — warm hits for previously-seen papers.</div></div>

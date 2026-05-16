@@ -8,10 +8,16 @@ the WiDS topic. The fallback embeds papers **locally** via SPECTER2 ONNX so the
 leader dashboard never hard-fails on S2 outages.
 
 ## Pipeline (3 tiers)
+Listed in *preference* order (canonical → derived → local):
 1. **Semantic Scholar API** — preferred, has canonical embeddings
 2. **pgvector cache** (`paper_embeddings` table) — warm hits, parsed via text
    form ([commit 163e04a](https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/163e04a))
 3. **WASM/ONNX local inference** — cold fallback, runs in the Vercel Function
+
+**Runtime execution order** in `web/lib/suggest/orchestrator.ts` is different
+for latency reasons: check pgvector cache first, hit S2 only on cache misses,
+fall back to WASM when S2 fails. So a previously-embedded paper short-circuits
+at tier 2 even though S2 is the "preferred" source.
 
 ## Model
 - **Base:** `allenai/specter2_base` + `allenai/specter2` proximity adapter
