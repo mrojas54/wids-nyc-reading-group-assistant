@@ -1,0 +1,44 @@
+WiDS NYC AI Reading Group
+=========================
+
+Hi {{ recipient.firstName }},
+
+It's been too long. We're getting the gang back together and it won't
+be the same without you. The horizon is the next 30 days and we're
+looking for a weekday evening that works for most of the group.
+
+
+NEXT PAPER
+{{ paper.title }}
+{{ paper.authorsShort }} — arXiv {{ paper.arxivId }}
+arXiv: {{ paper.arxivUrl }}
+{{ paper.location }} · {{ paper.duration }} · Paper Pal drops {{ paper.companionDropDay }}
+
+
+Tap any weekday evening in the next 30 days you could make it. We'll
+pick the date the most people can attend and send a calendar invite by
+Monday.
+
+Open availability:
+{{ links.availability }}
+
+
+{{ stats.submittedCountWord }} of us ({{ stats.submittedCount }} / {{ stats.totalMembers }}) have submitted so far — yours would
+really help us lock the date. Soft deadline: {{ deadline.soft }}, so the
+calendar invite can go out Monday.
+
+No availability this round is also a valid answer — just hit the link
+and submit zero days so I know you saw this and I'll stop bugging you.
+
+
+Thanks for being part of this,
+— {{ operator.displayName }}
+
+PS — your Paper Pal goes live Wednesday morning. I'll send a separate
+note when it's ready. Preview link if you're curious:
+{{ links.companionPreview }}
+
+---
+WiDS NYC AI Reading Group
+Member portal: {{ links.portalBase }}/dashboard
+Past papers:   {{ links.portalBase }}/papers
