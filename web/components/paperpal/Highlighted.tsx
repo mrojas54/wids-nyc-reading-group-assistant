@@ -3,7 +3,7 @@
 // Render prose with magenta-dotted terminology and indigo-dotted math variables.
 // Hovering either reveals a tooltip via the shared Tooltip primitive.
 
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type MouseEvent as ReactMouseEvent, type ReactNode, useState } from "react";
 import { Tooltip } from "./primitives";
 import type { MathExplanation, TerminologyItem } from "@/lib/paperpal/types";
 
@@ -23,7 +23,7 @@ type HoverState = HoverTerm | HoverMVar | null;
 function renderWithTerms(
   text: string,
   terms: TerminologyItem[] | undefined,
-  onHover: (t: TerminologyItem, e: React.MouseEvent) => void,
+  onHover: (t: TerminologyItem, e: ReactMouseEvent) => void,
   onLeave: () => void,
 ): ReactNode[] {
   if (!terms || terms.length === 0) return [text];
@@ -70,7 +70,7 @@ function renderWithTerms(
 function applyMathVars(
   children: ReactNode[],
   mvars: MathVar[],
-  onHover: (v: MathVar, e: React.MouseEvent) => void,
+  onHover: (v: MathVar, e: ReactMouseEvent) => void,
   onLeave: () => void,
 ): ReactNode[] {
   if (!mvars || mvars.length === 0) return children;
@@ -143,9 +143,9 @@ export function Highlighted({
 }) {
   const [hover, setHover] = useState<HoverState>(null);
 
-  const onTermHover = (data: TerminologyItem, e: React.MouseEvent) =>
+  const onTermHover = (data: TerminologyItem, e: ReactMouseEvent) =>
     setHover({ kind: "term", data, x: e.clientX, y: e.clientY });
-  const onMVarHover = (data: MathVar, e: React.MouseEvent) =>
+  const onMVarHover = (data: MathVar, e: ReactMouseEvent) =>
     setHover({ kind: "mvar", data, x: e.clientX, y: e.clientY });
   const onLeave = () => setHover(null);
 
