@@ -53,6 +53,8 @@ The operator must have a `reading-group-guide` skill installed. The make-guide c
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
+Currently deployed (5): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, plus `availability-chase`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.
 - Set the **Root Directory** to `web` in project settings.
@@ -96,8 +98,8 @@ The leader (a different person each cycle) handles `/wids-find-paper`, `/wids-ma
 ### When something goes wrong
 
 - **DB write failed** → check `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`.
-- **Form responses too low** → `form-response-chase` (renamed `availability-chase` after the portal cutover) will email you. Reply with what to do, or just nag your members on WhatsApp.
-- **Leader has gone silent** → `leader-nudge` will email them. CC's you on the third nudge (packets-not-sent). At that point, step in.
+- **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
+- **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
 - **Calendar event got rescheduled by someone** → `calendar-rsvp-sync` syncs it back to the DB nightly.
 - **Guide or companion generation failed** → `meetings.status='guide_failed'`. Leader investigates, re-runs `/wids-make-guide` or `/wids-make-companion` manually.
 - **CSV upload not picked up** → check `command_log` for the `process-form` rows. Verify CSV path matches the convention exactly. (Goes away post-portal-cutover.)
@@ -114,7 +116,7 @@ and stash the dumps in your Drive folder.
 
 ### Going on vacation
 
-Cycle pauses during operator absence — `cycle-keep-alive`, `form-response-chase` / `availability-chase`, and `leader-nudge` (third condition) emails queue up for your return. V2 will support a backup operator.
+Cycle pauses during operator absence — `cycle-keep-alive` and `availability-chase` emails queue up for your return. V2 will support a backup operator.
 
 ### Smoke testing
 
