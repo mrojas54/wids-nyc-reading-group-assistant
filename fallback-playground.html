@@ -163,7 +163,7 @@
           <p>Each model weight is normally a <strong>32-bit float</strong>. Quantization stores them in fewer bits.</p>
           <p><span class="pill">FP32</span> 4 bytes, full precision, baseline.</p>
           <p><span class="pill">FP16</span> 2 bytes, ~3 decimal digits. Nearly lossless for inference. ½ the file size.</p>
-          <p><span class="pill">INT8</span> 1 byte, only 256 distinct values per weight. Each tensor gets one shared <code>scale</code> factor: <code>w' = round(w / scale) · scale</code>. ¼ the file size, ~2× faster matmuls — at the cost of measurable accuracy drift.</p>
+          <p><span class="pill">INT8</span> 1 byte, only 256 distinct values per weight. Each tensor gets one shared <code>scale</code> factor. On disk we store the integer <code>q = round(w / scale)</code>; at runtime the kernel reconstructs <code>w' = q · scale</code>. The <code>round()</code> is the lossy step. ¼ the file size, ~2× faster matmuls — at the cost of measurable accuracy drift.</p>
           <p><strong>Per-tensor</strong>: one scale per weight matrix (faster, more drift). <strong>Per-channel</strong>: one scale per output row (slightly bigger, tighter parity). <strong>Static</strong>: also quantizes activations using a calibration dataset; smallest + fastest, but needs ~100 representative inputs to set activation scales.</p>
         </div>
       </details>
