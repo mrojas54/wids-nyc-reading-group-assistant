@@ -203,7 +203,7 @@
         <summary>Cold start vs timeout</summary>
         <div class="body">
           <p><strong>Cold start</strong> = the one-time cost on the first request a Fluid Compute instance handles: fetch the ONNX blob from Vercel Blob (~80 MB/s), load it into the WASM runtime, init the tokenizer. Subsequent requests on the same instance skip this (warm).</p>
-          <p><strong>Timeout</strong> = the hard cap per request. Default 300s on Vercel; we set 60s for <code>/admin/suggest</code>. If WASM inference plus cold start exceeds this, the function 504s — which is why <code>AbortSignal</code> cancellation between token chunks matters (<a href="https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/6116441" style="color: var(--accent);">6116441</a>).</p>
+          <p><strong>Timeout</strong> = the hard cap per request. Vercel's defaults are short (10s Hobby, 15s Pro Node); we override via <code>export const maxDuration = 60</code> in <code>web/app/api/suggest/route.ts</code> (max 300s on Pro, longer with Fluid Compute). If WASM inference plus cold start exceeds this, the function 504s — which is why <code>AbortSignal</code> cancellation between token chunks matters (<a href="https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/6116441" style="color: var(--accent);">6116441</a>).</p>
           <p>Bigger model → bigger blob → longer fetch → longer cold start. That's the main trade-off when you flirt with FP16 or larger architectures.</p>
         </div>
       </details>
