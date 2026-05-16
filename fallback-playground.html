@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SPECTER2 Fallback Trade-off Explorer</title>
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151c;
+    --panel-2: #1a1f2a;
+    --border: #232936;
+    --text: #e6e8ee;
+    --muted: #8b93a7;
+    --accent: #7aa2ff;
+    --accent-2: #9f7aff;
+    --good: #6ee7b7;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "SF Pro Text", Segoe UI, sans-serif; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+  h2 { font-size: 11px; margin: 0 0 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+  .app { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+  .sidebar { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; }
+  .header { padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .header .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .group { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .row { display: grid; gap: 6px; margin-bottom: 14px; }
+  .row:last-child { margin-bottom: 0; }
+  .row label { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 12px; }
+  .row label .val { color: var(--text); font-family: var(--mono); font-size: 12px; }
+  select, input[type="range"] { width: 100%; }
+  select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: inherit; }
+  input[type="range"] { -webkit-appearance: none; height: 4px; background: var(--border); border-radius: 2px; outline: none; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
+  .preset:hover { border-color: var(--accent); color: var(--accent); }
+  .preset.active { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+  .main { display: grid; grid-template-rows: 1fr auto; overflow: hidden; }
+  .preview { padding: 20px 28px; overflow-y: auto; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .metric { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .metric .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .metric .v { font-size: 20px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.02em; }
+  .metric .u { color: var(--muted); font-size: 11px; margin-left: 2px; }
+  .verdict { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; margin-top: 12px; font-weight: 500; }
+  .verdict.pass { background: rgba(110, 231, 183, 0.1); color: var(--good); border: 1px solid rgba(110, 231, 183, 0.3); }
+  .verdict.warn { background: rgba(251, 191, 36, 0.1); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.3); }
+  .verdict.fail { background: rgba(248, 113, 113, 0.1); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.3); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .bar { height: 8px; background: var(--panel-2); border-radius: 4px; overflow: hidden; position: relative; }
+  .bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 4px; transition: width 0.2s; }
+  .bar .threshold { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--warn); }
+  .compare { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .compare th, .compare td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .compare th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.06em; }
+  .compare td.num { font-family: var(--mono); text-align: right; }
+  .compare tr.current { background: rgba(122, 162, 255, 0.08); }
+  .compare tr.current td:first-child::before { content: "→ "; color: var(--accent); }
+  .notes { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .notes strong { color: var(--text); }
+  .implications { margin: 0; padding-left: 18px; }
+  .implications li { margin-bottom: 6px; }
+  .parity-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+  .prompt-area { border-top: 1px solid var(--border); background: var(--panel); padding: 16px 20px; }
+  .prompt-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .prompt-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-family: var(--mono); font-size: 12px; line-height: 1.6; max-height: 180px; overflow-y: auto; white-space: pre-wrap; }
+  .copy { background: var(--accent); color: #0b0d12; border: none; border-radius: 6px; padding: 6px 14px; font-weight: 600; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .copy:hover { background: var(--accent-2); }
+  .copy.copied { background: var(--good); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); margin-left: 4px; }
+  .tag.fp32 { color: #93c5fd; border-color: rgba(147, 197, 253, 0.3); }
+  .tag.fp16 { color: #c4b5fd; border-color: rgba(196, 181, 253, 0.3); }
+  .tag.int8 { color: #fcd34d; border-color: rgba(252, 211, 77, 0.3); }
+  .parity-grid { display: grid; gap: 12px; }
+  details.explain { margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px; }
+  details.explain summary { color: var(--accent); font-size: 11px; cursor: pointer; list-style: none; user-select: none; }
+  details.explain summary::before { content: "? "; opacity: 0.7; }
+  details.explain[open] summary::before { content: "× "; }
+  details.explain summary:hover { color: var(--accent-2); }
+  details.explain .body { color: var(--muted); font-size: 12px; line-height: 1.6; margin-top: 8px; }
+  details.explain .body strong { color: var(--text); }
+  details.explain .body code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; color: var(--text); }
+  details.explain .body p { margin: 0 0 8px; }
+  details.explain .body p:last-child { margin-bottom: 0; }
+  details.explain .body .pill { display: inline-block; padding: 1px 6px; border-radius: 3px; background: var(--panel-2); border: 1px solid var(--border); font-family: var(--mono); font-size: 10px; margin: 0 2px; }
+  .intro { background: linear-gradient(135deg, rgba(122, 162, 255, 0.08), rgba(159, 122, 255, 0.04)); border: 1px solid rgba(122, 162, 255, 0.2); }
+  .intro h2 { color: var(--accent); }
+  .intro p { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: var(--text); }
+  .intro p:last-child { margin-bottom: 0; }
+  .intro .tier { display: grid; grid-template-columns: 60px 1fr; gap: 12px; align-items: start; padding: 6px 0; }
+  .intro .tier-num { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; text-align: center; font-weight: 600; }
+  .intro .tier-body { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .intro .tier-body strong { color: var(--text); }
+  .primer { background: var(--panel-2); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 6px 6px 0; margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .primer strong { color: var(--text); }
+  .primer code { background: var(--panel); padding: 1px 5px; border-radius: 3px; color: var(--text); font-family: var(--mono); }
+  .primer .formula { font-family: var(--mono); background: var(--panel); padding: 8px 12px; border-radius: 4px; margin: 8px 0; color: var(--text); font-size: 11px; white-space: pre; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="header">
+      <h1>SPECTER2 Fallback Explorer</h1>
+      <div class="sub">Trade off model, quantization, and budget. See parity, file size, and cold start.</div>
+    </div>
+
+    <div class="group">
+      <h2>Presets</h2>
+      <div class="presets" id="presets"></div>
+      <details class="explain">
+        <summary>What are presets for?</summary>
+        <div class="body">
+          <p>Each preset snaps every control to a cohesive combination — a real scenario worth comparing.</p>
+          <p><strong>Your prod (today)</strong> is the actual config running in <code>web/lib/suggest/specter2-wasm.ts</code> right now. The other four are "what if" branches: tighter parity, near-lossless FP16, a tiny distilled model, and a retrieval-tuned alternative.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <h2>Model</h2>
+      <div class="row">
+        <label>Embedding model <span class="val" id="modelLabel"></span></label>
+        <select id="model"></select>
+      </div>
+      <div class="row">
+        <label>Max sequence length <span class="val"><span id="seqVal">512</span> tokens</span></label>
+        <input type="range" id="seqLen" min="128" max="512" step="128" value="512" />
+      </div>
+      <details class="explain">
+        <summary>How to read the model choices</summary>
+        <div class="body">
+          <p>An <strong>embedding model</strong> turns a paper's title+abstract into a fixed-length vector. Similar papers land near each other in vector space, so cosine similarity ≈ topical similarity.</p>
+          <p><strong>SPECTER2</strong> (Allen AI) is trained specifically on scientific paper citation pairs — its embeddings line up with Semantic Scholar's, which is why our pgvector cache can mix API-fetched and locally-computed vectors.</p>
+          <p>Other models (MiniLM, BGE, E5) are general-purpose. They're smaller and faster but live in a <strong>different vector space</strong>. Switching means S2's pre-computed embeddings become useless and you have to re-embed everything locally.</p>
+          <p><strong>Sequence length</strong> = how many tokens (~words) the model reads before it truncates. SPECTER2 maxes at 512; cutting to 256 saves ~65% compute but lops off long abstracts.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <h2>Quantization</h2>
+      <div class="row">
+        <label>Precision <span class="val" id="quantLabel"></span></label>
+        <select id="quant">
+          <option value="fp32">FP32 (baseline)</option>
+          <option value="fp16">FP16</option>
+          <option value="int8-dynamic" selected>INT8 dynamic (per-tensor)</option>
+          <option value="int8-channel">INT8 dynamic (per-channel)</option>
+          <option value="int8-static">INT8 static (calibrated)</option>
+        </select>
+      </div>
+      <details class="explain">
+        <summary>FP32 vs FP16 vs INT8 — what's actually changing</summary>
+        <div class="body">
+          <p>Each model weight is normally a <strong>32-bit float</strong>. Quantization stores them in fewer bits.</p>
+          <p><span class="pill">FP32</span> 4 bytes, full precision, baseline.</p>
+          <p><span class="pill">FP16</span> 2 bytes, ~3 decimal digits. Nearly lossless for inference. ½ the file size.</p>
+          <p><span class="pill">INT8</span> 1 byte, only 256 distinct values per weight. Each tensor gets one shared <code>scale</code> factor. On disk we store the integer <code>q = round(w / scale)</code>; at runtime the kernel reconstructs <code>w' = q · scale</code>. The <code>round()</code> is the lossy step. ¼ the file size, ~2× faster matmuls — at the cost of measurable accuracy drift.</p>
+          <p><strong>Per-tensor</strong>: one scale per weight matrix (faster, more drift). <strong>Per-channel</strong>: one scale per output row (slightly bigger, tighter parity). <strong>Static</strong>: also quantizes activations using a calibration dataset; smallest + fastest, but needs ~100 representative inputs to set activation scales.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <h2>Parity thresholds</h2>
+      <div class="row">
+        <label>Median cosine ≥ <span class="val mono" id="medThVal">0.99</span></label>
+        <input type="range" id="medTh" min="0.95" max="1.00" step="0.005" value="0.99" />
+      </div>
+      <div class="row">
+        <label>Min cosine ≥ <span class="val mono" id="minThVal">0.93</span></label>
+        <input type="range" id="minTh" min="0.85" max="1.00" step="0.01" value="0.93" />
+      </div>
+      <details class="explain">
+        <summary>Why two thresholds, not one?</summary>
+        <div class="body">
+          <p>For each of the 11 fixture papers, we compare the local INT8-ONNX vector to S2's canonical FP32 vector with <strong>cosine similarity</strong> (1.0 = identical direction).</p>
+          <p>The original spec used a single threshold (cos ≥ 0.997). That turned out to be aspirational — INT8 doesn't preserve a 110M-param transformer that tightly. Most papers land at 0.99+, but <strong>specific outliers</strong> drift to 0.94–0.95 (long abstracts with rare vocabulary push activations outside the dynamic quantizer's calibration range).</p>
+          <p>The two-threshold contract (<code>median ≥ 0.99</code> + <code>min ≥ 0.93</code>) tolerates expected outliers while still catching a genuinely broken export. See <a href="https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/17589da" style="color: var(--accent);">commit 17589da</a>.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="group">
+      <h2>Vercel budget</h2>
+      <div class="row">
+        <label>Function timeout <span class="val"><span id="timeoutVal">60</span>s</span></label>
+        <input type="range" id="timeout" min="10" max="300" step="10" value="60" />
+      </div>
+      <div class="row">
+        <label>Cold-start budget <span class="val"><span id="coldVal">8</span>s</span></label>
+        <input type="range" id="cold" min="2" max="30" step="1" value="8" />
+      </div>
+      <details class="explain">
+        <summary>Cold start vs timeout</summary>
+        <div class="body">
+          <p><strong>Cold start</strong> = the one-time cost on the first request a Fluid Compute instance handles: fetch the ONNX blob from Vercel Blob (~80 MB/s), load it into the WASM runtime, init the tokenizer. Subsequent requests on the same instance skip this (warm).</p>
+          <p><strong>Timeout</strong> = the hard cap per request. Vercel's defaults are short (10s Hobby, 15s Pro Node); we override via <code>export const maxDuration = 60</code> in <code>web/app/api/suggest/route.ts</code> (max 300s on Pro, longer with Fluid Compute). If WASM inference plus cold start exceeds this, the function 504s — which is why <code>AbortSignal</code> cancellation between token chunks matters (<a href="https://github.com/mrojas54/wids-nyc-reading-group-assistant/commit/6116441" style="color: var(--accent);">6116441</a>).</p>
+          <p>Bigger model → bigger blob → longer fetch → longer cold start. That's the main trade-off when you flirt with FP16 or larger architectures.</p>
+        </div>
+      </details>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="preview">
+      <div class="panel intro">
+        <h2>What this playground is</h2>
+        <p>The WiDS reading-group assistant has a <strong>3-tier embedding pipeline</strong> for paper similarity. When Semantic Scholar (S2) is rate-limited or down, the suggest endpoint falls back to running SPECTER2 locally — as ONNX-quantized weights in a WASM runtime inside a Vercel Function.</p>
+        <p style="font-size: 12px; color: var(--muted);">Tiers below are in <strong>preference</strong> order (canonical → derived → local). At runtime the orchestrator checks the pgvector cache first, calls S2 only on cache misses, and falls back to WASM when S2 fails.</p>
+        <div style="margin: 12px 0;">
+          <div class="tier"><div class="tier-num">Tier 1</div><div class="tier-body"><strong>Semantic Scholar API</strong> — canonical embeddings, but rate-limited (429s) and occasionally down.</div></div>
+          <div class="tier"><div class="tier-num">Tier 2</div><div class="tier-body"><strong>pgvector cache</strong> (<code>paper_embeddings</code>) — warm hits for previously-seen papers.</div></div>
+          <div class="tier"><div class="tier-num">Tier 3</div><div class="tier-body"><strong>WASM / ONNX fallback</strong> — local INT8-quantized SPECTER2 inference. Configured by everything in this playground.</div></div>
+        </div>
+        <p>Drag the controls to explore what a different quantization, model, or budget would cost you. The <strong>verdict box</strong> below turns green/yellow/red based on whether your config passes the parity contract and Vercel budget. The <strong>copy prompt</strong> at the bottom rewrites itself into actionable instructions naming the exact files to change.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Current configuration</h2>
+        <div class="metrics">
+          <div class="metric"><div class="k">Artifact size</div><div class="v"><span id="sizeV">110</span><span class="u">MB</span></div></div>
+          <div class="metric"><div class="k">Cold start (est)</div><div class="v"><span id="coldStartV">6.2</span><span class="u">s</span></div></div>
+          <div class="metric"><div class="k">P50 inference</div><div class="v"><span id="latV">450</span><span class="u">ms</span></div></div>
+          <div class="metric"><div class="k">Median cos (est)</div><div class="v" id="medV">0.993</div></div>
+        </div>
+        <div class="verdict" id="verdict"><span class="dot"></span><span id="verdictText"></span></div>
+      </div>
+
+      <div class="panel">
+        <h2>Parity (estimated against S2 canonical vectors)</h2>
+        <div class="parity-grid">
+          <div>
+            <div class="parity-row"><span>Median cosine</span><span class="mono" id="medBarVal">0.993</span></div>
+            <div class="bar"><div class="fill" id="medBar"></div><div class="threshold" id="medThMarker"></div></div>
+          </div>
+          <div>
+            <div class="parity-row"><span>Min cosine (worst-case outlier)</span><span class="mono" id="minBarVal">0.948</span></div>
+            <div class="bar"><div class="fill" id="minBar"></div><div class="threshold" id="minThMarker"></div></div>
+          </div>
+        </div>
+        <p class="notes" style="margin-top:12px;">Yellow line = your threshold. Bars are estimates from public quantization studies + SPECTER2's measured behavior on your 11-fixture set (median 0.9927, min 0.9476 on INT8 dynamic). Treat as directional, not benchmark.</p>
+      </div>
+
+      <div class="panel">
+        <h2>How this config compares</h2>
+        <table class="compare"><thead id="compareHead"></thead><tbody id="compareBody"></tbody></table>
+        <div class="primer">
+          <strong>How to read this table:</strong> rows compare every quantization mode for the model you picked. The highlighted row (<span style="color: var(--accent);">→</span>) is your current choice.
+          <div class="formula">size:  fp32_size × bytes_per_weight_ratio
+P50:   base_lat × (seq/512)^1.5 × quant_speedup
+cos:   measured (SPECTER2 INT8 dyn) or estimated</div>
+          The big jump is <strong>FP32 → INT8</strong>: 4× smaller, ~2× faster, ~0.005–0.05 cosine drift. <strong>FP16</strong> sits in between: 2× smaller, slightly faster, near-zero drift. <strong>Per-channel</strong> INT8 gives you most of static's parity benefit without needing a calibration set.
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>What this means in your stack</h2>
+        <p class="notes" style="margin: 0 0 12px;">Translates your current config into concrete consequences for the WiDS codebase — what files change, what breaks, what gets faster or smaller.</p>
+        <ul class="implications" id="implications"></ul>
+      </div>
+
+      <div class="panel">
+        <h2>Glossary</h2>
+        <div class="notes" style="display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px;">
+          <strong>SPECTER2</strong><span>Allen AI's paper embedding model (v2). 110M params, trained on scientific citation pairs.</span>
+          <strong>ONNX</strong><span>Open Neural Network Exchange. Cross-runtime model format. We export PyTorch → ONNX → INT8-quantize.</span>
+          <strong>WASM</strong><span>WebAssembly. Runtime that lets <code>onnxruntime-web</code> execute our quantized model inside a Vercel Function (no GPU, just CPU + SIMD).</span>
+          <strong>S2</strong><span>Semantic Scholar — the API + embedding source that Tier 1 talks to.</span>
+          <strong>pgvector</strong><span>Postgres extension for vector columns + similarity search. Backs the Tier 2 cache.</span>
+          <strong>parity</strong><span>How close the local fallback's embeddings are to S2's canonical ones, measured by cosine similarity on 11 fixture papers.</span>
+          <strong>MMR</strong><span>Maximal Marginal Relevance. Re-ranking step after similarity scoring, to diversify the top-K results.</span>
+          <strong>cold start</strong><span>First-request latency: fetch model from Vercel Blob + init ONNX session + tokenizer. Warm requests skip this.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="prompt-area">
+      <div class="prompt-head">
+        <h2 style="margin:0;">Prompt to copy back</h2>
+        <button class="copy" id="copy">Copy Prompt</button>
+      </div>
+      <div class="prompt-box" id="prompt"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const MODELS = {
+  "specter2": {
+    label: "SPECTER2 (allenai/specter2_base + proximity)",
+    params: 110, fp32Mb: 440, baseLatMs: 380, domain: "Scientific abstracts",
+    parity: {
+      "fp32": [1.000, 1.000],
+      "fp16": [0.9995, 0.9985],
+      "int8-dynamic": [0.9927, 0.9476],
+      "int8-channel": [0.996, 0.980],
+      "int8-static":  [0.997, 0.985],
+    },
+    note: "Your current production model. Numbers for int8-dynamic are measured on your 11 fixture papers (2026-05-10)."
+  },
+  "scincl": {
+    label: "SciNCL (malteos/scincl)",
+    params: 110, fp32Mb: 440, baseLatMs: 380, domain: "Scientific abstracts",
+    parity: {
+      "fp32": [1.000, 1.000],
+      "fp16": [0.9994, 0.998],
+      "int8-dynamic": [0.991, 0.945],
+      "int8-channel": [0.996, 0.978],
+      "int8-static":  [0.997, 0.984],
+    },
+    note: "Sibling of SPECTER2, different contrastive objective. Embedding space is incompatible with S2's — switching means re-embedding your cache."
+  },
+  "minilm": {
+    label: "all-MiniLM-L6-v2 (distilled)",
+    params: 22, fp32Mb: 90, baseLatMs: 90, domain: "General sentences",
+    parity: {
+      "fp32": [1.000, 1.000],
+      "fp16": [0.9998, 0.9994],
+      "int8-dynamic": [0.998, 0.992],
+      "int8-channel": [0.9988, 0.996],
+      "int8-static":  [0.999, 0.997],
+    },
+    note: "5x smaller, ~4x faster, robust to INT8. But embedding space is general-domain, not S2-compatible."
+  },
+  "bge-small": {
+    label: "BGE-small-en-v1.5",
+    params: 33, fp32Mb: 130, baseLatMs: 140, domain: "General + retrieval-tuned",
+    parity: {
+      "fp32": [1.000, 1.000],
+      "fp16": [0.9997, 0.999],
+      "int8-dynamic": [0.997, 0.988],
+      "int8-channel": [0.9985, 0.994],
+      "int8-static":  [0.999, 0.996],
+    },
+    note: "Stronger retrieval than MiniLM at similar size. Same caveat: not S2-compatible."
+  },
+  "e5-base": {
+    label: "intfloat/e5-base-v2",
+    params: 110, fp32Mb: 440, baseLatMs: 380, domain: "General retrieval",
+    parity: {
+      "fp32": [1.000, 1.000],
+      "fp16": [0.9995, 0.9988],
+      "int8-dynamic": [0.994, 0.965],
+      "int8-channel": [0.997, 0.985],
+      "int8-static":  [0.998, 0.990],
+    },
+    note: "Same size as SPECTER2 but trained for general retrieval. Holds INT8 slightly better. Not S2-compatible."
+  },
+};
+
+const QUANT_META = {
+  "fp32":         { sizeMul: 1.0,   latMul: 1.00, calib: false, tag: "fp32", label: "FP32 baseline (4 bytes/weight)" },
+  "fp16":         { sizeMul: 0.5,   latMul: 0.75, calib: false, tag: "fp16", label: "FP16 (2 bytes/weight, near-lossless)" },
+  "int8-dynamic": { sizeMul: 0.25,  latMul: 0.55, calib: false, tag: "int8", label: "INT8 dynamic per-tensor (one scale per weight tensor)" },
+  "int8-channel": { sizeMul: 0.26,  latMul: 0.55, calib: false, tag: "int8", label: "INT8 dynamic per-channel (one scale per output channel)" },
+  "int8-static":  { sizeMul: 0.25,  latMul: 0.45, calib: true,  tag: "int8", label: "INT8 static (weights AND activations quantized; needs calibration set)" },
+};
+
+const DEFAULTS = { model: "specter2", quant: "int8-dynamic", seqLen: 512, medTh: 0.99, minTh: 0.93, timeout: 60, cold: 8 };
+
+const PRESETS = {
+  "Your prod (today)":   { model: "specter2",   quant: "int8-dynamic", seqLen: 512, medTh: 0.99, minTh: 0.93, timeout: 60, cold: 8 },
+  "Safer parity":        { model: "specter2",   quant: "int8-channel", seqLen: 512, medTh: 0.995, minTh: 0.97, timeout: 60, cold: 8 },
+  "Near-lossless":       { model: "specter2",   quant: "fp16",         seqLen: 512, medTh: 0.999, minTh: 0.997, timeout: 60, cold: 12 },
+  "Tiny & fast":         { model: "minilm",     quant: "int8-dynamic", seqLen: 256, medTh: 0.99, minTh: 0.95, timeout: 30, cold: 3 },
+  "Retrieval-tuned":     { model: "bge-small",  quant: "int8-dynamic", seqLen: 384, medTh: 0.99, minTh: 0.96, timeout: 30, cold: 4 },
+};
+
+const state = { ...DEFAULTS };
+
+const modelSel = document.getElementById("model");
+Object.entries(MODELS).forEach(([k, m]) => {
+  const opt = document.createElement("option");
+  opt.value = k;
+  opt.textContent = m.label;
+  modelSel.appendChild(opt);
+});
+modelSel.value = state.model;
+
+const presetsEl = document.getElementById("presets");
+Object.keys(PRESETS).forEach(name => {
+  const b = document.createElement("button");
+  b.className = "preset";
+  b.textContent = name;
+  b.onclick = () => { Object.assign(state, PRESETS[name]); syncControls(); updateAll(); markActivePreset(name); };
+  presetsEl.appendChild(b);
+});
+
+function markActivePreset(name) {
+  [...presetsEl.children].forEach(b => b.classList.toggle("active", b.textContent === name));
+}
+
+function bind(id, key, transform) {
+  const el = document.getElementById(id);
+  el.addEventListener("input", () => {
+    state[key] = transform ? transform(el.value) : el.value;
+    updateAll();
+    markActivePreset(null);
+  });
+}
+bind("model", "model");
+bind("quant", "quant");
+bind("seqLen", "seqLen", Number);
+bind("medTh", "medTh", Number);
+bind("minTh", "minTh", Number);
+bind("timeout", "timeout", Number);
+bind("cold", "cold", Number);
+
+function syncControls() {
+  document.getElementById("model").value = state.model;
+  document.getElementById("quant").value = state.quant;
+  document.getElementById("seqLen").value = state.seqLen;
+  document.getElementById("medTh").value = state.medTh;
+  document.getElementById("minTh").value = state.minTh;
+  document.getElementById("timeout").value = state.timeout;
+  document.getElementById("cold").value = state.cold;
+}
+
+function estimate() {
+  const m = MODELS[state.model];
+  const q = QUANT_META[state.quant];
+  const sizeMb = Math.round(m.fp32Mb * q.sizeMul);
+  const fetchS = sizeMb / 80;
+  const initS = m.params > 50 ? 1.5 : 0.4;
+  const coldStartS = +(fetchS + initS + (state.quant === "fp32" ? 1.5 : 0)).toFixed(1);
+  const seqScale = Math.pow(state.seqLen / 512, 1.5);
+  const latMs = Math.round(m.baseLatMs * seqScale * q.latMul);
+  const [med, min] = m.parity[state.quant];
+  const seqPenalty = state.seqLen < 256 ? 0.005 : state.seqLen < 384 ? 0.002 : 0;
+  return {
+    sizeMb, coldStartS, latMs,
+    med: Math.max(0, med - seqPenalty),
+    min: Math.max(0, min - seqPenalty * 2),
+    needsCalib: q.calib,
+    s2Compat: state.model === "specter2",
+  };
+}
+
+function el(tag, props, children) {
+  const node = document.createElement(tag);
+  if (props) Object.entries(props).forEach(([k, v]) => {
+    if (k === "class") node.className = v;
+    else if (k === "text") node.textContent = v;
+    else node.setAttribute(k, v);
+  });
+  if (children) children.forEach(c => node.appendChild(c));
+  return node;
+}
+
+function renderTable() {
+  const head = document.getElementById("compareHead");
+  const body = document.getElementById("compareBody");
+  head.textContent = "";
+  body.textContent = "";
+
+  const headerRow = el("tr");
+  ["Quantization", "Size", "P50", "Median cos", "Min cos"].forEach(h => {
+    headerRow.appendChild(el("th", { text: h }));
+  });
+  head.appendChild(headerRow);
+
+  const rows = [
+    ["fp32", "FP32"], ["fp16", "FP16"],
+    ["int8-dynamic", "INT8 dyn"], ["int8-channel", "INT8 ch"], ["int8-static", "INT8 static"],
+  ];
+  const m = MODELS[state.model];
+  rows.forEach(([key, lbl]) => {
+    const qm = QUANT_META[key];
+    const sz = Math.round(m.fp32Mb * qm.sizeMul);
+    const lat = Math.round(m.baseLatMs * Math.pow(state.seqLen / 512, 1.5) * qm.latMul);
+    const [med, min] = m.parity[key];
+    const tr = el("tr", key === state.quant ? { class: "current" } : null);
+    const nameTd = el("td");
+    nameTd.appendChild(document.createTextNode(lbl + " "));
+    nameTd.appendChild(el("span", { class: "tag " + qm.tag, text: qm.tag }));
+    tr.appendChild(nameTd);
+    tr.appendChild(el("td", { class: "num", text: sz + " MB" }));
+    tr.appendChild(el("td", { class: "num", text: lat + " ms" }));
+    tr.appendChild(el("td", { class: "num", text: med.toFixed(4) }));
+    tr.appendChild(el("td", { class: "num", text: min.toFixed(4) }));
+    body.appendChild(tr);
+  });
+}
+
+function renderImplications(e) {
+  const list = document.getElementById("implications");
+  list.textContent = "";
+  const items = [];
+
+  const modelLi = el("li");
+  modelLi.appendChild(el("strong", { text: MODELS[state.model].label }));
+  modelLi.appendChild(document.createTextNode(" — " + MODELS[state.model].note));
+  items.push(modelLi);
+
+  const quantLi = el("li");
+  quantLi.appendChild(el("strong", { text: QUANT_META[state.quant].label }));
+  quantLi.appendChild(document.createTextNode("."));
+  items.push(quantLi);
+
+  if (e.needsCalib) {
+    const li = el("li");
+    li.appendChild(document.createTextNode("Static INT8 needs a "));
+    li.appendChild(el("strong", { text: "calibration set" }));
+    li.appendChild(document.createTextNode(" (~100 representative abstracts) — your 11-fixture set is too small. Plan: run dynamic INT8 for now; collect 100+ paper abstracts from your DB to bootstrap a calibration script later."));
+    items.push(li);
+  }
+  if (!e.s2Compat) {
+    const li = el("li");
+    li.appendChild(el("strong", { text: "This model is NOT compatible with S2 embeddings." }));
+    li.appendChild(document.createTextNode(" Your paper_embeddings pgvector cache would need to be rebuilt locally, and tier-1 (S2 API) becomes useless. Only worth it if S2 outages dominate your error budget."));
+    items.push(li);
+  }
+  if (state.quant === "fp32" && e.sizeMb > 200) {
+    items.push(el("li", { text: "At " + e.sizeMb + " MB the artifact may exceed Vercel Blob's free-tier comfort zone and inflates cold-start beyond your " + state.cold + "s budget." }));
+  }
+  if (state.seqLen < 256) {
+    items.push(el("li", { text: "At seq_len=" + state.seqLen + ", you'll truncate most paper abstracts — semantic quality drops independent of quantization." }));
+  }
+
+  items.forEach(i => list.appendChild(i));
+}
+
+function renderPreview() {
+  const e = estimate();
+  document.getElementById("sizeV").textContent = e.sizeMb;
+  document.getElementById("coldStartV").textContent = e.coldStartS;
+  document.getElementById("latV").textContent = e.latMs;
+  document.getElementById("medV").textContent = e.med.toFixed(4);
+
+  document.getElementById("modelLabel").textContent = MODELS[state.model].params + "M params";
+  document.getElementById("quantLabel").textContent = QUANT_META[state.quant].tag.toUpperCase();
+  document.getElementById("seqVal").textContent = state.seqLen;
+  document.getElementById("medThVal").textContent = state.medTh.toFixed(3);
+  document.getElementById("minThVal").textContent = state.minTh.toFixed(2);
+  document.getElementById("timeoutVal").textContent = state.timeout;
+  document.getElementById("coldVal").textContent = state.cold;
+
+  const scale = v => Math.max(0, Math.min(100, (v - 0.90) * 1000));
+  document.getElementById("medBar").style.width = scale(e.med) + "%";
+  document.getElementById("minBar").style.width = scale(e.min) + "%";
+  document.getElementById("medBarVal").textContent = e.med.toFixed(4);
+  document.getElementById("minBarVal").textContent = e.min.toFixed(4);
+  document.getElementById("medThMarker").style.left = scale(state.medTh) + "%";
+  document.getElementById("minThMarker").style.left = scale(state.minTh) + "%";
+
+  const v = document.getElementById("verdict");
+  const vt = document.getElementById("verdictText");
+  const failures = [];
+  if (e.med < state.medTh) failures.push("median " + e.med.toFixed(4) + " below threshold " + state.medTh);
+  if (e.min < state.minTh) failures.push("min " + e.min.toFixed(4) + " below threshold " + state.minTh);
+  if (e.coldStartS > state.cold) failures.push("cold start " + e.coldStartS + "s exceeds budget " + state.cold + "s");
+  const coldPathMs = e.coldStartS * 1000 + e.latMs;
+  if (coldPathMs > state.timeout * 1000) failures.push("cold-path total " + Math.round(coldPathMs) + "ms exceeds timeout " + state.timeout + "s");
+  v.classList.remove("pass", "warn", "fail");
+  if (failures.length === 0) { v.classList.add("pass"); vt.textContent = "Passes all parity and budget constraints."; }
+  else if (failures.length === 1) { v.classList.add("warn"); vt.textContent = "Fails: " + failures[0] + "."; }
+  else { v.classList.add("fail"); vt.textContent = "Fails " + failures.length + " constraints: " + failures.join("; ") + "."; }
+
+  renderTable();
+  renderImplications(e);
+}
+
+function updatePrompt() {
+  const e = estimate();
+  const m = MODELS[state.model];
+  const parts = [];
+
+  if (state.model !== DEFAULTS.model) {
+    parts.push("Swap the fallback embedding model from SPECTER2 to **" + m.label + "** (" + m.params + "M params, " + m.domain + ").");
+    if (!e.s2Compat) parts.push("This breaks compatibility with Semantic Scholar's embedding space, so the pgvector cache (`paper_embeddings`) must be rebuilt by embedding all cached papers locally. Tier-1 (S2 API) becomes a no-op for similarity scoring.");
+  }
+
+  if (state.quant !== DEFAULTS.quant) {
+    parts.push("Change ONNX quantization to **" + QUANT_META[state.quant].label + "**.");
+    if (state.quant === "int8-channel") parts.push("Pass `per_channel=True` to `quantize_dynamic` in `scripts/export_specter2_onnx.py`. Expected file: ~" + e.sizeMb + " MB. Re-pin SHA-256 in `web/lib/suggest/specter2-wasm.ts` after the new artifact uploads to Vercel Blob.");
+    if (state.quant === "int8-static") parts.push("This requires a calibration step: collect ~100 representative abstracts from `paper_embeddings`, run them through the FP32 model to record activation ranges, then use `onnxruntime.quantization.quantize_static`. Update the export workflow accordingly.");
+    if (state.quant === "fp16") parts.push("Use `onnxruntime.transformers.optimizer` with `use_fp16=True` instead of `quantize_dynamic`. Verify the WASM runtime in the Vercel Function supports fp16 ops on the deployed region's CPU.");
+    if (state.quant === "fp32") parts.push("Skip the quantization step entirely. Artifact grows to ~" + e.sizeMb + " MB; cold start grows to ~" + e.coldStartS + "s.");
+  }
+
+  if (state.seqLen !== DEFAULTS.seqLen) {
+    parts.push("Set tokenizer `max_length=" + state.seqLen + "` (down from " + DEFAULTS.seqLen + "). Inference will be ~" + Math.round((1 - Math.pow(state.seqLen / 512, 1.5)) * 100) + "% faster but abstracts >" + state.seqLen + " tokens get truncated.");
+  }
+
+  if (state.medTh !== DEFAULTS.medTh || state.minTh !== DEFAULTS.minTh) {
+    parts.push("Update parity thresholds in the spec doc and `web/lib/suggest/__tests__/parity.test.ts` to median ≥ **" + state.medTh.toFixed(3) + "**, min ≥ **" + state.minTh.toFixed(2) + "**.");
+  }
+
+  if (state.timeout !== DEFAULTS.timeout || state.cold !== DEFAULTS.cold) {
+    parts.push("Adjust function budget: timeout=" + state.timeout + "s, cold-start budget=" + state.cold + "s.");
+  }
+
+  let prompt;
+  if (parts.length === 0) {
+    prompt = "Configuration matches your current production setup (SPECTER2 + INT8 dynamic, 512 tokens, median ≥ 0.99 / min ≥ 0.93). No changes needed.";
+  } else {
+    prompt = "Reconfigure the SPECTER2 fallback in `web/lib/suggest/` and `scripts/export_specter2_onnx.py`:\n\n" + parts.map((p, i) => (i + 1) + ". " + p).join("\n\n");
+    prompt += "\n\nExpected outcome: artifact ~" + e.sizeMb + " MB, cold start ~" + e.coldStartS + "s, P50 inference ~" + e.latMs + "ms, median cos " + e.med.toFixed(4) + ", min cos " + e.min.toFixed(4) + ". Run the parity test against the 11 fixture papers and confirm it passes the new thresholds before pushing the new SHA-256 to `EXPECTED_MODEL_SHA256`.";
+  }
+  document.getElementById("prompt").textContent = prompt;
+}
+
+function updateAll() { renderPreview(); updatePrompt(); }
+
+document.getElementById("copy").addEventListener("click", async () => {
+  const btn = document.getElementById("copy");
+  const text = document.getElementById("prompt").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(document.getElementById("prompt"));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    btn.textContent = "Select & copy";
+  }
+  setTimeout(() => { btn.textContent = "Copy Prompt"; btn.classList.remove("copied"); }, 1800);
+});
+
+syncControls();
+updateAll();
+markActivePreset("Your prod (today)");
+</script>
+</body>
+</html>
