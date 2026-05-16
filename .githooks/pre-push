@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Prevent direct pushes to the main branch.
+# Prevent pushing directly to main
 # Install: git config core.hooksPath .githooks
 
 protected_branch="main"
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   if [ "$remote_ref" = "refs/heads/$protected_branch" ]; then
-    echo "🚫 Direct push to '$protected_branch' is not allowed. Open a PR instead."
+    echo "🚫 Cannot push directly to '$protected_branch'. Open a PR instead."
     exit 1
   fi
 done

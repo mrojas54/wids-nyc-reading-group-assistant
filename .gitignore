@@ -36,3 +36,5 @@ CLAUDE.md
 .firecrawl/
 # Serena MCP scratch dir
 .serena/
+# `remember` skill session-handoff scratch dir
+.remember/
