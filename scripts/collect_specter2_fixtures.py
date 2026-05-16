@@ -98,10 +98,21 @@ def main() -> int:
                 skipped.append((s2_id, "no embedding"))
                 time.sleep(BASE_DELAY_S)
                 continue
+            abstract = (data.get("abstract") or "").strip()
+            # Skip empty-abstract papers: SPECTER2 fed only title+SEP produces
+            # a degenerate CLS vector that drifts up to cos ~0.04 between local
+            # FP32 and S2's served vector (any tiny attention-mask or kernel-
+            # order difference compounds on all-padding tokens). Such fixtures
+            # don't exercise the model meaningfully and pollute parity metrics.
+            if not abstract:
+                print("empty abstract")
+                skipped.append((s2_id, "empty abstract"))
+                time.sleep(BASE_DELAY_S)
+                continue
             fixtures.append({
                 "paperId": data["paperId"],
                 "title": (data.get("title") or "").strip(),
-                "abstract": (data.get("abstract") or "").strip(),
+                "abstract": abstract,
                 "vector": vec,
             })
             print(f"OK ({len(vec)}-dim, {len(fixtures)} kept)")
