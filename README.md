@@ -36,9 +36,11 @@ Before running `/wids-bootstrap`, the operator must:
   - `migrations/010_paper_embeddings.sql` — enables `pgvector` and creates the `paper_embeddings` cache used by paper suggestion ranking.
   - `migrations/011_papers_s2_paper_id.sql` — adds `papers.s2_paper_id` for Semantic Scholar lookups.
   - `migrations/012_papers_s2_paper_id_constraint.sql` — replaces the partial S2 ID index with a full unique constraint for Supabase upserts.
+  - `migrations/013_paper_companions.sql` — Paper Pal companion payload (jsonb) keyed by paper. RLS: read=any active member, write=operator (widened to operator/admin/leader in migration 015).
   - `migrations/014_members_role_leader_admin.sql` — widens `members.role` to `member | operator | leader | admin`; `operator` remains unique, `leader` / `admin` are uncapped.
+  - `migrations/015_paper_companions_role_widening.sql` — extends `paper_companions` write policies so admins (always) and leaders (for their assigned paper) can also insert/update.
   - `supabase/migrations/20260518040000_015_availability_created_at.sql` — adds `availability.created_at` plus `(meeting_id, created_at)` index for reminder-chase queries. Existing rows are backfilled with migration time, not their true historical submission time.
-  - Note: the current repository has no `013` migration file; apply the files that exist in the order shown.
+  - Note: 013 / 014 / 015 are new in the Paper-Pal-replaces-companion branch; apply them in order.
 - Verify 10 base tables exist: `members, topics, papers, paper_topics, meetings, volunteers, availability, meeting_attendance, paper_suggestions, command_log`.
 - Verify portal columns and helpers exist: `members.auth_user_id`, `members.role` accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`, `availability.created_at`, the `current_member_id()` function, and 10 RLS policies.
 
@@ -116,7 +118,7 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
 
-The leader (a different person each cycle) handles `/wids-find-paper`, `/wids-make-guide`, `/wids-make-companion`, `/wids-send-packets`.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`). Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those commands are kept for rollback but should not be run in production. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply migration `013_paper_companions.sql` before going live.
 
 ### When something goes wrong
 
