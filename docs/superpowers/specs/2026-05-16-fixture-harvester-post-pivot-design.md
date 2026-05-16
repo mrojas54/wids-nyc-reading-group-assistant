@@ -102,8 +102,14 @@ the attention pass). On an 8-core M-series Mac, 4–6 parallel workers is
 the sweet spot before thermal throttling kicks in; on a Linux box with
 N cores, use N–1.
 
-**Measured per-paper inference time: ~600 ms on CPU** (from the
-validation run on commit `66142fd`).
+**Measured per-paper inference time: ~1100 ms steady-state on CPU**
+(median 1099 ms across the 10 parity fixtures, range 846–1615 ms,
+excluding a 3068 ms first-paper warmup). Measured via PR #40's batch
+smoke test: `embed_specter2_fp32.py --stdin-json --report-timing` on
+Apple Silicon with the `torch<2.6` cache. An earlier figure of ~600 ms
+from the commit-`66142fd` validation run reflected a warmer cache /
+different state; the 1100 ms number is what fresh workers should plan
+against.
 
 ---
 
@@ -115,14 +121,14 @@ Let:
 - `W_src` = abstract-source workers (default 3, one per source)
 - `W_emb` = local-embed workers (default 4 on a typical laptop)
 - `T_src` ≈ 400 ms median abstract-fetch
-- `T_emb` ≈ 600 ms per paper, measured
+- `T_emb` ≈ 1100 ms per paper, measured steady-state (see note above)
 
 The two pools run **concurrently** with the JSONL pipe between them as a
 bounded buffer. Steady-state throughput is the *bottleneck* of:
 
 ```
-Throughput_src = W_src / T_src     ≈ 3 / 0.4 s   = 7.5 papers/s
-Throughput_emb = W_emb / T_emb     ≈ 4 / 0.6 s   = 6.67 papers/s
+Throughput_src = W_src / T_src     ≈ 3 / 0.4 s    = 7.5 papers/s
+Throughput_emb = W_emb / T_emb     ≈ 4 / 1.1 s    = 3.64 papers/s
 ```
 
 Embed is the bottleneck (CPU-bound > I/O-bound at these worker counts),
@@ -130,16 +136,16 @@ so:
 
 ```
 Wall-time ≈ N / Throughput_emb + startup
-        ≈ N × 0.15 s + 10 s     (with W_emb=4)
+        ≈ N × 0.275 s + 10 s    (with W_emb=4)
 ```
 
-Concrete points:
+Concrete points (W_emb=4, T_emb=1.1 s steady-state):
 
 | N papers | Embed-only wall-time | + 10s startup | Pre-pivot S2 (1 req/s) |
 |----------|----------------------|---------------|------------------------|
-|     100  |   15 s               |  25 s         |  100 s                 |
-|   1,000  |  150 s (2.5 min)     |  160 s        | 1,000 s (17 min)       |
-|  10,000  | 1,500 s (25 min)     | 1,510 s       | 10,000 s (2h 47m)      |
+|     100  |   28 s               |  38 s         |  100 s                 |
+|   1,000  |  275 s (4.6 min)     |  285 s        | 1,000 s (17 min)       |
+|  10,000  | 2,750 s (46 min)     | 2,760 s       | 10,000 s (2h 47m)      |
 
 **Scaling lever:** doubling `W_emb` from 4 to 8 halves the embed term
 (linear up to physical-core count). The pre-pivot S2 path had no such
