@@ -116,7 +116,7 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
 
-The leader (a different person each cycle) handles `/wids-find-paper`, `/wids-make-guide`, `/wids-make-companion`, `/wids-send-packets`.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`). Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those commands are kept for rollback but should not be run in production. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply migration `013_paper_companions.sql` before going live.
 
 ### When something goes wrong
 
