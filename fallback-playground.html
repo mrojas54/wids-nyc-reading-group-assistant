@@ -557,7 +557,8 @@ function renderPreview() {
   if (e.med < state.medTh) failures.push("median " + e.med.toFixed(4) + " below threshold " + state.medTh);
   if (e.min < state.minTh) failures.push("min " + e.min.toFixed(4) + " below threshold " + state.minTh);
   if (e.coldStartS > state.cold) failures.push("cold start " + e.coldStartS + "s exceeds budget " + state.cold + "s");
-  if (e.latMs > state.timeout * 1000) failures.push("inference " + e.latMs + "ms exceeds timeout");
+  const coldPathMs = e.coldStartS * 1000 + e.latMs;
+  if (coldPathMs > state.timeout * 1000) failures.push("cold-path total " + Math.round(coldPathMs) + "ms exceeds timeout " + state.timeout + "s");
   v.classList.remove("pass", "warn", "fail");
   if (failures.length === 0) { v.classList.add("pass"); vt.textContent = "Passes all parity and budget constraints."; }
   else if (failures.length === 1) { v.classList.add("warn"); vt.textContent = "Fails: " + failures[0] + "."; }
