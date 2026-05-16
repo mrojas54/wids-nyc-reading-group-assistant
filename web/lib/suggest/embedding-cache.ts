@@ -25,7 +25,8 @@ export async function getCached(
 // gives us a string. JSON.parse handles the bracketed comma-separated
 // format directly. The number[] branch is for tests and any future driver
 // that decodes pgvector natively.
-function parseVector(raw: unknown): Float32Array {
+/** @internal Exported for testing. */
+export function parseVector(raw: unknown): Float32Array {
   if (typeof raw === "string") return Float32Array.from(JSON.parse(raw) as number[]);
   if (Array.isArray(raw)) return Float32Array.from(raw as number[]);
   throw new Error(`paper_embeddings.vector: unexpected type ${typeof raw}`);
