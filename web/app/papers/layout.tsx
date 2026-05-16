@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Brandmark } from "@/components/ui";
+import LensDropdown from "@/components/paperpal/LensDropdown";
 
 export default function PapersLayout({ children }: { children: ReactNode }) {
   return (
@@ -8,17 +10,28 @@ export default function PapersLayout({ children }: { children: ReactNode }) {
         className="border-b border-[var(--color-paper-200)] bg-white/60"
         style={{ backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
       >
-        <div className="mx-auto max-w-3xl px-4 py-3 flex items-center justify-between">
-          <Brandmark />
-          <a
-            href="/"
-            className="text-sm hover:underline text-[var(--color-sage-700)]"
-          >
-            Sign in
-          </a>
+        <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Brandmark />
+            <Link
+              href="/papers"
+              className="text-sm hover:underline text-[var(--color-sage-700)]"
+            >
+              Inbox
+            </Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <LensDropdown />
+            <Link
+              href="/dashboard"
+              className="text-sm hover:underline text-[var(--color-sage-700)]"
+            >
+              Dashboard
+            </Link>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
     </div>
   );
 }
