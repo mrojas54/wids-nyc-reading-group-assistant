@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>Availability for the next reading group</title>
+
+  <!--
+    Availability-reminder email — WiDS NYC AI Reading Group Planner.
+
+    Source design: Claude Design handoff bundle "magic-reminders /
+    Availability Reminder.html". High-fidelity port to email-client-safe
+    table-based markup; modern CSS variables in the prototype are inlined
+    as literal hex.
+
+    Template tokens are Mustache-style ({{ recipient.firstName }}) — distinct
+    from magic-link.html's Supabase Go-template tokens, because this template
+    is rendered by the agent driving Gmail MCP, not by Supabase auth. The
+    full merge-field list is documented in
+    scheduled_tasks/availability-chase.md (Step 5: operator 'remind' flow).
+
+    Documented design-system exception: primary CTA uses magenta-500 fill
+    with white text. The system reserves magenta for "voice, not decoration,
+    never primary CTA" — but for this invitation-toned email it reads as
+    a WiDS-family event invite. Scoped to outbound email only.
+
+    Compatibility target: Gmail (web/iOS/Android), Apple Mail (macOS/iOS),
+    Outlook 2019+ (Windows) via VML button fallback, Outlook web. Outlook
+    desktop renders a slightly degraded but readable layout (per handoff
+    acceptance criterion #1).
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
+    .serif, .paper-title, .count, .signoff-name { font-family: Georgia, "Times New Roman", serif !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #365c4b; }
+
+    @media only screen and (max-width: 640px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 20px !important; padding-right: 20px !important; }
+      .pad-x-tight { padding-left: 20px !important; padding-right: 20px !important; }
+      .body-text { font-size: 15px !important; line-height: 1.6 !important; }
+      .paper-title { font-size: 21px !important; }
+      .count { font-size: 26px !important; }
+      .btn-cell a { padding: 13px 18px !important; font-size: 15px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#ecece4;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#1a1814;">
+
+  <!-- Hidden preheader (inbox-preview text). Trailing zero-width whitespace
+       pushes any leaked first-paragraph snippet out of the preview pane. -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    {{ stats.submittedCount }} of {{ stats.totalMembers }} so far &mdash; tap any weekday evening you could make it.
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (page backdrop) ===== -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ecece4" style="background-color:#ecece4;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+
+        <!-- ===== Email card ===== -->
+        <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:640px;background-color:#ffffff;border:1px solid #e6dfd1;border-radius:14px;">
+
+          <!-- ── Brand bar (Codex mark tile + wordmark) ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 8px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="40" valign="middle" style="width:40px;padding-right:12px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="40" height="40" style="width:40px;height:40px;background-color:#eef4f0;border:1px solid #dde9e1;border-radius:10px;">
+                      <tr>
+                        <td align="center" valign="middle" style="line-height:0;">
+                          <svg width="28" height="28" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Codex">
+                            <g stroke="#16205e" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                              <path d="M18 62 L 18 36 L 12 30 L 12 18" />
+                              <path d="M28 62 L 28 44 L 24 40" />
+                              <path d="M36 62 L 36 28 L 30 22 L 30 12" />
+                              <path d="M44 62 L 44 14" />
+                              <path d="M52 62 L 52 14" />
+                              <path d="M60 62 L 60 28 L 66 22 L 66 12" />
+                              <path d="M68 62 L 68 44 L 72 40" />
+                              <path d="M78 62 L 78 36 L 84 30 L 84 18" />
+                            </g>
+                            <g fill="#f3eee5" stroke="#16205e" stroke-width="1.4">
+                              <circle cx="12" cy="14" r="3" />
+                              <circle cx="24" cy="40" r="2.4" />
+                              <circle cx="30" cy="8" r="3" />
+                              <circle cx="66" cy="8" r="3" />
+                              <circle cx="72" cy="40" r="2.4" />
+                              <circle cx="84" cy="14" r="3" />
+                            </g>
+                            <circle cx="44" cy="10" r="3.4" fill="#c8226d" stroke="#16205e" stroke-width="1.2" />
+                            <circle cx="52" cy="10" r="3.4" fill="#f3eee5" stroke="#16205e" stroke-width="1.4" />
+                            <path d="M48 62 C 36 58, 22 58, 8 64 L 10 68 C 24 64, 36 64, 48 68 Z" fill="#16205e" stroke="#16205e" stroke-width="1.2" stroke-linejoin="round" />
+                            <path d="M48 62 C 60 58, 74 58, 88 64 L 86 68 C 72 64, 60 64, 48 68 Z" fill="#16205e" stroke="#16205e" stroke-width="1.2" stroke-linejoin="round" />
+                            <line x1="48" y1="62" x2="48" y2="68" stroke="#16205e" stroke-width="1.4" />
+                            <path d="M44 66 L 52 66 L 50 72 L 46 72 Z" fill="#c8226d" stroke="#16205e" stroke-width="0.8" stroke-linejoin="round" />
+                          </svg>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td valign="middle">
+                    <div class="serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-weight:600;font-size:17px;color:#16205e;letter-spacing:-0.01em;line-height:1.15;">
+                      Codex
+                    </div>
+                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#6d6757;line-height:1.4;margin-top:1px;">
+                      WiDS &middot; NYC &middot; AI Reading Group
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Greeting ── -->
+          <tr>
+            <td class="pad-x" style="padding:18px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#1a1814;">
+                Hi {{ recipient.firstName }},
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Opening paragraph ── -->
+          <tr>
+            <td class="pad-x" style="padding:12px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#4f4a3e;">
+                It's been too long. We're getting the gang back together and it won't be the same without you. The horizon is the next 30 days and we're looking for a weekday evening that works for most of the group.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Paper card ── -->
+          <tr>
+            <td class="pad-x" style="padding:22px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#faf8f4;border:1px solid #e6dfd1;border-radius:20px;">
+                <tr>
+                  <td style="padding:22px 24px;">
+                    <!-- Eyebrow: "NEXT PAPER" with book icon -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="middle" style="padding-right:8px;line-height:0;">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#365c4b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                        </td>
+                        <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#365c4b;font-weight:600;">
+                          Next paper
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Title -->
+                    <h2 class="paper-title serif" style="margin:8px 0 4px 0;font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:24px;line-height:1.2;letter-spacing:-0.02em;color:#1a1814;font-weight:600;">
+                      {{ paper.title }}
+                    </h2>
+
+                    <!-- Authors line -->
+                    <div class="serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:13px;color:#6d6757;">
+                      {{ paper.authorsShort }} &mdash; arXiv {{ paper.arxivId }}
+                    </div>
+
+                    <!-- Chips (2x2 grid via stacked rows for Outlook safety) -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
+                      <tr>
+                        <!-- Magenta accent chip: "Reading group" -->
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#fdeaf3;border:1px solid #f9c8df;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c8226d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#a51858;font-weight:500;">
+                                      Reading group
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <!-- Neutral chip: location -->
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8e8674" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;">
+                                      {{ paper.location }}
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <tr>
+                        <!-- Neutral chip: duration -->
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8e8674" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;">
+                                      {{ paper.duration }}
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <!-- Neutral chip: companion drop -->
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8e8674" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;">
+                                      Paper Pal drops {{ paper.companionDropDay }}
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Body paragraph ── -->
+          <tr>
+            <td class="pad-x" style="padding:20px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#4f4a3e;">
+                <strong style="color:#1a1814;font-weight:600;">Tap any weekday evening</strong> in the next 30 days you could make it. We'll pick the date the most people can attend and send a calendar invite by Monday.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── CTA row (magenta primary + sage ghost) ── -->
+          <tr>
+            <td class="pad-x" style="padding:18px 32px 0 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <!-- Primary CTA: magenta-500 fill, white text, magenta-600 border, bulletproof -->
+                  <td class="btn-cell" align="center" bgcolor="#c8226d" style="border-radius:10px;background-color:#c8226d;border:1.5px solid #a51858;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.availability }}" style="height:46px;v-text-anchor:middle;width:200px;" arcsize="22%" strokecolor="#a51858" strokeweight="1.5px" fillcolor="#c8226d">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15.5px;font-weight:600;">Open availability &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <a href="{{ links.availability }}"
+                       style="display:inline-block;padding:13px 20px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;font-weight:600;letter-spacing:0.005em;color:#ffffff;text-decoration:none;line-height:1;">
+                      Open availability &rarr;
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                  <!-- Secondary ghost link -->
+                  <td style="padding-left:14px;">
+                    <a href="{{ paper.arxivUrl }}" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14.5px;color:#365c4b;text-decoration:underline;text-underline-offset:3px;">
+                      Skim the paper first &nearr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Progress block ── -->
+          <tr>
+            <td class="pad-x" style="padding:22px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef4f0;border:1px solid #dde9e1;border-radius:10px;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="middle" style="padding-right:14px;">
+                          <span class="count serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:30px;line-height:1;color:#c8226d;font-weight:600;letter-spacing:-0.02em;">{{ stats.submittedCount }}</span><span class="serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:16px;color:#8e8674;font-weight:400;">&nbsp;/&nbsp;{{ stats.totalMembers }}</span>
+                        </td>
+                        <td valign="middle">
+                          <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.5;color:#4f4a3e;">
+                            <strong style="font-weight:600;color:#1a1814;">{{ stats.submittedCountWord }} of us</strong> have submitted so far &mdash; yours would really help us lock the date.
+                          </div>
+                          <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#6d6757;margin-top:2px;line-height:1.5;">
+                            Soft deadline: {{ deadline.soft }}, so the calendar invite can go out Monday.
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Permission line (defuses the stat callout) ── -->
+          <tr>
+            <td class="pad-x" style="padding:16px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#4f4a3e;">
+                No availability this round is also a valid answer &mdash; just hit the link and submit zero days so I know you saw this and I'll stop bugging you.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Sign-off ── -->
+          <tr>
+            <td class="pad-x" style="padding:24px 32px 28px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px solid #e6dfd1;padding-top:18px;">
+                    <p style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#4f4a3e;line-height:1.55;">
+                      Thanks for being part of this,
+                    </p>
+                    <p class="signoff-name" style="margin:6px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#1a1814;font-weight:500;line-height:1.55;">
+                      &mdash; {{ operator.displayName }}
+                    </p>
+                    <p style="margin:10px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:#8e8674;line-height:1.55;">
+                      PS &mdash; your Paper Pal goes live Wednesday morning. I'll send a separate note when it's ready. <a href="{{ links.companionPreview }}" style="color:#365c4b;text-decoration:underline;text-underline-offset:3px;">Preview link</a> if you're curious.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td style="background-color:#faf8f4;border-top:1px solid #e6dfd1;padding:16px 32px;border-bottom-left-radius:14px;border-bottom-right-radius:14px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#8e8674;line-height:1.55;">
+                    WiDS NYC AI Reading Group
+                    <span style="color:#d2c8b4;">&nbsp;&middot;&nbsp;</span>
+                    <a href="{{ links.portalBase }}/dashboard" style="color:#6d6757;text-decoration:none;">Member portal</a>
+                    <span style="color:#d2c8b4;">&nbsp;&middot;&nbsp;</span>
+                    <a href="{{ links.portalBase }}/papers" style="color:#6d6757;text-decoration:none;">Past papers</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- ===== /Email card ===== -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
