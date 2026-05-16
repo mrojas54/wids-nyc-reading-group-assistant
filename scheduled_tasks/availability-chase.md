@@ -5,7 +5,7 @@ description: Detect low availability-response rates and email operator (operator
 
 # scheduled_tasks/availability-chase
 
-Runs daily. For any meeting in `status='prep'` more than 7 days old, computes availability-response rate; if low, alerts the operator. Renamed from `form-response-chase` with migration 002 — availability is now collected via the portal at `${PORTAL_URL}/availability`, not Google Forms.
+Runs daily. For any meeting in `status='prep'` more than 7 days old, computes availability-response rate; if low, alerts the operator. Renamed from `form-response-chase` with migration 002 — availability is now collected via the portal at `https://wids-nyc-reading-group-assistant.vercel.app/availability`, not Google Forms.
 
 ## Step 1 — Find prep meetings needing chase
 
@@ -46,7 +46,7 @@ Response rate: <responded>/<total> active members.
 Non-responders:
   <names of active members WITHOUT availability rows for this meeting>
 
-Portal link: ${PORTAL_URL}/availability
+Portal link: https://wids-nyc-reading-group-assistant.vercel.app/availability
 
 Reply:
   'remind'  — I'll email non-responders directly with the portal link

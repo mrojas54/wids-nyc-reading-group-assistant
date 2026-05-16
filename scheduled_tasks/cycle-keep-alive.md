@@ -7,7 +7,7 @@ description: Detect cycles that have stalled and email operator to suggest resta
 
 Runs daily. Notifies operator if no cycle has been started in 28+ days.
 
-> **Note (migration 002):** This task is operator-facing only — it nudges the operator to restart a stalled cycle and never emails members. Member-facing availability collection moved from Google Forms to the portal at `${PORTAL_URL}/availability` (see `availability-chase` for that path); this task is unaffected by the cutover.
+> **Note (migration 002):** This task is operator-facing only — it nudges the operator to restart a stalled cycle and never emails members. Member-facing availability collection moved from Google Forms to the portal at `https://wids-nyc-reading-group-assistant.vercel.app/availability` (see `availability-chase` for that path); this task is unaffected by the cutover.
 
 ## Step 1 — Check most recent reading_group
 
