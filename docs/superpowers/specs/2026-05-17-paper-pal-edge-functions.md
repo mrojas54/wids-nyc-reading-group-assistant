@@ -55,9 +55,10 @@ sequenceDiagram
 - **Method:** `POST`
 - **Body:** `{ paper_id: number, pdf_url: string, provider?: "gemini" | "claude" }`
 - **Gate:** caller must satisfy `canSynthesizePaperPal(paper_id)` against their JWT
-- **Side effect:** upsert into `paper_companions` keyed on `paper_id`
-- **Returns:** `{ ok: true, paper_id, payload_summary }` or structured error
-- **Idempotency:** safe to retry — upsert overwrites by `paper_id`
+- **Rate limit:** `429` with `Retry-After` if `now() - last_synthesis_at < 5 min` (see §11 Q2)
+- **Response format:** `text/event-stream` (SSE). Stage events during synthesis, terminal `complete` event with `paper_id` (see §11 Q4)
+- **Side effect:** upsert into `paper_companions` keyed on `paper_id`; sets `last_synthesis_at = now()` and increments `regeneration_count`
+- **Idempotency:** safe to retry once rate-limit window passes — upsert overwrites by `paper_id`
 
 ### 4.2 `analyze-hint`
 - **Method:** `POST`
@@ -110,7 +111,8 @@ ALTER TABLE paper_companions
   ADD COLUMN model text,                         -- e.g. 'gemini-2.5-pro', 'claude-sonnet-4-7'
   ADD COLUMN generated_by_member_id bigint REFERENCES members(id) ON DELETE SET NULL,
   ADD COLUMN generated_at timestamptz NOT NULL DEFAULT now(),
-  ADD COLUMN regeneration_count integer NOT NULL DEFAULT 0;
+  ADD COLUMN last_synthesis_at timestamptz,        -- rate-limit cursor (see §11 Q2)
+  ADD COLUMN regeneration_count integer NOT NULL DEFAULT 0;  -- telemetry only, NOT enforcement
 
 -- For Socratic turn history.
 CREATE TABLE paper_socratic_turns (
@@ -213,12 +215,68 @@ E2E (Playwright, against staging Supabase branch):
 
 Feature flag: `PAPER_PAL_INPORTAL_SYNTHESIS` (env var, defaults false). When false, `/new` shows "in-portal synthesis is in beta — use /wids-make-companion".
 
-## 11. Open questions
+## 11. Resolved questions
 
-1. **PDF storage retention:** keep PDFs in `papers-pdfs` bucket indefinitely (~5MB each, cheap) or delete after synthesis succeeds? Recommend: keep, in case we want to regenerate with a different model later.
-2. **Cost ceiling:** should the Edge Function refuse to run if `regeneration_count >= 5` on a given paper, unless caller is `'admin'`?
-3. **A/B logging:** when provider is overridden by admin, where do we log the diff for comparison? A `paper_companion_runs` audit table, or just `console.log` and trust Supabase logs?
-4. **Streaming:** worth doing in PR 2, or wait for user feedback on the first cut?
+> Originally drafted as open questions; resolved 2026-05-17.
+
+### Q1 — PDF storage retention → **Keep indefinitely, soft-prune at 500 MB**
+
+Papers are public arXiv preprints (no PII risk). At ~5 MB × ~25 papers/year, fills <150 MB/year — well inside the Supabase 1 GB free tier. Deletion creates a future cost: if the synthesis prompt changes 6 months from now, regenerating against the original PDF beats re-downloading one that may have moved or vanished.
+
+**Policy:** keep PDFs in `papers-pdfs` indefinitely. If bucket size > 500 MB, prune oldest by `created_at`. No code action needed for PR1.
+
+### Q2 — Cost ceiling → **Rate-limit (1 regen / paper / 5 min), no count cap**
+
+A hard count cap punishes legitimate prompt-tuning (3–5 iterations are normal on the first synthesis). The real failure mode is a tight loop, which rate-limiting catches without limiting deliberate regeneration.
+
+**Implementation in `analyze-paper`:**
+
+```ts
+const { data: existing } = await sb
+  .from("paper_companions")
+  .select("last_synthesis_at")
+  .eq("paper_id", paper_id)
+  .maybeSingle();
+
+if (existing?.last_synthesis_at) {
+  const elapsedMs = Date.now() - new Date(existing.last_synthesis_at).getTime();
+  if (elapsedMs < 5 * 60 * 1000) {
+    return new Response(JSON.stringify({
+      error: "rate_limited",
+      retry_after_seconds: Math.ceil((5 * 60 * 1000 - elapsedMs) / 1000),
+    }), { status: 429, headers: { "Retry-After": String(Math.ceil((5 * 60 * 1000 - elapsedMs) / 1000)) }});
+  }
+}
+```
+
+`regeneration_count` stays in migration 015 as **telemetry only** (incremented on every successful synthesis). Useful for spotting papers being thrashed; not used to block.
+
+### Q3 — A/B logging → **Use `paper_companions` provider/model columns; no audit table**
+
+The real A/B comparison is two browser tabs side-by-side, not a log query. The logging requirement collapses to *provenance*: who, what provider/model, when. Migration 015 already captures all of it (`provider`, `model`, `generated_by_member_id`, `generated_at`, `regeneration_count`).
+
+If real telemetry needs arise later (token counts, p99 latency, cost-per-provider), add a `paper_companion_runs` audit table in a future PR. For now: Supabase Function logs cover "did it succeed" for free.
+
+### Q4 — Streaming → **Stage-based SSE in PR2; defer true token streaming**
+
+Token streaming requires NDJSON output or post-hoc JSON reconstruction — both fragile, both stateful in the Edge Function. The user pain is "60-second spinner with no feedback," which a 5-stage Server-Sent Events stream solves at ~10% of the complexity and ~80% of the perceived-latency win.
+
+**Stage events emitted by `analyze-paper`:**
+
+| event | when | data |
+|---|---|---|
+| `stage` | PDF parsed | `{ "stage": "parsing_pdf", "elapsed_ms": ~1000 }` |
+| `stage` | Provider call starts | `{ "stage": "generating_synthesis", "elapsed_ms": ~2000 }` |
+| `stage` | Synthesis bento ready | `{ "stage": "drafting_assessment", "elapsed_ms": ~30000 }` |
+| `stage` | Writing to DB | `{ "stage": "persisting", "elapsed_ms": ~55000 }` |
+| `complete` | Done | `{ "paper_id": 42, "provider": "gemini", "duration_ms": ~58000 }` |
+
+`/new` page subscribes via `EventSource` and renders a 5-step progress bar. True token streaming added only if a user explicitly asks to see it write.
+
+## 11.5 New open questions (raised by resolutions)
+
+1. **Rate-limit window:** is 5 minutes the right interval? For an operator iterating on prompts in PR1 dev, this feels too long; consider parameterizing via env var `PAPER_PAL_REGEN_COOLDOWN_SEC` (default 300, set to 30 in non-prod).
+2. **Bucket pruning automation:** the 500 MB soft-prune is a policy until there's a scheduled task to enforce it. Should we add `wids-prune-paper-pdfs` to `scheduled-tasks` now, or wait until we hit 400 MB?
 
 ## 12. Estimated effort
 
@@ -226,10 +284,12 @@ Feature flag: `PAPER_PAL_INPORTAL_SYNTHESIS` (env var, defaults false). When fal
 |---|---|
 | Migrations 015 + 016 + RPC | 2h |
 | Provider abstraction (Gemini + Claude) | 4h |
-| `analyze-paper` Edge Function + tests | 4h |
+| `analyze-paper` Edge Function + rate-limit + SSE + tests | 5h |
 | `analyze-hint` Edge Function + tests | 2h |
 | `analyze-socratic` Edge Function + turns table + tests | 4h |
-| `/new` page wiring + Storage bucket setup | 3h |
+| `/new` page wiring + Storage bucket setup + SSE consumer | 4h |
 | Assessment UI wiring (PR 2) | 3h |
 | Docs + deploy + smoke | 2h |
-| **Total (PR 1 + PR 2 combined)** | **~24h** |
+| **Total (PR 1 + PR 2 combined)** | **~26h** |
+
+> +2h vs the initial estimate accounts for SSE emit/consume + rate-limit logic resolved in §11.
