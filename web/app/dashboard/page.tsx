@@ -95,11 +95,11 @@ export default async function DashboardPage() {
             style={{ textDecoration: "none", color: "inherit" }}
           >
             <div className="companion-body">
-              <div className="companion-eyebrow">Companion</div>
+              <div className="companion-eyebrow">Paper Pal</div>
               <div className="companion-title">
-                {meeting.paper_title ?? "Companion reading"}
+                {meeting.paper_title ?? "Paper Pal"}
               </div>
-              <div className="companion-meta">Open the paper guide</div>
+              <div className="companion-meta">Open Paper Pal</div>
             </div>
             <Icon name="chevronRight" size={16} aria-hidden />
           </a>
