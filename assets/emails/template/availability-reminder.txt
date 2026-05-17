@@ -10,9 +10,9 @@ looking for a weekday evening that works for most of the group.
 
 NEXT PAPER
 {{ paper.title }}
-{{ paper.authorsShort }} — arXiv {{ paper.arxivId }}
-arXiv: {{ paper.arxivUrl }}
-{{ paper.location }} · {{ paper.duration }} · Paper Pal drops {{ paper.companionDropDay }}
+{{ paper.authorsShort }} — {{ paper.citationText }}
+Link: {{ paper.url }}
+{{ paper.metaLine }}
 
 
 Tap any weekday evening in the next 30 days you could make it. We'll
@@ -41,4 +41,3 @@ note when it's ready. Preview link if you're curious:
 ---
 WiDS NYC AI Reading Group
 Member portal: {{ links.portalBase }}/dashboard
-Past papers:   {{ links.portalBase }}/papers

@@ -109,7 +109,7 @@ The scheduled task **never auto-emails members**. It always alerts the
 operator first; the operator approves with `remind` (or
 `remind subject="…"`) to authorise the send. This mirrors the existing
 `availability-chase` design and prevents the bot from speaking with
-Madeline's voice without her consent.
+Michelle's voice without her consent.
 
 ## Idempotency
 

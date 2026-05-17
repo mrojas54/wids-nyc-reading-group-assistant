@@ -87,26 +87,31 @@ register:
 ### 5b — Resolve per-cycle merge data
 
 ```sql
--- meeting + paper (one row)
-SELECT m.id            AS meeting_id,
-       m.type          AS meeting_type,
-       p.title         AS paper_title,
-       p.authors_short AS paper_authors_short,
-       p.arxiv_id      AS paper_arxiv_id,
-       p.location      AS paper_location,
-       p.duration      AS paper_duration,
-       p.companion_drop_day AS paper_companion_drop_day,
-       p.slug          AS paper_slug
+-- meeting + paper (one row). FK direction: meetings.paper_id → papers.id.
+SELECT m.id              AS meeting_id,
+       m.type            AS meeting_type,
+       m.location        AS meeting_location,
+       p.id              AS paper_id,
+       p.title           AS paper_title,
+       p.authors         AS paper_authors,        -- text[] of full names
+       p.venue           AS paper_venue,
+       p.year            AS paper_year,
+       p.url             AS paper_url,            -- arXiv abs URL OR DOI URL OR journal landing page
+       p.s2_paper_id     AS paper_s2_paper_id,    -- e.g. "DOI:10.3390/math13101551" or "ARXIV:2026.04812"
+       p.companion_url   AS paper_companion_url   -- e.g. "/papers/2"
 FROM meetings m
-LEFT JOIN papers p ON p.meeting_id = m.id
+LEFT JOIN papers p ON p.id = m.paper_id
 WHERE m.id = <meeting_id>;
 
 -- stats (one row)
 SELECT (SELECT count(DISTINCT a.member_id) FROM availability a WHERE a.meeting_id = <meeting_id>) AS submitted_count,
        (SELECT count(*) FROM members WHERE active = true)                                          AS total_members;
 
--- non-responders (N rows; one email per row)
-SELECT mb.id, mb.email, mb.first_name
+-- non-responders (N rows; one email per row). members.name is a single
+-- column; split on space for first_name.
+SELECT mb.id,
+       mb.email,
+       split_part(mb.name, ' ', 1) AS first_name
 FROM members mb
 WHERE mb.active = true
   AND NOT EXISTS (
@@ -115,13 +120,33 @@ WHERE mb.active = true
 ```
 
 Static / config values:
-- `operator.displayName` — operator's display name (currently `Madeline Rojas`).
+- `operator.displayName` — operator's display name (currently `Michelle Rojas`).
 - `links.portalBase` — `https://wids-nyc-reading-group-assistant.vercel.app`
 - `links.availability` — `<portalBase>/availability`
-- `links.companionPreview` — `<portalBase>/papers/<paper.slug>` (if `paper.slug` is null, drop the PS link by replacing `<a …>Preview link</a>` with the literal text `Preview link coming soon` before send).
-- `paper.arxivUrl` — `https://arxiv.org/abs/<paper.arxivId>`
+- `links.companionPreview` — `<portalBase><paper.companion_url>` (e.g. `<portalBase>/papers/2`). If `paper.companion_url` is null, drop the PS preview link by replacing `<a …>Preview link</a>` in the HTML body with the literal text `Preview link coming soon`, and replace the `{{ links.companionPreview }}` line in the `.txt` body with the literal text `(preview link coming soon)`.
 - `deadline.soft` — derived: the upcoming Sunday evening relative to send date (e.g. `Sunday evening`).
-- `stats.submittedCountWord` — `stats.submittedCount` spelled out in English title-case (`One`, `Two`, …, `Ten`, then fallback to the digit string for >10). Used in the bold `<strong>… of us</strong>` line.
+- `stats.submittedCountWord` — `stats.submittedCount` spelled out in English title-case (`One`, `Two`, …, `Nine`, then fallback to the digit string for ≥10). Used in the bold `<strong>… of us</strong>` line.
+
+Derived values (v2 composition rules — renderer-side, not in DB):
+- `paper.authorsShort` — first 1–3 surnames from `papers.authors`, joined with `, ` and `&`. ≥4 → first surname + ` et al.`. Examples: `Zhao, Guo & Wang` · `Chen et al.`
+- `paper.citation` — HTML-safe single string with optional inline `<em>`. Composed by:
+  ```text
+  IF papers.s2_paper_id starts with "ARXIV:":
+      citation = "arXiv " + substring after "ARXIV:"
+  ELSE IF papers.venue IS NOT NULL:
+      citation = "in <em>" + escape(papers.venue) + "</em> (" + papers.year + ")"
+  ELSE:
+      citation = "(" + papers.year + ")"
+  ```
+  Substituted **raw** into the HTML template (no escaping) so the `<em>` renders.
+- `paper.citationText` — same composition as `paper.citation` but with `<em>…</em>` stripped (plain text for the `.txt` body). Examples: `arXiv 2026.04812` · `in Mathematics (2025)` · `(2025)`.
+- `paper.url` — value of `papers.url` as-is. (Note: in the v1 contract this was `paper.arxivUrl` and assumed arXiv; v2 drops that assumption.)
+- `paper.location` — value of `meetings.location` as-is. **Optional.** If null, renderer must strip the `<td>` between `<!-- BEGIN-OPTIONAL-CHIP: location -->` and `<!-- END-OPTIONAL-CHIP -->` in the HTML template before substitution. No placeholder.
+- `paper.duration` — `papers` has no `duration` column yet. Static fallback: `~90 min`.
+- `paper.companionDropDay` — `papers` has no `companion_drop_day` column yet. Static fallback: `Wed`.
+- `paper.metaLine` — plain-text meta line for the `.txt` body, composed by joining the optional/fallback values with ` · `. Skip the location piece if null. Examples:
+  - location present: `Brooklyn, TBD · ~90 min · Paper Pal drops Wed`
+  - location null:    `~90 min · Paper Pal drops Wed`
 
 ### 5c — Render + send per recipient
 
@@ -129,26 +154,36 @@ For each non-responder row:
 
 1. Read `assets/emails/template/availability-reminder.html` and
    `assets/emails/template/availability-reminder.txt`.
-2. Substitute every `{{ token }}` with the resolved value. Tokens:
+2. Substitute every `{{ token }}` with the resolved value (v2 contract).
+   Tokens used in both `.html` and `.txt` unless noted. "(v2 / composed)"
+   tokens are NOT raw DB columns — see "Derived values" in Step 5b for
+   composition rules.
 
-   | Token | Source |
-   |---|---|
-   | `{{ recipient.firstName }}` | members.first_name (this row) |
-   | `{{ paper.title }}` | papers.title |
-   | `{{ paper.authorsShort }}` | papers.authors_short |
-   | `{{ paper.arxivId }}` | papers.arxiv_id |
-   | `{{ paper.arxivUrl }}` | derived from arxiv_id |
-   | `{{ paper.location }}` | papers.location |
-   | `{{ paper.duration }}` | papers.duration |
-   | `{{ paper.companionDropDay }}` | papers.companion_drop_day |
-   | `{{ stats.submittedCount }}` | int |
-   | `{{ stats.submittedCountWord }}` | derived word form |
-   | `{{ stats.totalMembers }}` | int |
-   | `{{ deadline.soft }}` | derived |
-   | `{{ links.availability }}` | static |
-   | `{{ links.companionPreview }}` | derived |
-   | `{{ links.portalBase }}` | static |
-   | `{{ operator.displayName }}` | static / config |
+   | Token | Source | Notes |
+   |---|---|---|
+   | `{{ recipient.firstName }}` | `split_part(members.name, ' ', 1)` | per-recipient |
+   | `{{ paper.title }}` | `papers.title` | |
+   | `{{ paper.authorsShort }}` | derived from `papers.authors[]` | v2 / composed |
+   | `{{ paper.citation }}` | derived (s2_paper_id / venue / year) | v2 / composed · HTML-safe · **substitute raw** (no escaping — may contain `<em>`) · `.html` only |
+   | `{{ paper.citationText }}` | derived (same as `paper.citation`, `<em>` stripped) | v2 / composed · `.txt` only |
+   | `{{ paper.url }}` | `papers.url` | replaces v1's `paper.arxivUrl` |
+   | `{{ paper.location }}` | `meetings.location` | **optional** — if null, renderer strips the `<td>` wrapped in `<!-- BEGIN-OPTIONAL-CHIP: location -->` / `<!-- END-OPTIONAL-CHIP -->` before substitution; `.html` only |
+   | `{{ paper.duration }}` | static `~90 min` | column not yet in schema · `.html` only |
+   | `{{ paper.companionDropDay }}` | static `Wed` | column not yet in schema · `.html` only |
+   | `{{ paper.metaLine }}` | derived join of location/duration/companion-drop with ` · ` | v2 / composed · `.txt` only |
+   | `{{ stats.submittedCount }}` | int from stats query | |
+   | `{{ stats.submittedCountWord }}` | derived (`One`–`Nine`, then digits) | |
+   | `{{ stats.totalMembers }}` | int from stats query | |
+   | `{{ deadline.soft }}` | derived (next Sunday evening) | |
+   | `{{ links.availability }}` | static `<portalBase>/availability` | |
+   | `{{ links.companionPreview }}` | `<portalBase><paper.companion_url>` | falls back to literal `Preview link coming soon` if `paper.companion_url` is null |
+   | `{{ links.portalBase }}` | static | |
+   | `{{ operator.displayName }}` | static / config | |
+
+   Tokens removed in v2 (do NOT use): `paper.arxivId`, `paper.arxivUrl`,
+   `paper.slug`. Their roles are now subsumed by `paper.citation` /
+   `paper.citationText` (citation), `paper.url` (canonical URL), and
+   `paper.companion_url` (companion preview path).
 
 3. Idempotency check — skip this recipient if a prior reminder for this
    `meeting × member` is already logged:
