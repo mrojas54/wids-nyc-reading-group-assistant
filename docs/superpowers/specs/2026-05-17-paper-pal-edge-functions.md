@@ -209,8 +209,8 @@ E2E (Playwright, against staging Supabase branch):
 
 ## 10. Rollout
 
-1. **PR 1 (this slice):** migrations 015 + 016, Edge Function code, provider abstraction, `synthesizePaper`, tests
-2. **PR 2:** wire `/new` page (replace stub), wire assessment UI to hint/socratic functions
+1. **PR 1 (this slice):** migrations 015 + 016, Edge Function code, provider abstraction, `synthesizePaper`, `wids-prune-paper-pdfs` scheduled task (dry-run on), tests
+2. **PR 2:** wire `/new` page (replace stub), wire assessment UI to hint/socratic functions, flip `wids-prune-paper-pdfs` from dry-run to live after first successful run
 3. **PR 3 (post-launch):** deprecate `/wids-make-companion` after operator validates 3 papers end-to-end in-portal
 
 Feature flag: `PAPER_PAL_INPORTAL_SYNTHESIS` (env var, defaults false). When false, `/new` shows "in-portal synthesis is in beta — use /wids-make-companion".
@@ -273,10 +273,49 @@ Token streaming requires NDJSON output or post-hoc JSON reconstruction — both 
 
 `/new` page subscribes via `EventSource` and renders a 5-step progress bar. True token streaming added only if a user explicitly asks to see it write.
 
-## 11.5 New open questions (raised by resolutions)
+## 11.5 Resolved follow-up questions
 
-1. **Rate-limit window:** is 5 minutes the right interval? For an operator iterating on prompts in PR1 dev, this feels too long; consider parameterizing via env var `PAPER_PAL_REGEN_COOLDOWN_SEC` (default 300, set to 30 in non-prod).
-2. **Bucket pruning automation:** the 500 MB soft-prune is a policy until there's a scheduled task to enforce it. Should we add `wids-prune-paper-pdfs` to `scheduled-tasks` now, or wait until we hit 400 MB?
+> Raised by the §11 resolutions; resolved 2026-05-17.
+
+### Q5 — Rate-limit window → **Tunable via `PAPER_PAL_REGEN_COOLDOWN_SEC` env var**
+
+Hard-coding 5 minutes punishes PR1 development (each prompt-tuning iteration burns the 5-minute window). Parameterize:
+
+- **Prod default:** `300` (5 min)
+- **Non-prod / preview:** `30`
+- **Read at:** the top of `analyze-paper` handler, with `parseInt(Deno.env.get("PAPER_PAL_REGEN_COOLDOWN_SEC") ?? "300", 10)`
+
+The §11 Q2 implementation snippet becomes:
+
+```ts
+const cooldownMs = (parseInt(Deno.env.get("PAPER_PAL_REGEN_COOLDOWN_SEC") ?? "300", 10)) * 1000;
+// …
+if (existing?.last_synthesis_at) {
+  const elapsedMs = Date.now() - new Date(existing.last_synthesis_at).getTime();
+  if (elapsedMs < cooldownMs) {
+    const retryAfter = Math.ceil((cooldownMs - elapsedMs) / 1000);
+    return new Response(
+      JSON.stringify({ error: "rate_limited", retry_after_seconds: retryAfter }),
+      { status: 429, headers: { "Retry-After": String(retryAfter) } },
+    );
+  }
+}
+```
+
+Document the env var in `supabase/functions/.env.example` as part of PR1.
+
+### Q6 — Bucket pruning automation → **Ship `wids-prune-paper-pdfs` scheduled task in PR1**
+
+The 500 MB soft-prune is policy-only until a scheduled task enforces it. Waiting until 400 MB means a future manual scramble. Ship it now while the architecture is fresh.
+
+**Specification:**
+- **Schedule:** weekly, e.g. Sunday 02:00 UTC
+- **Action:** list objects in `papers-pdfs` bucket, sum sizes; if total > 500 MB, delete oldest-first by `created_at` until total < 450 MB
+- **Idempotency:** safe — pure-read-then-delete; no state past the bucket itself
+- **Logging:** `INSERT INTO command_log (command, payload, status)` with deleted-paths array, matching the existing scheduled-task pattern (see `wids-pre-meeting-reminder` for the canonical template)
+- **Safety rail:** dry-run flag (`PAPER_PAL_PRUNE_DRY_RUN=true`) that logs what would be deleted without actually deleting — default true in PR1, flip to false after first successful dry run
+
+Adds to `mcp__scheduled-tasks__create_scheduled_task` setup as a one-time bootstrap step in PR1's deploy checklist.
 
 ## 12. Estimated effort
 
@@ -284,12 +323,13 @@ Token streaming requires NDJSON output or post-hoc JSON reconstruction — both 
 |---|---|
 | Migrations 015 + 016 + RPC | 2h |
 | Provider abstraction (Gemini + Claude) | 4h |
-| `analyze-paper` Edge Function + rate-limit + SSE + tests | 5h |
+| `analyze-paper` Edge Function + rate-limit (env-tunable) + SSE + tests | 5h |
 | `analyze-hint` Edge Function + tests | 2h |
 | `analyze-socratic` Edge Function + turns table + tests | 4h |
 | `/new` page wiring + Storage bucket setup + SSE consumer | 4h |
+| `wids-prune-paper-pdfs` scheduled task + dry-run + bootstrap | 2h |
 | Assessment UI wiring (PR 2) | 3h |
 | Docs + deploy + smoke | 2h |
-| **Total (PR 1 + PR 2 combined)** | **~26h** |
+| **Total (PR 1 + PR 2 combined)** | **~28h** |
 
-> +2h vs the initial estimate accounts for SSE emit/consume + rate-limit logic resolved in §11.
+> +4h vs the initial estimate: +2h for SSE emit/consume + rate-limit logic (§11 Q4 + Q2), +2h for the `wids-prune-paper-pdfs` scheduled task (§11.5 Q6).
