@@ -33,7 +33,7 @@ export function YourHistory({ items }: { items: HistoryItem[] }) {
             </div>
             {it.companion_url && (
               <a href={it.companion_url} className="history-link">
-                Companion →
+                Paper Pal →
               </a>
             )}
           </li>

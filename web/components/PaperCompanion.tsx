@@ -71,7 +71,7 @@ export function PaperCompanion({
             className="text-lg font-semibold"
             style={{ color: "var(--color-paper-800)" }}
           >
-            In this companion.
+            In this Paper Pal.
           </h2>
           <ol className="list-decimal list-inside space-y-1">
             {content.sections.map((s, i) => (

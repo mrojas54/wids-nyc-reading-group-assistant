@@ -130,6 +130,81 @@ export type HistoryItem = {
   companion_url: string | null;
 };
 
+export type SynthesisGate = {
+  canSynthesize: boolean;
+  reason: "owner" | "leader" | "none";
+};
+
+/**
+ * Paper Pal synthesis gate. Returns canSynthesize=true when the caller is
+ * the chapter owner (role in operator/admin) OR the leader of any meeting
+ * that uses this paper. Safe to call on the public /papers/<id> route —
+ * unauthenticated callers get { canSynthesize: false, reason: "none" }.
+ *
+ * See docs/superpowers/specs/2026-05-17-paper-pal-design.md §3.
+ */
+export async function canSynthesizePaperPal(
+  sb: SupabaseClient,
+  paperId: number,
+): Promise<SynthesisGate> {
+  const memberId = await currentMemberId(sb);
+  if (memberId == null) return { canSynthesize: false, reason: "none" };
+
+  const { data: member } = await sb
+    .from("members")
+    .select("role")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (member?.role === "operator" || member?.role === "admin") {
+    return { canSynthesize: true, reason: "owner" };
+  }
+
+  const { count } = await sb
+    .from("meetings")
+    .select("*", { count: "exact", head: true })
+    .eq("paper_id", paperId)
+    .eq("leader_id", memberId);
+
+  if ((count ?? 0) > 0) return { canSynthesize: true, reason: "leader" };
+  return { canSynthesize: false, reason: "none" };
+}
+
+export type PaperCatalogRow = {
+  id: number;
+  title: string;
+  authors: string[] | null;
+  leader_name: string | null;
+};
+
+/** Looks up papers.id and joins the most recent meeting's leader, if any. */
+export async function paperCatalogRow(
+  sb: SupabaseClient,
+  paperId: number,
+): Promise<PaperCatalogRow | null> {
+  const { data: paper } = await sb
+    .from("papers")
+    .select("id, title, authors")
+    .eq("id", paperId)
+    .maybeSingle();
+  if (!paper) return null;
+
+  const { data: meeting } = await sb
+    .from("meetings")
+    .select("members:leader_id(name)")
+    .eq("paper_id", paperId)
+    .order("scheduled_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    id: paper.id,
+    title: paper.title,
+    authors: paper.authors ?? null,
+    leader_name: (meeting as any)?.members?.name ?? null,
+  };
+}
+
 export async function myHistory(sb: SupabaseClient, limit = 10): Promise<HistoryItem[]> {
   const { data } = await sb
     .from("meeting_attendance")
