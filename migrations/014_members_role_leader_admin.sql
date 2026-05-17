@@ -1,4 +1,4 @@
--- migrations/013_members_role_leader_admin.sql
+-- migrations/014_members_role_leader_admin.sql
 -- Widen the members.role CHECK to include 'leader' and 'admin'.
 --
 -- The dashboard already gates on these values (web/app/dashboard/page.tsx:54-57)
