@@ -22,7 +22,7 @@ The Edge Functions write to `paper_companions.payload` (JSONB) which `/papers/<i
 - KaTeX math rendering (Phase deferred in #45)
 - Discussion board / SR review (Phases 8 & 9, NEEDS SCHEMA)
 - Removing `/wids-make-companion` — kept as fallback for the foreseeable future
-- Streaming responses — first cut is request/response, even though Gemini and Claude both support streaming
+- **True token streaming** — `analyze-paper` emits stage-progress SSE (see §11 Q4), but the underlying provider response is collected fully before persisting; we don't stream Gemini/Claude tokens through to the client
 
 ## 3. Architecture
 
@@ -36,14 +36,17 @@ sequenceDiagram
   participant DB as paper_companions (JSONB)
 
   U->>N: Upload PDF + paper_id
-  N->>EF: POST /analyze-paper { paper_id, pdf_url, provider? }
+  N->>EF: POST /analyze-paper { paper_id, pdf_storage_path, provider? }
   EF->>Q: canSynthesizePaperPal(jwt_member_id, paper_id)
   Q-->>EF: { canSynthesize: true, reason: "owner"|"leader" }
+  EF-->>N: SSE: stage=parsing_pdf
   EF->>P: Generate ResearchPaperAnalysis from PDF
+  EF-->>N: SSE: stage=generating_synthesis
   P-->>EF: { payload, provider_meta }
-  EF->>DB: upsert paper_companions { payload, provider, model, generated_by }
+  EF-->>N: SSE: stage=persisting
+  EF->>DB: UPSERT paper_companions (atomic — payload + counters in one CTE)
   DB-->>EF: ok
-  EF-->>N: { ok: true, paper_id }
+  EF-->>N: SSE: complete { paper_id }
   N-->>U: Redirect to /papers/<paper_id>
 ```
 
@@ -52,12 +55,12 @@ sequenceDiagram
 ## 4. The three Edge Functions
 
 ### 4.1 `analyze-paper`
-- **Method:** `POST`
-- **Body:** `{ paper_id: number, pdf_url: string, provider?: "gemini" | "claude" }`
+- **Method:** `POST` (not `GET` — the body carries a Supabase Storage signed URL)
+- **Body:** `{ paper_id: number, pdf_storage_path: string, provider?: "gemini" | "claude" }` where `pdf_storage_path` is a path inside the `papers-pdfs` bucket; the Edge Function mints its own signed URL server-side (see §8 + §13 security)
 - **Gate:** caller must satisfy `canSynthesizePaperPal(paper_id)` against their JWT
-- **Rate limit:** `429` with `Retry-After` if `now() - last_synthesis_at < 5 min` (see §11 Q2)
-- **Response format:** `text/event-stream` (SSE). Stage events during synthesis, terminal `complete` event with `paper_id` (see §11 Q4)
-- **Side effect:** upsert into `paper_companions` keyed on `paper_id`; sets `last_synthesis_at = now()` and increments `regeneration_count`
+- **Rate limit:** `429` with `Retry-After` header if `now() - last_synthesis_at < PAPER_PAL_REGEN_COOLDOWN_SEC` (see §11 Q2 + Q5)
+- **Response format:** `text/event-stream` (SSE) over the `POST` connection. Because `EventSource` only supports `GET`, the `/new` client must consume via `fetch()` + `response.body.getReader()` + a small SSE chunk parser, **not** `new EventSource(url)`. See §13 for the client snippet.
+- **Side effect (atomic, single transaction):** UPSERT into `paper_companions` keyed on `paper_id`, setting `payload`, `provider`, `model`, `generated_by_member_id`, `generated_at = now()`, `last_synthesis_at = now()`, and `regeneration_count = regeneration_count + 1` (CTE pattern so the increment can't be lost on crash mid-write)
 - **Idempotency:** safe to retry once rate-limit window passes — upsert overwrites by `paper_id`
 
 ### 4.2 `analyze-hint`
@@ -105,16 +108,27 @@ Same abstraction for `analyze-hint` and `analyze-socratic` — different prompts
 ```sql
 -- migration 015_paper_pal_provider_metadata.sql
 
+-- Step 1: add provider column with 'manual' as the historical-truth default,
+-- because pre-migration synthesis happened via /wids-make-companion (operator
+-- session, not Gemini). Setting DEFAULT 'gemini' would silently misattribute
+-- every backfilled row.
 ALTER TABLE paper_companions
-  ADD COLUMN provider text NOT NULL DEFAULT 'gemini'
-    CHECK (provider IN ('gemini', 'claude', 'manual')),
+  ADD COLUMN provider text NOT NULL DEFAULT 'manual'
+    CHECK (provider IN ('gemini', 'claude', 'manual'));
+
+-- Step 2: change the default to 'gemini' for future inserts.
+ALTER TABLE paper_companions ALTER COLUMN provider SET DEFAULT 'gemini';
+
+ALTER TABLE paper_companions
   ADD COLUMN model text,                         -- e.g. 'gemini-2.5-pro', 'claude-sonnet-4-7'
   ADD COLUMN generated_by_member_id bigint REFERENCES members(id) ON DELETE SET NULL,
   ADD COLUMN generated_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN last_synthesis_at timestamptz,        -- rate-limit cursor (see §11 Q2)
   ADD COLUMN regeneration_count integer NOT NULL DEFAULT 0;  -- telemetry only, NOT enforcement
 
--- For Socratic turn history.
+-- For Socratic turn history. PRIMARY KEY style (bigserial vs IDENTITY) should
+-- match whatever the existing migrations in this repo use — implementer:
+-- check `migrations/013_paper_companions.sql` and copy that convention.
 CREATE TABLE paper_socratic_turns (
   id bigserial PRIMARY KEY,
   paper_id bigint NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
@@ -131,10 +145,17 @@ CREATE TABLE paper_socratic_turns (
 CREATE INDEX paper_socratic_turns_paper_member ON paper_socratic_turns(paper_id, member_id);
 
 ALTER TABLE paper_socratic_turns ENABLE ROW LEVEL SECURITY;
+
+-- Members can read their own turn history (for "resume Socratic session" UX).
 CREATE POLICY "members read own turns" ON paper_socratic_turns
   FOR SELECT USING (member_id = current_member_id());
-CREATE POLICY "service role writes" ON paper_socratic_turns
-  FOR INSERT WITH CHECK (false);  -- writes happen only via Edge Function (service role bypasses RLS)
+
+-- Direct member-context inserts are blocked. The analyze-socratic Edge Function
+-- writes via the service role key, which bypasses RLS — this policy exists to
+-- forbid accidental inserts from anywhere else (e.g. an RPC, the Supabase
+-- dashboard, a future API route that forgets to use the service role).
+CREATE POLICY "block direct member inserts" ON paper_socratic_turns
+  FOR INSERT WITH CHECK (false);
 ```
 
 ## 7. Auth gate — re-using `canSynthesizePaperPal` from Deno
@@ -180,12 +201,16 @@ Then `web/lib/queries.ts`'s `canSynthesizePaperPal` becomes a thin wrapper aroun
 ## 8. `/new` page wiring (replaces the #45 stub)
 
 Replace the Gemini-upload-flow stub with:
-1. PDF picker → upload to Supabase Storage bucket `papers-pdfs` (RLS: operator/leader write, anyone read by path token)
-2. POST `/functions/v1/analyze-paper` with `{ paper_id, pdf_url: signed_url }`
-3. On 200 → `router.push('/papers/' + paper_id)`
-4. On error → toast + retain form state
 
-Assessment UI (already in #45's `McqMode` and `SocraticMode`) wires `/analyze-hint` and `/analyze-socratic` via fetch.
+1. PDF picker → upload to Supabase Storage bucket `papers-pdfs` at path `<paper_id>/<uuid>.pdf`. RLS on the bucket:
+   - **Insert:** allowed for members where `canSynthesizePaperPal(paper_id) = true` (owner or paper's leader)
+   - **Select:** allowed only via service-role signed URLs minted by the Edge Function (no public read, no anon-token read)
+2. `POST /functions/v1/analyze-paper` with `{ paper_id, pdf_storage_path }` — the path, not a URL. The Edge Function mints its own signed URL server-side, eliminating SSRF risk from caller-supplied URLs.
+3. Subscribe to the SSE response via `fetch()` + `ReadableStream` (see §13 for the client snippet — `EventSource` does **not** work for `POST`).
+4. On `complete` event → `router.push('/papers/' + paper_id)`
+5. On error event or HTTP non-2xx → toast + retain form state
+
+Assessment UI (already in #45's `McqMode` and `SocraticMode`) wires `/analyze-hint` and `/analyze-socratic` via plain `fetch()` (no streaming — those endpoints return JSON).
 
 ## 9. Test plan
 
@@ -319,17 +344,129 @@ Adds to `mcp__scheduled-tasks__create_scheduled_task` setup as a one-time bootst
 
 ## 12. Estimated effort
 
-| Step | Effort |
-|---|---|
-| Migrations 015 + 016 + RPC | 2h |
-| Provider abstraction (Gemini + Claude) | 4h |
-| `analyze-paper` Edge Function + rate-limit (env-tunable) + SSE + tests | 5h |
-| `analyze-hint` Edge Function + tests | 2h |
-| `analyze-socratic` Edge Function + turns table + tests | 4h |
-| `/new` page wiring + Storage bucket setup + SSE consumer | 4h |
-| `wids-prune-paper-pdfs` scheduled task + dry-run + bootstrap | 2h |
-| Assessment UI wiring (PR 2) | 3h |
-| Docs + deploy + smoke | 2h |
-| **Total (PR 1 + PR 2 combined)** | **~28h** |
+| Step | PR | Effort |
+|---|---|---|
+| Migrations 015 + 016 + RPC | 1 | 2h |
+| Provider abstraction (Gemini + Claude) | 1 | 4h |
+| `analyze-paper` Edge Function + rate-limit (env-tunable) + SSE + tests | 1 | 5h |
+| `analyze-hint` Edge Function + tests | 1 | 2h |
+| `analyze-socratic` Edge Function + turns table + tests | 1 | 4h |
+| `wids-prune-paper-pdfs` scheduled task + dry-run + bootstrap | 1 | 2h |
+| `/new` page wiring + Storage bucket setup + SSE consumer | 2 | 4h |
+| Assessment UI wiring (`McqMode`/`SocraticMode` → fetch) | 2 | 3h |
+| Docs + deploy + smoke (across both PRs) | 1+2 | 2h |
+| **PR 1 subtotal** | | **~19h** |
+| **PR 2 subtotal** | | **~7h** |
+| **Combined total** | | **~28h** |
 
 > +4h vs the initial estimate: +2h for SSE emit/consume + rate-limit logic (§11 Q4 + Q2), +2h for the `wids-prune-paper-pdfs` scheduled task (§11.5 Q6).
+
+## 13. Implementation contracts
+
+This section pins down the wire-level details that ambiguity in earlier sections leaves open. Resolving these here is what lets PR1 land without API redesigns.
+
+### 13.1 Edge Function SSE response headers
+
+```ts
+return new Response(stream, {
+  headers: {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",          // disables proxy buffering on hosted Supabase
+  },
+});
+```
+
+`X-Accel-Buffering: no` is required because Supabase Edge Functions sit behind a proxy that otherwise buffers responses to 8 KB chunks — fine for JSON, fatal for SSE.
+
+### 13.2 `/new` client: consuming SSE from a `POST`
+
+`EventSource` is `GET`-only. Use `fetch()` + a chunked-text parser:
+
+```ts
+const res = await fetch("/functions/v1/analyze-paper", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${session.access_token}`,
+  },
+  body: JSON.stringify({ paper_id, pdf_storage_path }),
+});
+
+if (!res.ok) {
+  // Handle 429, 401, 403 before attempting to stream.
+  const err = await res.json();
+  if (res.status === 429) toast(`Rate-limited, retry in ${err.retry_after_seconds}s`);
+  return;
+}
+
+const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+let buf = "";
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+  buf += value;
+  // SSE frames are separated by a blank line.
+  const frames = buf.split("\n\n");
+  buf = frames.pop()!;
+  for (const frame of frames) {
+    const event = parseSseFrame(frame);  // { event, data }
+    if (event.event === "stage") setProgress(event.data);
+    if (event.event === "complete") router.push(`/papers/${event.data.paper_id}`);
+    if (event.event === "error") toast(event.data.message);
+  }
+}
+```
+
+Tested pattern: identical to how the AI SDK and OpenAI's JavaScript client consume their streaming endpoints.
+
+### 13.3 Edge Function timeout
+
+Supabase Edge Functions default to **150 seconds** wall-clock (as of late 2025; verify current limit before implementation). Set explicitly via `supabase functions deploy analyze-paper --execution-timeout 120` and document in the deploy checklist. `analyze-paper` should reject any provider call that hasn't returned within `EDGE_TIMEOUT_MS - 10000` to leave 10 seconds for the persistence step + SSE close.
+
+### 13.4 PDF source: storage path, not arbitrary URL
+
+The Edge Function body accepts `pdf_storage_path` (a path inside `papers-pdfs`), **not** an arbitrary URL. The function mints its own signed URL via `supabase.storage.from("papers-pdfs").createSignedUrl(path, 60)` and passes that to the provider. Rationale:
+
+- Eliminates SSRF: caller can't trick the function into fetching internal endpoints.
+- No URL-leak risk: signed URLs are short-lived (60s) and never leave the Edge Function process.
+- Path validation: function asserts the path starts with `${paper_id}/` to prevent cross-paper access.
+
+### 13.5 `provider` override authority
+
+The request body's optional `provider` field is honored **only if the caller's JWT-derived role is `'admin'`**. The Edge Function calls `can_synthesize_paper_pal()` for the auth gate (which returns reason `'owner'`/`'leader'`) plus a separate role lookup:
+
+```ts
+const { data: callerRole } = await sb.from("members")
+  .select("role").eq("id", currentMemberId).maybeSingle();
+const effectiveProvider = (
+  callerRole?.role === "admin" && body.provider
+    ? body.provider
+    : (Deno.env.get("PAPER_PAL_PROVIDER") ?? "gemini")
+);
+```
+
+Non-admin requests with `provider` in the body get the env-default silently (no error, no warning) — A/B is admin-only by design.
+
+### 13.6 `analyze-paper` UPSERT — atomicity
+
+The side effect must be a single statement (so a crash mid-write can't leave `regeneration_count` desynced from `payload`):
+
+```sql
+INSERT INTO paper_companions
+  (paper_id, payload, provider, model, generated_by_member_id,
+   generated_at, last_synthesis_at, regeneration_count)
+VALUES
+  ($1, $2, $3, $4, $5, now(), now(), 1)
+ON CONFLICT (paper_id) DO UPDATE SET
+  payload = EXCLUDED.payload,
+  provider = EXCLUDED.provider,
+  model = EXCLUDED.model,
+  generated_by_member_id = EXCLUDED.generated_by_member_id,
+  generated_at = now(),
+  last_synthesis_at = now(),
+  regeneration_count = paper_companions.regeneration_count + 1;
+```
+
+Single statement, single transaction, atomic by Postgres semantics. No CTE needed.
