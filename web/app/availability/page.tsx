@@ -5,16 +5,34 @@ import { AvailabilityForm } from "./AvailabilityForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function AvailabilityPage() {
+export default async function AvailabilityPage({
+  searchParams,
+}: {
+  searchParams?: { meeting?: string };
+}) {
   const sb = createSupabaseServerClient();
 
-  const { data: prep } = await sb
-    .from("meetings")
-    .select("id, type")
-    .eq("status", "prep")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const requestedId = Number(searchParams?.meeting);
+  const requested =
+    Number.isInteger(requestedId) && requestedId > 0
+      ? await sb
+          .from("meetings")
+          .select("id, type, status")
+          .eq("id", requestedId)
+          .eq("status", "prep")
+          .maybeSingle()
+          .then((r) => r.data)
+      : null;
+
+  const prep =
+    requested ??
+    (await sb
+      .from("meetings")
+      .select("id, type")
+      .eq("status", "prep")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()).data;
 
   if (!prep) {
     return (

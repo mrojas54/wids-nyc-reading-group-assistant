@@ -69,10 +69,13 @@ export async function myAvailabilitySubmitted(
   sb: SupabaseClient,
   prepMeetingId: number,
 ): Promise<boolean> {
+  const memberId = await currentMemberId(sb);
+  if (memberId == null) return false;
   const { count } = await sb
     .from("availability")
     .select("*", { count: "exact", head: true })
-    .eq("meeting_id", prepMeetingId);
+    .eq("meeting_id", prepMeetingId)
+    .eq("member_id", memberId);
   return (count ?? 0) > 0;
 }
 

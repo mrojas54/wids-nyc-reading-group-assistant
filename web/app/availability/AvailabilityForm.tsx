@@ -23,6 +23,8 @@ export function AvailabilityForm({
 
   const count = days.length;
   const dayWord = count === 1 ? "day" : "days";
+  const isEditing = initialDays.length > 0;
+  const submitLabel = isEditing ? "Update availability" : "Submit availability";
 
   return (
     <div className="availability-form">
@@ -43,7 +45,7 @@ export function AvailabilityForm({
           disabled={pending || count === 0}
           variant="primary"
         >
-          {pending ? "Saving…" : count === 0 ? "Choose dates" : "Submit availability"}
+          {pending ? "Saving…" : count === 0 ? "Choose dates" : submitLabel}
         </Button>
       </div>
     </div>

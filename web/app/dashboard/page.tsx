@@ -86,6 +86,7 @@ export default async function DashboardPage() {
           meeting={meeting}
           myRsvp={rsvp}
           availabilityStatus={availabilityStatus}
+          prepMeetingId={prepMeeting?.id ?? null}
         />
 
         {meeting?.companion_url && (

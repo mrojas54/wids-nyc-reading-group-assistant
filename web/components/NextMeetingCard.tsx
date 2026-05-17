@@ -11,15 +11,27 @@ const TYPE_LABEL: Record<NextMeeting["type"], string> = {
 
 export type AvailabilityStatus = "needed" | "submitted" | null;
 
+/**
+ * Build the /availability link, scoping to a specific prep meeting when known.
+ * The portal accepts ?meeting=<id> so the dashboard can deep-link a member
+ * back to the form for the paper they originally submitted against.
+ */
+export function availabilityHref(prepMeetingId: number | null | undefined): string {
+  return prepMeetingId ? `/availability?meeting=${prepMeetingId}` : "/availability";
+}
+
 export function NextMeetingCard({
   meeting,
   myRsvp,
   availabilityStatus = null,
+  prepMeetingId = null,
 }: {
   meeting: NextMeeting | null;
   myRsvp: RsvpStatus | null;
   /** Folds the availability prompt INTO the hero as a secondary CTA. */
   availabilityStatus?: AvailabilityStatus;
+  /** Prep meeting id used to scope the /availability link to a specific paper. */
+  prepMeetingId?: number | null;
 }) {
   if (!meeting) {
     return (
@@ -73,7 +85,10 @@ export function NextMeetingCard({
       )}
 
       {availabilityStatus === "needed" && (
-        <Link href="/availability" className="hero-nudge">
+        <Link
+          href={availabilityHref(prepMeetingId)}
+          className="hero-nudge"
+        >
           <span className="nudge-text">
             <b>We&rsquo;re scheduling the next meeting.</b>
             <br />
@@ -82,7 +97,20 @@ export function NextMeetingCard({
           <Icon name="chevronRight" size={16} className="nudge-arrow" />
         </Link>
       )}
-      {availabilityStatus === "submitted" && (
+      {availabilityStatus === "submitted" && prepMeetingId && (
+        <Link
+          href={availabilityHref(prepMeetingId)}
+          className="hero-nudge confirmed"
+        >
+          <span className="nudge-text">
+            <b>Thanks — got your dates.</b>
+            <br />
+            <span className="nudge-sub">Tap to change availability</span>
+          </span>
+          <Icon name="chevronRight" size={16} className="nudge-arrow" />
+        </Link>
+      )}
+      {availabilityStatus === "submitted" && !prepMeetingId && (
         <div className="hero-nudge confirmed">
           <span className="nudge-text">
             <b>Thanks — got your dates.</b>
