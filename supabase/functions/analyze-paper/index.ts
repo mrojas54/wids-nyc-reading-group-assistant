@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
 
       await sse.stage("persisting");
 
-      // Atomic UPSERT via the upsert_paper_companion RPC (migration 015).
+      // Atomic UPSERT via the upsert_paper_companion RPC (migration 016).
       // Single SQL statement → regeneration_count and payload move together
       // by Postgres semantics (spec §13.6).
       const { error: upErr } = await sbSvc.rpc("upsert_paper_companion", {

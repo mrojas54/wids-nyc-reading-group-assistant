@@ -32,7 +32,7 @@ export async function currentMemberId(sb: SupabaseClient): Promise<number | null
 
 /**
  * Returns the caller's role via the current_member_role SECURITY DEFINER
- * RPC (migration 016). The RPC reads `members.role` with definer rights,
+ * RPC (migration 017). The RPC reads `members.role` with definer rights,
  * so this works even if the `members` SELECT policy is tightened to
  * exclude the `role` column from regular authenticated reads.
  *

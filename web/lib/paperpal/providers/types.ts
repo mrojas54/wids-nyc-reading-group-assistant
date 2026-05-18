@@ -14,7 +14,7 @@ import type { ResearchPaperAnalysisParsed } from "./schema";
 export type Provider = "gemini" | "claude";
 
 // Wider set persisted in paper_companions.provider (matches the SQL
-// CHECK constraint in migration 015). 'manual' represents rows written
+// CHECK constraint in migration 016). 'manual' represents rows written
 // by the now-deprecated /wids-make-companion flow, before in-portal
 // synthesis existed. Read-only — never passed to the dispatch helpers.
 export type StoredProvider = Provider | "manual";
