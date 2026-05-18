@@ -7,9 +7,10 @@
 -- Schema notes vs. spec §6:
 --   - generated_at, model, generated_by already exist on paper_companions
 --     (migration 013). They are NOT re-added here.
---   - The spec writes generated_by_member_id; we reuse the existing
---     `generated_by` column (also bigint REFERENCES members) for the same
---     intent. Edge Function SQL in §13.6 reads from `generated_by`.
+--   - The spec writes `generated_by_member_id`; we reuse the existing
+--     `generated_by` column (int REFERENCES members) for the same intent.
+--     The upsert_paper_companion RPC below + the Edge Function pass
+--     `p_generated_by`, which maps to the existing column.
 BEGIN;
 
 -- Step 1: add `provider` with 'manual' as the historical-truth default.
@@ -75,9 +76,12 @@ CREATE POLICY paper_socratic_turns_block_member_insert ON paper_socratic_turns
 --
 -- The Edge Function MUST call this rather than two separate statements
 -- (insert + increment) so a crash mid-write can't desync
--- regeneration_count from payload. SECURITY DEFINER because Edge Function
--- already uses the service role — definer drop is here for future RPC
--- callers that might run with weaker grants.
+-- regeneration_count from payload. SECURITY DEFINER is here for FUTURE
+-- callers (e.g., a server-side Next.js route that uses the anon key +
+-- user JWT) so they can upsert without needing direct INSERT/UPDATE
+-- grants on paper_companions. The current caller is the Edge Function
+-- using the service role, which bypasses RLS and grants entirely — for
+-- it, SECURITY DEFINER is a no-op but a safe one.
 CREATE OR REPLACE FUNCTION upsert_paper_companion(
   p_paper_id     int,
   p_payload      jsonb,

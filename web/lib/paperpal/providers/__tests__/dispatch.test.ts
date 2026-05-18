@@ -93,9 +93,16 @@ describe("synthesizePaper", () => {
 
   it("routes to Claude and parses the structured payload", async () => {
     let receivedAuth = "";
+    let documentSourceType = "";
     server.use(
-      http.post(CLAUDE_URL, ({ request }) => {
+      http.get(PDF_URL, () => HttpResponse.arrayBuffer(FAKE_PDF.buffer)),
+      http.post(CLAUDE_URL, async ({ request }) => {
         receivedAuth = request.headers.get("x-api-key") ?? "";
+        const body = await request.json() as {
+          messages: Array<{ content: Array<{ type: string; source?: { type: string } }> }>;
+        };
+        documentSourceType = body.messages[0].content.find((c) => c.type === "document")
+          ?.source?.type ?? "";
         return HttpResponse.json({
           content: [{ type: "text", text: JSON.stringify(validPayload) }],
           usage: { input_tokens: 100, output_tokens: 50 },
@@ -111,10 +118,14 @@ describe("synthesizePaper", () => {
     expect(result.meta.provider).toBe("claude");
     expect(result.meta.model).toBe("claude-sonnet-4-7");
     expect(receivedAuth).toBe("test-claude-key");
+    // Regression guard for the 60s-signed-URL-race fix — Claude must
+    // receive the PDF as base64, NOT as a {type:"url"} reference.
+    expect(documentSourceType).toBe("base64");
   });
 
   it("rejects when the provider returns JSON that fails schema validation", async () => {
     server.use(
+      http.get(PDF_URL, () => HttpResponse.arrayBuffer(FAKE_PDF.buffer)),
       http.post(CLAUDE_URL, () =>
         HttpResponse.json({
           content: [{ type: "text", text: JSON.stringify({ title: "" }) }],

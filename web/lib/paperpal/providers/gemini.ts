@@ -6,6 +6,8 @@
 // fetch + a typed response shape is ~20 lines and works everywhere.
 import { researchPaperAnalysisSchema } from "./schema";
 import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts";
+import { parseProviderJson } from "./parse";
+import { fetchPdfAsBase64 } from "./pdf";
 import type {
   HintInput,
   HintResult,
@@ -98,11 +100,7 @@ export async function geminiSynthesize(
   // Storage URLs return application/pdf with a query-string token that
   // Gemini's fetcher doesn't always accept; base64 inline is reliable
   // up to its ~20 MB request cap and our PDFs are ~5 MB.
-  const pdfBytes = await fetch(input.pdfUrl).then((r) => {
-    if (!r.ok) throw new Error(`pdf fetch ${r.status}`);
-    return r.arrayBuffer();
-  });
-  const pdfB64 = arrayBufferToBase64(pdfBytes);
+  const pdfB64 = await fetchPdfAsBase64(input.pdfUrl);
   const prompt = buildSynthesisPrompt({ paperTitle: input.paperTitle });
   const { text, meta } = await callGemini(
     [
@@ -111,7 +109,9 @@ export async function geminiSynthesize(
     ],
     { apiKey, model },
   );
-  const parsed = researchPaperAnalysisSchema.parse(JSON.parse(text));
+  const parsed = researchPaperAnalysisSchema.parse(
+    parseProviderJson(text, "geminiSynthesize"),
+  );
   return { payload: parsed, meta };
 }
 
@@ -122,7 +122,7 @@ export async function geminiHint(input: HintInput, opts: SynthesizeOpts): Promis
     apiKey,
     model,
   });
-  const obj = JSON.parse(text) as { hint?: string; confidence?: string };
+  const obj = parseProviderJson<{ hint?: string; confidence?: string }>(text, "geminiHint");
   if (!obj.hint) throw new Error("gemini hint missing 'hint' field");
   return {
     hint: obj.hint,
@@ -143,22 +143,11 @@ export async function geminiSocratic(
     apiKey,
     model,
   });
-  const obj = JSON.parse(text) as { nextQuestion?: string; summary?: string };
+  const obj = parseProviderJson<{ nextQuestion?: string; summary?: string }>(
+    text,
+    "geminiSocratic",
+  );
   if (!obj.nextQuestion) throw new Error("gemini socratic missing 'nextQuestion'");
   return { nextQuestion: obj.nextQuestion, summary: obj.summary, meta };
 }
 
-function arrayBufferToBase64(buf: ArrayBuffer): string {
-  // btoa works in both Node 18+ and Deno. For binary, we chunk to avoid
-  // "Maximum call stack size exceeded" on multi-MB PDFs.
-  const bytes = new Uint8Array(buf);
-  const chunkSize = 0x8000;
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const sub = bytes.subarray(i, i + chunkSize);
-    // String.fromCharCode.apply avoids spreading the typed array, which
-    // requires --downlevelIteration in the web tsconfig (ES2017 target).
-    binary += String.fromCharCode.apply(null, Array.from(sub) as number[]);
-  }
-  return btoa(binary);
-}

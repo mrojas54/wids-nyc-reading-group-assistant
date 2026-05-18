@@ -50,10 +50,25 @@ BEGIN
 END;
 $$;
 
--- Match the privilege model of current_member_id() (migration 004):
--- restrict to authenticated callers. The Edge Function uses the service
--- role client which bypasses this grant entirely.
+-- Restrict to authenticated callers only — unauthenticated roles can't
+-- learn whether a member can synthesize a paper. Service-role bypasses
+-- this grant entirely.
 REVOKE EXECUTE ON FUNCTION public.can_synthesize_paper_pal(int) FROM PUBLIC, anon;
 GRANT  EXECUTE ON FUNCTION public.can_synthesize_paper_pal(int) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- current_member_role: returns the caller's role string, or NULL if
+-- unauthenticated / no member row. SECURITY DEFINER so callers don't
+-- depend on whatever RLS the `members` table happens to have at the
+-- moment — a tightened SELECT policy on `members.role` would otherwise
+-- silently break the admin-override path in analyze-paper.
+CREATE OR REPLACE FUNCTION current_member_role()
+RETURNS text
+LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = 'public' AS $$
+  SELECT role FROM members WHERE id = current_member_id();
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.current_member_role() FROM PUBLIC, anon;
+GRANT  EXECUTE ON FUNCTION public.current_member_role() TO authenticated;
 
 COMMIT;

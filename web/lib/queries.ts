@@ -133,10 +133,12 @@ export type HistoryItem = {
   companion_url: string | null;
 };
 
-export type SynthesisGate = {
-  canSynthesize: boolean;
-  reason: "owner" | "leader" | "none";
-};
+// Discriminated union — makes the illegal state
+// `{canSynthesize: true, reason: "none"}` a compile error and frees
+// callers from having to defensively check both fields independently.
+export type SynthesisGate =
+  | { canSynthesize: true; reason: "owner" | "leader" }
+  | { canSynthesize: false; reason: "none" };
 
 /**
  * Paper Pal synthesis gate. Returns canSynthesize=true when the caller is
@@ -158,11 +160,11 @@ export async function canSynthesizePaperPal(
     p_paper_id: paperId,
   });
   if (error || !data) return { canSynthesize: false, reason: "none" };
-  const row = data as { canSynthesize?: boolean; reason?: SynthesisGate["reason"] };
-  return {
-    canSynthesize: Boolean(row.canSynthesize),
-    reason: (row.reason ?? "none") as SynthesisGate["reason"],
-  };
+  const row = data as { canSynthesize?: boolean; reason?: string };
+  if (row.canSynthesize === true && (row.reason === "owner" || row.reason === "leader")) {
+    return { canSynthesize: true, reason: row.reason };
+  }
+  return { canSynthesize: false, reason: "none" };
 }
 
 export type PaperCatalogRow = {

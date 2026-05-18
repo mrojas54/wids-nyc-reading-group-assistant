@@ -13,6 +13,7 @@
 // env shim in gemini.ts / claude.ts handles process.env vs Deno.env.
 import { geminiSynthesize, geminiHint, geminiSocratic } from "./gemini";
 import { claudeSynthesize, claudeHint, claudeSocratic } from "./claude";
+import { isProvider } from "./types";
 import type {
   HintInput,
   HintResult,
@@ -24,7 +25,13 @@ import type {
   SynthesizePaperResult,
 } from "./types";
 
-export type { Provider, ProviderMeta, SynthesizePaperResult } from "./types";
+export type {
+  Provider,
+  StoredProvider,
+  ProviderMeta,
+  SynthesizePaperResult,
+} from "./types";
+export { isProvider, isStoredProvider } from "./types";
 export { researchPaperAnalysisSchema } from "./schema";
 
 function unknownProvider(p: string): never {
@@ -57,12 +64,19 @@ export async function nextSocraticTurn(
 
 // Helper for callers that want to honor the env default + admin override
 // rule from spec §13.5 without re-implementing the precedence each time.
+//
+// Precedence: bodyProvider (admin-only) → envDefault → "gemini".
+//
+// We deliberately fall back to "gemini" rather than throwing on unknown
+// values because the env default of `undefined` is a normal config state
+// for prod (it just means "use the built-in default"). Bad-string inputs
+// are silently coerced; a bad bodyProvider from an admin is on the admin
+// to debug.
 export function resolveProvider(opts: {
   envDefault: string | undefined;
   bodyProvider?: string;
   callerIsAdmin: boolean;
 }): Provider {
   const requested = opts.callerIsAdmin && opts.bodyProvider ? opts.bodyProvider : opts.envDefault;
-  if (requested === "gemini" || requested === "claude") return requested;
-  return "gemini";
+  return isProvider(requested) ? requested : "gemini";
 }
