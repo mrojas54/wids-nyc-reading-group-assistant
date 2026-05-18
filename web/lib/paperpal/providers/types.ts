@@ -1,7 +1,13 @@
 // Shared types for the provider abstraction.
 // Kept in a separate file so Deno Edge Functions can import just the
 // types without pulling in the heavier zod schema + provider impls.
-import type { ResearchPaperAnalysis } from "../types";
+//
+// We use ResearchPaperAnalysisParsed (z.infer of the zod schema) as the
+// authoritative shape for provider results — this way, drift between
+// the schema and the legacy ResearchPaperAnalysis interface in
+// web/lib/paperpal/types.ts surfaces as a tsc error rather than a
+// silent runtime mismatch.
+import type { ResearchPaperAnalysisParsed } from "./schema";
 
 // Providers that can actually be invoked for a fresh synthesis. Tracks
 // the set the dispatch helpers in index.ts know how to route.
@@ -44,7 +50,7 @@ export type SynthesizePaperInput = {
 };
 
 export type SynthesizePaperResult = {
-  payload: ResearchPaperAnalysis;
+  payload: ResearchPaperAnalysisParsed;
   meta: ProviderMeta;
 };
 

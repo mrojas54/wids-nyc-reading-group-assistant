@@ -126,8 +126,12 @@ Deno.serve(async (req) => {
     });
     if (insErr) {
       // Don't fail the user-facing response over a transcript log miss —
-      // log to stderr and still return the next question.
-      console.error("[analyze-socratic] transcript insert failed", insErr.message);
+      // log to stderr and still return the next question. Pass the full
+      // error object (not just .message) so on-call can distinguish a
+      // constraint violation (duplicate turn_number) from an RLS deny
+      // from a network timeout — only the full object carries `code`,
+      // `details`, and `hint`.
+      console.error("[analyze-socratic] transcript insert failed:", insErr);
     }
 
     return jsonResponse(origin, {
