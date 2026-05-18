@@ -5,8 +5,13 @@ import { useMemo, useState } from "react";
 type Props = {
   initialSelected: string[];
   onChange: (days: string[]) => void;
-  /** Days from today inclusive. Default 30. */
-  windowDays?: number;
+  /**
+   * Last selectable day, inclusive. Defaults to the last day of NEXT month
+   * (today's remaining days + all of the following month). A fixed day-count
+   * window felt too short near month boundaries — a monthly reading group
+   * cadence wants "the rest of this month and all of next month" semantics.
+   */
+  horizonEnd?: Date;
   /** Inject a stable "today" for tests/snapshots. */
   today?: Date;
 };
@@ -34,22 +39,32 @@ function daysInMonth(year: number, month: number): number {
 }
 
 /**
- * Month-grouped calendar (1-2 months) showing a `windowDays`-day horizon.
- * Days outside the horizon (past or beyond) render as `.dis`. Today gets the
- * sage-ring + sage-dot. Selected days flip to magenta.
+ * Last day of the month AFTER `from`. JS Date day=0 of month M+1 yields the
+ * last day of month M, so day=0 of month+2 yields the last day of month+1.
+ * Handles December rollover via the Date constructor's month normalization.
+ */
+export function endOfNextMonth(from: Date): Date {
+  return new Date(from.getFullYear(), from.getMonth() + 2, 0);
+}
+
+/**
+ * Month-grouped calendar (1-2 months) showing today → `horizonEnd` inclusive.
+ * Default horizon is the last day of NEXT month so members near a month
+ * boundary can still pick dates well into the following month. Days outside
+ * the horizon (past or beyond) render as `.dis`. Today gets the sage-ring +
+ * sage-dot. Selected days flip to magenta.
  */
 export function MonthCalendar({
   initialSelected,
   onChange,
-  windowDays = 30,
+  horizonEnd: horizonEndProp,
   today: todayProp,
 }: Props) {
   const today = useMemo(() => startOfDay(todayProp ?? new Date()), [todayProp]);
-  const horizonEnd = useMemo(() => {
-    const d = new Date(today);
-    d.setDate(today.getDate() + windowDays);
-    return d;
-  }, [today, windowDays]);
+  const horizonEnd = useMemo(
+    () => startOfDay(horizonEndProp ?? endOfNextMonth(today)),
+    [today, horizonEndProp],
+  );
 
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(initialSelected),
