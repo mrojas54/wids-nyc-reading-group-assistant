@@ -1,11 +1,8 @@
 import { UnauthorizedError, ForbiddenError } from "@/lib/suggest/types";
 
-// Allowed roles for /admin/* routes. Today the schema's role CHECK constraint
-// only permits 'member' and 'operator' (see migrations/001_initial_schema.sql),
-// so the only role that can actually pass this gate is 'operator' — i.e., the
-// operator (Michelle) using her own session. The set is forward-compatible:
-// if a future migration expands the role enum to include 'leader' and 'admin'
-// (matching the original design intent), no code change is needed here.
+// Allowed roles for /admin/* routes. migrations/014_members_role_leader_admin.sql
+// widens members.role to include 'leader' and 'admin'; the original operator
+// role remains allowed for owner/admin workflows.
 const ALLOWED_ROLES = new Set(["operator", "leader", "admin"] as const);
 type AllowedRole = "operator" | "leader" | "admin";
 

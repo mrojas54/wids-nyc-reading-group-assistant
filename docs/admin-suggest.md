@@ -24,9 +24,10 @@ ever read and returns a ranked list, balancing two signals:
 - **Diversity** — among candidates that are roughly equally relevant,
   prefer ones that aren't redundant with each other.
 
-You see results in 2–30 seconds, depending on whether the system has
+You usually see results in 2–30 seconds, depending on whether the system has
 to compute embeddings from scratch (cold cache) or just ranks vectors
-that are already cached.
+that are already cached. Very cold SPECTER2 starts can run longer, up to
+the timeout budget described below.
 
 ---
 
@@ -34,9 +35,9 @@ that are already cached.
 
 ### What you'll see
 
-After logging in to the member site, leaders and admins see a "Find a
+After logging in to the member site, operators, leaders, and admins see a "Find a
 paper" link in the dashboard. (If you don't see it, your account isn't
-flagged as `leader` or `admin` in the `members` table — ask the
+flagged as `operator`, `leader`, or `admin` in the `members` table — ask the
 operator to bump your role.)
 
 The form has three inputs:
@@ -109,10 +110,14 @@ The diagnostics line tells you *why* it took as long as it did:
   warm means the same Vercel serverless instance had loaded it in a
   recent request and skipped that cost.
 
-If the request times out (after 30 s) or hits an error, you'll see a
-red error message rather than the ranked list. Common causes:
-- "Timed out after 30 s" → cold start was unusually slow. Just retry —
-  the second request is warm.
+If the request times out or hits an error, you'll see a red error
+message rather than the ranked list. The server has a 55-second
+cooperative timeout inside a 60-second Vercel function budget; the
+browser aborts at 60 seconds so it can still receive the server's JSON
+504 when possible. Common causes:
+- "Timed out after 60 s" or a JSON `{"error":"timeout"}` response →
+  cold start or local WASM inference was unusually slow. Just retry —
+  the second request is often warm.
 - "Semantic Scholar is unavailable" → S2 is having a bad day. Wait a
   bit. The system will try the local fallback automatically, so this
   only fires if BOTH S2 and the local model failed.
@@ -141,7 +146,10 @@ Vercel Node Function (a single serverless container)
     ▼ Compute MMR ranking → JSON response
 ```
 
-The whole pipeline is wrapped in a 30-second timeout.
+The whole pipeline is wrapped in a 55-second server timeout and a
+60-second client abort. The split is deliberate: the server needs to
+finish under Vercel's 60-second `maxDuration` so it can return a clean
+504 JSON body instead of being killed by the platform.
 
 ### Why "embeddings" at all
 
@@ -201,7 +209,7 @@ A few decisions worth understanding:
 | Single embedding space (`model='specter_v2'`) for both S2 and WASM | Adapter-fused ONNX matches S2's vectors closely enough; mixing them in one pgvector column is safe |
 | Vectors cached forever in Supabase | A paper's embedding never changes (model is frozen), so re-fetching is wasted |
 | WASM model loaded lazily (singleton promise) | All-cache-hit requests skip the 5–15s load entirely |
-| 30 s client timeout, 60 s function timeout | Client-visible deadline + server cleanup headroom |
+| 55 s server timeout, 60 s client/function budget | Lets the route return a clean JSON 504 before Vercel's hard kill while still giving cold SPECTER2 starts room to finish |
 | Auth check happens BEFORE any DB or S2 access | Don't leak DB queries to logged-out users |
 | Failed cache writes don't break the request | Cache is a perf optimization, not a correctness gate |
 

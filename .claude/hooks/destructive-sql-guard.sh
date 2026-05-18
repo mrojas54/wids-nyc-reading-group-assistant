@@ -4,8 +4,8 @@
 # PreToolUse hook — blocks destructive SQL targeting production tables
 # until the operator has given explicit confirmation in chat.
 #
-# Implements the policy from CLAUDE.md ("Destructive operations require
-# explicit confirmation"). Added 2026-05-17 after a DELETE FROM
+# Implements the README policy ("Destructive SQL guard": destructive
+# operations require explicit confirmation). Added 2026-05-17 after a DELETE FROM
 # availability WHERE meeting_id = 6 ran on inferred (not explicit)
 # authorization.
 #
@@ -64,7 +64,7 @@ if echo "$QUERY_STRIPPED" | grep -iEq "$DESTRUCTIVE_RE"; then
 The statement targets a production table (members, meetings, papers,
 availability, or command_log).
 
-Per CLAUDE.md "Destructive operations require explicit confirmation":
+Per README.md "Destructive SQL guard":
 
   1. Surface the EXACT statement to the user in chat
   2. Run a SELECT preview showing which rows would be affected

@@ -1,6 +1,6 @@
 # Scheduled tasks
 
-Each `.md` file in this directory is a standalone prompt to register with the scheduled-tasks MCP. They run daily and are independent — failures of one don't block others.
+Each non-deprecated `.md` file in this directory is a standalone prompt to register with the scheduled-tasks MCP. They run daily and are independent — failures of one don't block others.
 
 ## Registration
 
@@ -26,8 +26,11 @@ Doesn't matter — they're independent. But a sensible order is:
 3. `pre-meeting-reminder`
 4. `cycle-keep-alive`
 5. `availability-chase`
-6. `leader-nudge`
-7. `post-meeting-thanks`
+6. `post-meeting-thanks`
+
+Do **not** register `leader-nudge`. It is deprecated and superseded by the
+Paper Pal companion flow; leaving it unregistered matches the root
+[README](../README.md#5-scheduled-tasks-mcp).
 
 ## Observability
 

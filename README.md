@@ -23,14 +23,24 @@ Before running `/wids-bootstrap`, the operator must:
 ### 1. Supabase project
 - Sign up at https://supabase.com (free tier).
 - Create a new project (note the project URL and `service_role` key).
-- Apply the migrations in order:
+- Apply the migrations in order. Historical hand-applied files live in `migrations/`; newer Supabase CLI files live in `supabase/migrations/`. A production project needs both sets:
   - `migrations/001_initial_schema.sql` — base tables. Paste into SQL Editor and run, or use Supabase MCP `apply_migration`.
   - `migrations/002_member_app.sql` — auth linkage, RLS policies for portal tables, `companion_url` column, `current_member_id()` helper.
   - `migrations/003_rls_policies.sql` — RLS policies for `topics`, `paper_topics`, `paper_suggestions`, `volunteers`. Browser (anon-key + session) reads via these.
   - `migrations/004_function_grants.sql` — restricts `current_member_id()` RPC to authenticated callers only.
   - `migrations/005_revoke_rls_auto_enable.sql` — hides the `rls_auto_enable()` event-trigger function from PostgREST.
+  - `migrations/006_members_phone.sql` — validates nullable `members.phone` / `members.whatsapp` values as E.164.
+  - `migrations/007_members_select_grant.sql` — grants authenticated reads on `members` so portal server actions can resolve the signed-in member row.
+  - `migrations/008_meeting_attendance_grants.sql` — pins authenticated grants for RSVP reads/writes and the attendance sequence.
+  - `migrations/009_papers_zotero_item_key.sql` — stores the Zotero group-library item key after companion pushes.
+  - `migrations/010_paper_embeddings.sql` — enables `pgvector` and creates the `paper_embeddings` cache used by paper suggestion ranking.
+  - `migrations/011_papers_s2_paper_id.sql` — adds `papers.s2_paper_id` for Semantic Scholar lookups.
+  - `migrations/012_papers_s2_paper_id_constraint.sql` — replaces the partial S2 ID index with a full unique constraint for Supabase upserts.
+  - `migrations/014_members_role_leader_admin.sql` — widens `members.role` to `member | operator | leader | admin`; `operator` remains unique, `leader` / `admin` are uncapped.
+  - `supabase/migrations/20260518040000_015_availability_created_at.sql` — adds `availability.created_at` plus `(meeting_id, created_at)` index for reminder-chase queries. Existing rows are backfilled with migration time, not their true historical submission time.
+  - Note: the current repository has no `013` migration file; apply the files that exist in the order shown.
 - Verify 10 base tables exist: `members, topics, papers, paper_topics, meetings, volunteers, availability, meeting_attendance, paper_suggestions, command_log`.
-- Verify migration 002 added `members.auth_user_id`, `papers.companion_url`, the `current_member_id()` function, and 10 RLS policies.
+- Verify portal columns and helpers exist: `members.auth_user_id`, `members.role` accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`, `availability.created_at`, the `current_member_id()` function, and 10 RLS policies.
 
 #### Note: `ensure_rls` event trigger
 This project's database has a custom event trigger named `ensure_rls` (function: `public.rls_auto_enable()`, owner: `postgres`) that auto-runs `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` on every new table created in the `public` schema. It was added out-of-band (not in any migration in this repo) and is intentionally kept as a defense-in-depth guardrail. **Implication for new tables:** RLS will be on automatically — your migration must add policies, or the table will be invisible to the browser (anon/authenticated). `command_log` is the one accepted exception (service-role-only, no browser access needed).
@@ -47,13 +57,26 @@ Configure these MCPs in your Claude Code settings:
 - **Gmail MCP** (already connected for most users) — for sending emails and creating drafts.
 - **Calendar MCP** (already connected for most users) — for creating Meet/in-person events.
 
+#### Destructive SQL guard
+
+This repo installs a Claude Code `PreToolUse` hook at [.claude/hooks/destructive-sql-guard.sh](.claude/hooks/destructive-sql-guard.sh), wired by [.claude/settings.json](.claude/settings.json). It inspects Bash commands and MCP SQL calls matching `mcp__.*__execute_sql` / `mcp__.*__apply_migration`.
+
+The guard blocks `DELETE`, `TRUNCATE`, and `DROP TABLE` / `DROP COLUMN` statements against production tables `members`, `meetings`, `papers`, `availability`, and `command_log` until the operator gives explicit confirmation for the exact statement. The safe workflow is:
+
+1. Paste the exact destructive SQL into chat.
+2. Run a `SELECT` preview showing the rows or objects that would be affected.
+3. Wait for an explicit affirmative (`yes`, `confirm`, or `proceed`) on that exact command.
+4. Re-run the destructive statement.
+
+Context such as "reset the cycle" or "I told members" is not enough. This README section is the policy Claude Code should follow.
+
 ### 4. Custom skill
 The operator must have a `reading-group-guide` skill installed. The make-guide command invokes this skill; if it's not installed, `/wids-make-guide` will halt.
 
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
-Currently deployed (5): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, plus `availability-chase`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+Currently deployed (6): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, and `availability-chase`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
 
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.
@@ -144,7 +167,8 @@ Opens http://localhost:3000. See [web/README.md](web/README.md).
 ## Repository layout
 
 ```
-migrations/          SQL migrations (apply in order)
+migrations/          Historical SQL migrations (apply in order)
+supabase/migrations/ Supabase CLI timestamped migrations
 .claude/commands/    Operator slash commands (markdown)
 scheduled_tasks/     Scheduled background task specs (markdown)
 docs/                Specs and plans
