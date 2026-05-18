@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { Brandmark, Icon } from "@/components/ui";
 import { AvailabilityForm } from "./AvailabilityForm";
@@ -12,27 +13,40 @@ export default async function AvailabilityPage({
 }) {
   const sb = createSupabaseServerClient();
 
-  const requestedId = Number(searchParams?.meeting);
-  const requested =
-    Number.isInteger(requestedId) && requestedId > 0
-      ? await sb
-          .from("meetings")
-          .select("id, type, status")
-          .eq("id", requestedId)
-          .eq("status", "prep")
-          .maybeSingle()
-          .then((r) => r.data)
-      : null;
+  // Resolution rule:
+  // - `?meeting=<id>` provided → must resolve to a prep meeting, else 404.
+  //   Don't silently redirect to "latest prep" when the user asked for a
+  //   specific meeting — that would let an old email link to a now-scheduled
+  //   meeting drop the user into the wrong paper's availability form.
+  // - No `?meeting` param → fall back to the latest prep meeting (legacy
+  //   behavior, used by the dashboard's "needed" CTA before per-meeting
+  //   routing existed).
+  const rawParam = searchParams?.meeting;
+  const hasParam = typeof rawParam === "string" && rawParam.length > 0;
 
-  const prep =
-    requested ??
-    (await sb
+  let prep: { id: number; type?: string } | null = null;
+
+  if (hasParam) {
+    const requestedId = Number(rawParam);
+    if (!Number.isInteger(requestedId) || requestedId <= 0) notFound();
+    const { data: requested } = await sb
+      .from("meetings")
+      .select("id, type, status")
+      .eq("id", requestedId)
+      .eq("status", "prep")
+      .maybeSingle();
+    if (!requested) notFound();
+    prep = requested;
+  } else {
+    const { data: latestPrep } = await sb
       .from("meetings")
       .select("id, type")
       .eq("status", "prep")
       .order("created_at", { ascending: false })
       .limit(1)
-      .maybeSingle()).data;
+      .maybeSingle();
+    prep = latestPrep;
+  }
 
   if (!prep) {
     return (
