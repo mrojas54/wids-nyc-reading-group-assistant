@@ -45,7 +45,11 @@ export async function getMemberRole(
 ): Promise<string | null> {
   const { data, error } = await sb.rpc("current_member_role");
   if (error) {
-    console.error("[gate] current_member_role RPC failed:", error.message);
+    // Log the full error object — PostgREST `code` field is what tells
+    // on-call apart from "function missing" (PGRST202, e.g., migration
+    // 016 not applied) vs auth timeout vs network. `.message` alone
+    // is not enough.
+    console.error("[gate] current_member_role RPC failed:", error);
     return null;
   }
   return (data as string | null) ?? null;
@@ -72,11 +76,14 @@ export async function canRequestHint(
     .eq("meetings.paper_id", paperId)
     .limit(1);
   if (error) {
-    // Surface the error so a DB issue (RLS regression, network) doesn't
-    // present to the user as a 403 "not_attending" — caller still gets
-    // false here, but the on-call signal exists in logs.
+    // Surface the DB error as a thrown exception so the caller (the
+    // analyze-hint / analyze-socratic handlers) can emit a 502 instead
+    // of a misleading 403 "not_attending_meeting_for_paper" — the user
+    // is in fact attending; the DB just didn't answer. The handler's
+    // outer try/catch already maps thrown errors to 502 provider_failed,
+    // which is closer to the truth than a forged authorization denial.
     console.error("[gate] canRequestHint attendance query failed:", error);
-    return false;
+    throw new Error(`canRequestHint DB error: ${error.message}`);
   }
   return (data?.length ?? 0) > 0;
 }

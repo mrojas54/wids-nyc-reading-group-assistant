@@ -84,7 +84,16 @@ Deno.serve(async (req) => {
   const memberId = await currentMemberId(sbAuth);
   if (memberId == null) return errorResponse(origin, 401, "no_member");
 
-  const allowed = await canRequestHint(sbAuth, paperId, memberId);
+  // See analyze-hint for the throw-vs-false rationale — a DB error here
+  // should give the user a "retry later" (502) signal, not a misleading
+  // 403 forged from a query failure.
+  let allowed: boolean;
+  try {
+    allowed = await canRequestHint(sbAuth, paperId, memberId);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return errorResponse(origin, 502, "gate_check_failed", { detail: message });
+  }
   if (!allowed) return errorResponse(origin, 403, "not_attending_meeting_for_paper");
 
   const { data: paperRow } = await sbAuth
