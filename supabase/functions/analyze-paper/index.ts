@@ -29,44 +29,14 @@ import {
   resolveProvider,
   synthesizePaper,
 } from "../../../web/lib/paperpal/providers/index.ts";
+import {
+  parseAnalyzePaperBody,
+  type AnalyzePaperBody,
+} from "../../../web/lib/paperpal/edge_helpers/parse_body.ts";
+import { cooldownMs } from "../../../web/lib/paperpal/edge_helpers/rate_limit.ts";
 
 const BUCKET = "papers-pdfs";
-const DEFAULT_COOLDOWN_SEC = 300;
 const SIGNED_URL_TTL_SEC = 60;
-
-type Body = {
-  paper_id?: unknown;
-  pdf_storage_path?: unknown;
-  provider?: unknown;
-};
-
-function parseBody(body: Body): { paperId: number; pdfPath: string; provider?: string } | string {
-  const paperId = typeof body.paper_id === "number" ? body.paper_id : NaN;
-  if (!Number.isInteger(paperId) || paperId <= 0) return "paper_id must be a positive integer";
-
-  const pdfPath = typeof body.pdf_storage_path === "string" ? body.pdf_storage_path : "";
-  if (!pdfPath) return "pdf_storage_path is required";
-  // Reject any percent-encoded path before further checks. Supabase
-  // Storage decodes percent sequences server-side, so `42/%2e%2e/43/...`
-  // would slip past the `..` check below and let a caller with write
-  // access to paper 42's folder mint a signed URL for paper 43.
-  if (pdfPath.includes("%")) return "pdf_storage_path may not contain percent-encoded characters";
-  // Path must start with `<paper_id>/` — prevents a caller from synthesizing
-  // paper 42 using a PDF uploaded under paper 7's folder (spec §13.4).
-  if (!pdfPath.startsWith(`${paperId}/`)) {
-    return `pdf_storage_path must start with "${paperId}/"`;
-  }
-  if (pdfPath.includes("..")) return "pdf_storage_path may not contain '..'";
-
-  const provider = typeof body.provider === "string" ? body.provider : undefined;
-  return { paperId, pdfPath, provider };
-}
-
-function cooldownMs(): number {
-  const raw = Deno.env.get("PAPER_PAL_REGEN_COOLDOWN_SEC");
-  const parsed = raw ? parseInt(raw, 10) : NaN;
-  return (Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_COOLDOWN_SEC) * 1000;
-}
 
 Deno.serve(async (req) => {
   const preflight = handlePreflight(req);
@@ -80,20 +50,19 @@ Deno.serve(async (req) => {
   const jwt = extractBearer(req);
   if (!jwt) return errorResponse(origin, 401, "missing_bearer_token");
 
-  let body: Body;
+  let body: AnalyzePaperBody;
   try {
-    body = (await req.json()) as Body;
+    body = (await req.json()) as AnalyzePaperBody;
   } catch (_e) {
     return errorResponse(origin, 400, "invalid_json");
   }
-  const parsed = parseBody(body);
+  const parsed = parseAnalyzePaperBody(body);
   if (typeof parsed === "string") return errorResponse(origin, 400, parsed);
   const { paperId, pdfPath, provider: bodyProvider } = parsed;
 
   const sbAuth = authClient(jwt);
   const sbSvc = serviceClient();
 
-  // Auth gate — caller must satisfy can_synthesize_paper_pal.
   const gate = await canSynthesizePaperPal(sbAuth, paperId);
   if (!gate.canSynthesize) return errorResponse(origin, 403, "forbidden", gate);
 
@@ -117,7 +86,7 @@ Deno.serve(async (req) => {
   }
   if (existing?.last_synthesis_at) {
     const elapsedMs = Date.now() - new Date(existing.last_synthesis_at).getTime();
-    const window = cooldownMs();
+    const window = cooldownMs(Deno.env.get("PAPER_PAL_REGEN_COOLDOWN_SEC"));
     if (window > 0 && elapsedMs < window) {
       const retryAfter = Math.ceil((window - elapsedMs) / 1000);
       return new Response(
@@ -151,7 +120,6 @@ Deno.serve(async (req) => {
     return errorResponse(origin, 404, "pdf_not_found", { detail: signErr?.message });
   }
 
-  // ---- Stream from here on ----
   const sse = startSseResponse(origin);
 
   // Run in the background so the Response can return immediately.

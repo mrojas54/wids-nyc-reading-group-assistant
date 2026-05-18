@@ -87,7 +87,10 @@ describe("synthesizePaper", () => {
     expect(result.meta.provider).toBe("gemini");
     expect(result.meta.inputTokens).toBe(10);
     expect(result.payload.title).toBe("T");
-    expect(receivedUrl).toContain("gemini-2.5-pro:generateContent");
+    // Verify Gemini was actually called (not Claude) and the API key
+    // was forwarded. Deliberately NOT asserting the model string in the
+    // URL — that would force a test edit on every routine model bump.
+    expect(receivedUrl).toContain(GEMINI_HOST);
     expect(receivedUrl).toContain("key=test-gemini-key");
   });
 

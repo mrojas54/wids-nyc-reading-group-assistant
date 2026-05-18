@@ -20,59 +20,63 @@ log what they WOULD delete without touching the bucket. After the
 operator confirms one clean dry run, flip the env var to `false` (PR2's
 deploy step does this).
 
-## Step 1 — Check threshold
+## Step 1 — Enumerate every PDF (flat list with full paths)
+
+Bucket paths are `<paper_id>/<uuid>.pdf` (spec §8), so `list("")` only
+returns top-level folder entries. We do a two-level walk and accumulate
+a flat `allFiles` list with full paths + sizes, then sort by `created_at`
+so the oldest comes first:
 
 ```js
 const bucket = "papers-pdfs";
-const { data: objects, error } = await sbSvc.storage.from(bucket).list("", {
+const { data: folders, error } = await sbSvc.storage.from(bucket).list("", {
   limit: 10000,
-  sortBy: { column: "created_at", order: "asc" },
+  sortBy: { column: "name", order: "asc" },
 });
 if (error) throw new Error(`storage list failed: ${error.message}`);
 
-const totalBytes = (objects ?? []).reduce(
-  (sum, o) => sum + (o.metadata?.size ?? 0),
-  0,
-);
+const allFiles = [];
+for (const folder of folders ?? []) {
+  // Real files have an id; folder placeholders have id === null. Skip
+  // any stray top-level files (none expected, but harmless).
+  if (folder.id !== null) continue;
+  const { data: inner, error: innerErr } = await sbSvc.storage
+    .from(bucket)
+    .list(folder.name, {
+      limit: 1000,
+      sortBy: { column: "created_at", order: "asc" },
+    });
+  if (innerErr) throw new Error(`list ${folder.name} failed: ${innerErr.message}`);
+  for (const file of inner ?? []) {
+    allFiles.push({
+      path: `${folder.name}/${file.name}`,
+      size: file.metadata?.size ?? 0,
+      created_at: file.created_at,
+    });
+  }
+}
+allFiles.sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? ""));
+
+const totalBytes = allFiles.reduce((sum, f) => sum + f.size, 0);
 const THRESHOLD_BYTES = 500 * 1024 * 1024;  // 500 MB
-const FLOOR_BYTES = 450 * 1024 * 1024;       // delete down to here
+const FLOOR_BYTES     = 450 * 1024 * 1024;  // delete down to here
 ```
 
 If `totalBytes < THRESHOLD_BYTES`, log a `noop` row and exit (see Step 4).
 
 ## Step 2 — Pick deletion candidates
 
-Walk `objects` from oldest forward, accumulating until the projected
+Walk `allFiles` from oldest forward, accumulating until projected
 remaining-after-delete drops below `FLOOR_BYTES`:
 
 ```js
 const candidates = [];
 let remaining = totalBytes;
-for (const o of objects) {
+for (const f of allFiles) {
   if (remaining <= FLOOR_BYTES) break;
-  candidates.push(o);
-  remaining -= o.metadata?.size ?? 0;
+  candidates.push(f);
+  remaining -= f.size;
 }
-```
-
-Recursive directory listing: if the bucket uses `<paper_id>/<uuid>.pdf`
-paths (it does — see spec §8), `list("")` only returns top-level folder
-entries. List each folder explicitly to enumerate PDFs:
-
-```js
-const allFiles = [];
-for (const folder of objects) {
-  if (!folder.id) {  // null id means it's a folder placeholder
-    const { data: inner } = await sbSvc.storage.from(bucket).list(folder.name, {
-      limit: 1000,
-      sortBy: { column: "created_at", order: "asc" },
-    });
-    for (const file of inner ?? []) {
-      allFiles.push({ path: `${folder.name}/${file.name}`, ...file });
-    }
-  }
-}
-// Sort the flat list by created_at, then apply Step 2 logic.
 ```
 
 ## Step 3 — Delete (or log in dry-run)
