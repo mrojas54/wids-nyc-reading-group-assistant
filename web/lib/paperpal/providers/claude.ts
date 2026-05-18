@@ -6,6 +6,8 @@
 // paper hit the cache for ~90% input-token cost savings.
 import { researchPaperAnalysisSchema } from "./schema";
 import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts";
+import { parseProviderJson } from "./parse";
+import { fetchPdfAsBase64 } from "./pdf";
 import type {
   HintInput,
   HintResult,
@@ -22,8 +24,7 @@ const ENDPOINT = "https://api.anthropic.com/v1/messages";
 
 type ClaudeContentBlock =
   | { type: "text"; text: string; cache_control?: { type: "ephemeral" } }
-  | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
-  | { type: "document"; source: { type: "url"; url: string } };
+  | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } };
 
 type ClaudeResponse = {
   content?: Array<{ type: string; text?: string }>;
@@ -92,18 +93,26 @@ export async function claudeSynthesize(
 ): Promise<SynthesizePaperResult> {
   const apiKey = requireApiKey();
   const model = opts.model ?? DEFAULT_MODEL;
-  // Claude accepts PDFs as a URL-source document up to 32MB; signed
-  // Supabase URLs work directly here, so we skip the base64 download
-  // hop the Gemini path needs.
+  // Download the PDF ourselves and pass it inline as base64. Anthropic's
+  // url-source document fetcher runs server-side and can race past the
+  // 60s signed-URL TTL when their API is queued; base64 consumes the
+  // signed URL immediately so expiry can't bite us. Cost is one extra
+  // hop on our side (~5MB transfer).
+  const pdfB64 = await fetchPdfAsBase64(input.pdfUrl);
   const userPrompt = buildSynthesisPrompt({ paperTitle: input.paperTitle });
   const { text, meta } = await callClaude(
     [
-      { type: "document", source: { type: "url", url: input.pdfUrl } },
+      {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: pdfB64 },
+      },
       { type: "text", text: userPrompt },
     ],
     { apiKey, model, maxTokens: 16000, system: SYSTEM_PROMPT },
   );
-  const parsed = researchPaperAnalysisSchema.parse(JSON.parse(text));
+  const parsed = researchPaperAnalysisSchema.parse(
+    parseProviderJson(text, "claudeSynthesize"),
+  );
   return { payload: parsed, meta };
 }
 
@@ -114,7 +123,7 @@ export async function claudeHint(input: HintInput, opts: SynthesizeOpts): Promis
     [{ type: "text", text: buildHintPrompt(input) }],
     { apiKey, model, maxTokens: 512, system: SYSTEM_PROMPT },
   );
-  const obj = JSON.parse(text) as { hint?: string; confidence?: string };
+  const obj = parseProviderJson<{ hint?: string; confidence?: string }>(text, "claudeHint");
   if (!obj.hint) throw new Error("claude hint missing 'hint' field");
   return {
     hint: obj.hint,
@@ -135,7 +144,10 @@ export async function claudeSocratic(
     [{ type: "text", text: buildSocraticPrompt(input) }],
     { apiKey, model, maxTokens: 1024, system: SYSTEM_PROMPT },
   );
-  const obj = JSON.parse(text) as { nextQuestion?: string; summary?: string };
+  const obj = parseProviderJson<{ nextQuestion?: string; summary?: string }>(
+    text,
+    "claudeSocratic",
+  );
   if (!obj.nextQuestion) throw new Error("claude socratic missing 'nextQuestion'");
   return { nextQuestion: obj.nextQuestion, summary: obj.summary, meta };
 }

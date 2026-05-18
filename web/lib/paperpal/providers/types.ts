@@ -3,7 +3,23 @@
 // types without pulling in the heavier zod schema + provider impls.
 import type { ResearchPaperAnalysis } from "../types";
 
+// Providers that can actually be invoked for a fresh synthesis. Tracks
+// the set the dispatch helpers in index.ts know how to route.
 export type Provider = "gemini" | "claude";
+
+// Wider set persisted in paper_companions.provider (matches the SQL
+// CHECK constraint in migration 015). 'manual' represents rows written
+// by the now-deprecated /wids-make-companion flow, before in-portal
+// synthesis existed. Read-only — never passed to the dispatch helpers.
+export type StoredProvider = Provider | "manual";
+
+export function isProvider(v: unknown): v is Provider {
+  return v === "gemini" || v === "claude";
+}
+
+export function isStoredProvider(v: unknown): v is StoredProvider {
+  return isProvider(v) || v === "manual";
+}
 
 export type ProviderMeta = {
   provider: Provider;
@@ -22,7 +38,8 @@ export type SynthesizePaperInput = {
   // path the caller supplied. NEVER the caller-supplied URL directly —
   // see spec §13.4 (SSRF prevention).
   pdfUrl: string;
-  // Hint-only; the provider may still pull title from the PDF itself.
+  // Optional prompt hint for when PDF metadata is garbled or missing.
+  // The provider may still extract the title from the PDF itself.
   paperTitle?: string;
 };
 

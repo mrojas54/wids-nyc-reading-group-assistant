@@ -46,6 +46,11 @@ function parseBody(body: Body): { paperId: number; pdfPath: string; provider?: s
 
   const pdfPath = typeof body.pdf_storage_path === "string" ? body.pdf_storage_path : "";
   if (!pdfPath) return "pdf_storage_path is required";
+  // Reject any percent-encoded path before further checks. Supabase
+  // Storage decodes percent sequences server-side, so `42/%2e%2e/43/...`
+  // would slip past the `..` check below and let a caller with write
+  // access to paper 42's folder mint a signed URL for paper 43.
+  if (pdfPath.includes("%")) return "pdf_storage_path may not contain percent-encoded characters";
   // Path must start with `<paper_id>/` — prevents a caller from synthesizing
   // paper 42 using a PDF uploaded under paper 7's folder (spec §13.4).
   if (!pdfPath.startsWith(`${paperId}/`)) {
@@ -98,11 +103,18 @@ Deno.serve(async (req) => {
   // Rate-limit pre-check (read-only). The race window between this check
   // and the UPSERT is acceptable: even if two requests slip through, the
   // UPSERT is idempotent — second one just overwrites first.
-  const { data: existing } = await sbSvc
+  const { data: existing, error: existingErr } = await sbSvc
     .from("paper_companions")
     .select("last_synthesis_at")
     .eq("paper_id", paperId)
     .maybeSingle();
+  if (existingErr) {
+    // A failure here would silently bypass the cooldown. Log loudly and
+    // continue — the spec treats rate-limiting as advisory cost-control,
+    // not a hard correctness boundary, so a one-off bypass is preferable
+    // to refusing all synthesis while paper_companions is unreadable.
+    console.error("[analyze-paper] rate-limit pre-check failed:", existingErr);
+  }
   if (existing?.last_synthesis_at) {
     const elapsedMs = Date.now() - new Date(existing.last_synthesis_at).getTime();
     const window = cooldownMs();

@@ -2,11 +2,11 @@
 //
 // Two clients per request, deliberately separated:
 //   - authClient: built from the caller's JWT (Authorization: Bearer ...).
-//     Respects RLS. Used for the auth gate via the can_synthesize_paper_pal
-//     RPC — that RPC is SECURITY DEFINER, but going through the authed
-//     client preserves auth.uid() so current_member_id() resolves correctly.
+//     Respects RLS. Used for all caller-identity queries (the gate RPC,
+//     role lookups, attendance checks) so that auth.uid() resolves to the
+//     calling member inside each query and RLS policies fire normally.
 //   - serviceClient: built from SUPABASE_SERVICE_ROLE_KEY. Bypasses RLS.
-//     Used for the side-effect writes (UPSERT paper_companions, INSERT
+//     Used for side-effect writes (UPSERT paper_companions, INSERT
 //     paper_socratic_turns) — these need to write even when the caller
 //     can't directly write the row (RLS blocks member-context inserts).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";

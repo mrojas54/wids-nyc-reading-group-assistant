@@ -51,8 +51,14 @@ export function startSseResponse(origin: string | null): SseEmitter {
     if (!controller) return;
     try {
       controller.enqueue(frame(event, data));
-    } catch (_e) {
-      // Client disconnected; downstream catches the abort.
+    } catch (e) {
+      // Most commonly: client disconnected and the stream closed under us.
+      // Log at warn level (not silent) so a genuine runtime/infra failure
+      // — e.g., Supabase proxy killing the stream early — is visible in
+      // logs. Remaining write attempts on this emitter become no-ops; the
+      // background synthesis IIFE still runs to completion.
+      const reason = e instanceof Error ? e.message : String(e);
+      console.warn("[sse] enqueue failed, marking emitter closed:", reason);
       controller = null;
     }
   }
