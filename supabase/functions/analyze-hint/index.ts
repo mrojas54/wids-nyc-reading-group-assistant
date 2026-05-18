@@ -58,7 +58,17 @@ Deno.serve(async (req) => {
   const memberId = await currentMemberId(sb);
   if (memberId == null) return errorResponse(origin, 401, "no_member");
 
-  const allowed = await canRequestHint(sb, paperId, memberId);
+  // canRequestHint throws on DB error (vs. returning false on legitimate
+  // not-attending) so we can distinguish "you're not in this meeting"
+  // (403) from "we couldn't tell" (502). The user-facing distinction
+  // matters: 403 is final, 502 is "retry later."
+  let allowed: boolean;
+  try {
+    allowed = await canRequestHint(sb, paperId, memberId);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return errorResponse(origin, 502, "gate_check_failed", { detail: message });
+  }
   if (!allowed) return errorResponse(origin, 403, "not_attending_meeting_for_paper");
 
   // Title hint for the prompt — best-effort.
