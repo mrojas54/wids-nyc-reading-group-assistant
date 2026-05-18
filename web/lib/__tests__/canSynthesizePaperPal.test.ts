@@ -1,5 +1,5 @@
 // Unit tests for the Node-side canSynthesizePaperPal wrapper.
-// The actual gate logic lives in the SQL function (migration 016);
+// The actual gate logic lives in the SQL function (migration 017);
 // here we just verify the wrapper translates the RPC return shape
 // correctly and is safe on error / null data.
 import { describe, it, expect, vi } from "vitest";

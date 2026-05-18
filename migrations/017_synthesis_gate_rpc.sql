@@ -1,4 +1,6 @@
--- migrations/016_synthesis_gate_rpc.sql
+-- migrations/017_synthesis_gate_rpc.sql
+-- (Originally numbered 016; renumbered to 017 alongside the 015→016 bump.)
+--
 -- can_synthesize_paper_pal: single source of truth for the Paper Pal
 -- synthesis gate, callable from both Node (web/lib/queries.ts) and Deno
 -- (supabase/functions/analyze-paper). Replaces the two-query implementation

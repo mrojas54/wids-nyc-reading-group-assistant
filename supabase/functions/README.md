@@ -11,7 +11,7 @@ assessment workflow specified in
 | `analyze-socratic` | POST (JSON) | Next turn in a Socratic conversation | §4.3 |
 
 All three require a Supabase JWT in `Authorization: Bearer ...`. The auth
-gate is centralized in the `can_synthesize_paper_pal` RPC (migration 016)
+gate is centralized in the `can_synthesize_paper_pal` RPC (migration 017)
 so Node and Deno enforce the same rules.
 
 ## Layout

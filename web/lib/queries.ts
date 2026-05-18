@@ -144,7 +144,7 @@ export type SynthesisGate =
  * unauthenticated callers get { canSynthesize: false, reason: "none" }.
  *
  * Thin wrapper over the can_synthesize_paper_pal SECURITY DEFINER RPC
- * (migration 016), so the gate logic stays identical across Node and the
+ * (migration 017), so the gate logic stays identical across Node and the
  * Deno Edge Functions.
  *
  * See docs/superpowers/specs/2026-05-17-paper-pal-edge-functions.md §7.

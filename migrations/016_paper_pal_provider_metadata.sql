@@ -1,4 +1,7 @@
--- migrations/015_paper_pal_provider_metadata.sql
+-- migrations/016_paper_pal_provider_metadata.sql
+-- (Originally numbered 015; renumbered to 016 when version 015 was claimed
+-- out-of-band by 015_availability_created_at.)
+--
 -- Adds provider/rate-limit/telemetry columns to paper_companions, and
 -- creates paper_socratic_turns for analyze-socratic transcript history.
 --
