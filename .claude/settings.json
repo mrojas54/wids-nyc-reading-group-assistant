@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|mcp__f593e869-1d39-4295-a673-56bc3be4d701__execute_sql|mcp__f593e869-1d39-4295-a673-56bc3be4d701__apply_migration",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/destructive-sql-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
