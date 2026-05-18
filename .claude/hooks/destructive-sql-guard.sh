@@ -9,7 +9,18 @@
 # availability WHERE meeting_id = 6 ran on inferred (not explicit)
 # authorization.
 #
-# Matches: Bash + mcp__f593e869-*__execute_sql + mcp__f593e869-*__apply_migration
+# Matcher in .claude/settings.json:
+#   Bash|mcp__.*__execute_sql|mcp__.*__apply_migration
+#
+# The "mcp__.*__" wildcard is deliberate. Each Claude Code installation
+# generates its own UUID per MCP server, so a hardcoded UUID like
+# "mcp__f593e869-1d39-4295-a673-56bc3be4d701__execute_sql" would silently
+# fail to match for any contributor whose Supabase MCP got a different UUID
+# (i.e. anyone other than the person who first wrote the hook). The wildcard
+# matches the Supabase MCP regardless of which UUID it was assigned on a
+# given machine, and incidentally also catches any future Postgres / SQLite
+# / etc. MCP that exposes execute_sql or apply_migration.
+#
 # Protected tables: members, meetings, papers, availability, command_log
 # Blocks (case-insensitive):
 #   - DELETE FROM <protected-table>

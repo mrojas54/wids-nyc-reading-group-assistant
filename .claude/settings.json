@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|mcp__f593e869-1d39-4295-a673-56bc3be4d701__execute_sql|mcp__f593e869-1d39-4295-a673-56bc3be4d701__apply_migration",
+        "matcher": "Bash|mcp__.*__execute_sql|mcp__.*__apply_migration",
         "hooks": [
           {
             "type": "command",
