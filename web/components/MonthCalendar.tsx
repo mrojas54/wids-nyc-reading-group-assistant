@@ -48,6 +48,50 @@ export function endOfNextMonth(from: Date): Date {
 }
 
 /**
+ * Parse a "YYYY-MM-DD" key into a local-midnight Date. Matches isoDay's
+ * encoding: zero-padded year/month/day in local time, no timezone shift.
+ */
+export function parseLocalDay(key: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  return new Date(Number(y), Number(mo) - 1, Number(d));
+}
+
+/**
+ * Filter pre-fill keys down to those inside [today, horizonEnd] inclusive.
+ *
+ * Why this exists: pre-fill comes from DB rows that may include dates
+ * outside the current selectable window — stale rows from a previous cycle,
+ * test seed data, or rows whose dates have since rolled into the past. The
+ * calendar renders such dates as disabled cells, so a user CAN'T deselect
+ * them via UI, yet they remain in the selection Set and inflate the "N
+ * days selected" counter. Pruning at intake means the count matches what's
+ * visible, and the next submit naturally cleans up the stale rows.
+ */
+export function pruneToWindow(
+  keys: readonly string[],
+  today: Date,
+  horizonEnd: Date,
+): string[] {
+  const lo = today.getTime();
+  const hi = horizonEnd.getTime();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const key of keys) {
+    if (seen.has(key)) continue;
+    const date = parseLocalDay(key);
+    if (!date) continue;
+    const t = date.getTime();
+    if (t >= lo && t <= hi) {
+      seen.add(key);
+      out.push(key);
+    }
+  }
+  return out;
+}
+
+/**
  * Month-grouped calendar (1-2 months) showing today → `horizonEnd` inclusive.
  * Default horizon is the last day of NEXT month so members near a month
  * boundary can still pick dates well into the following month. Days outside
@@ -66,8 +110,10 @@ export function MonthCalendar({
     [today, horizonEndProp],
   );
 
+  // Prune pre-fill at mount so stale rows (past dates, out-of-window) don't
+  // sit as invisible Set entries the user can't deselect. See pruneToWindow.
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(initialSelected),
+    () => new Set(pruneToWindow(initialSelected, today, horizonEnd)),
   );
 
   // Render the current month and (if the horizon spills) the next month.
