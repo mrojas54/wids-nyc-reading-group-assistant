@@ -133,10 +133,12 @@ export type HistoryItem = {
   companion_url: string | null;
 };
 
-export type SynthesisGate = {
-  canSynthesize: boolean;
-  reason: "owner" | "leader" | "none";
-};
+// Discriminated union — makes the illegal state
+// `{canSynthesize: true, reason: "none"}` a compile error and frees
+// callers from having to defensively check both fields independently.
+export type SynthesisGate =
+  | { canSynthesize: true; reason: "owner" | "leader" }
+  | { canSynthesize: false; reason: "none" };
 
 /**
  * Paper Pal synthesis gate. Returns canSynthesize=true when the caller is
@@ -144,32 +146,24 @@ export type SynthesisGate = {
  * that uses this paper. Safe to call on the public /papers/<id> route —
  * unauthenticated callers get { canSynthesize: false, reason: "none" }.
  *
- * See docs/superpowers/specs/2026-05-17-paper-pal-design.md §3.
+ * Thin wrapper over the can_synthesize_paper_pal SECURITY DEFINER RPC
+ * (migration 017), so the gate logic stays identical across Node and the
+ * Deno Edge Functions.
+ *
+ * See docs/superpowers/specs/2026-05-17-paper-pal-edge-functions.md §7.
  */
 export async function canSynthesizePaperPal(
   sb: SupabaseClient,
   paperId: number,
 ): Promise<SynthesisGate> {
-  const memberId = await currentMemberId(sb);
-  if (memberId == null) return { canSynthesize: false, reason: "none" };
-
-  const { data: member } = await sb
-    .from("members")
-    .select("role")
-    .eq("id", memberId)
-    .maybeSingle();
-
-  if (member?.role === "operator" || member?.role === "admin") {
-    return { canSynthesize: true, reason: "owner" };
+  const { data, error } = await sb.rpc("can_synthesize_paper_pal", {
+    p_paper_id: paperId,
+  });
+  if (error || !data) return { canSynthesize: false, reason: "none" };
+  const row = data as { canSynthesize?: boolean; reason?: string };
+  if (row.canSynthesize === true && (row.reason === "owner" || row.reason === "leader")) {
+    return { canSynthesize: true, reason: row.reason };
   }
-
-  const { count } = await sb
-    .from("meetings")
-    .select("*", { count: "exact", head: true })
-    .eq("paper_id", paperId)
-    .eq("leader_id", memberId);
-
-  if ((count ?? 0) > 0) return { canSynthesize: true, reason: "leader" };
   return { canSynthesize: false, reason: "none" };
 }
 
