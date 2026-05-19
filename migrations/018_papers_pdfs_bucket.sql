@@ -1,4 +1,4 @@
--- migrations/017_papers_pdfs_bucket.sql
+-- migrations/018_papers_pdfs_bucket.sql
 -- Creates the papers-pdfs Storage bucket and the INSERT RLS policy used
 -- by the in-portal /new flow. Synthesis-eligible callers (operator/admin
 -- or the paper's meeting leader) can upload to <paper_id>/<uuid>.pdf;
@@ -6,13 +6,15 @@
 --
 -- Spec: docs/superpowers/specs/2026-05-17-paper-pal-edge-functions.md §8
 -- Plan: docs/superpowers/plans/2026-05-18-paper-pal-pr2-implementation.md
---       Slice 1
+--       Slice 1 (renumbered from 017 → 018 after migrations 015→016 /
+--       016→017 renumber on origin/claude/paper-pal-edge-functions-pr1)
 --
 -- Tested by: tests/papers_pdfs_bucket_rls_test.sql
 --
 -- Schema notes:
 --   - papers.id is INT (migration 001), so the path-prefix cast is ::int.
---   - can_synthesize_paper_pal(int) lives in migration 016.
+--   - can_synthesize_paper_pal(int) lives in migration 017
+--     (was migration 016 prior to the post-#52 renumber).
 --   - Object path convention is "<paper_id>/<uuid>.pdf" (spec §13.4); the
 --     Edge Function also asserts this prefix when minting its signed URL.
 BEGIN;
