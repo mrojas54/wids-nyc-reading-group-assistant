@@ -121,6 +121,37 @@ This task is safe to re-run: a subsequent invocation re-lists the bucket
 and re-evaluates the threshold. There's no per-meeting key to dedupe
 against because the bucket-level state IS the only state.
 
+## Dry-run → live cutover (PR2 ops step)
+
+This task ships with `PAPER_PAL_PRUNE_DRY_RUN=true` so the first weekly
+runs only log what they WOULD delete. The flip to live behavior is a
+post-merge ops step on PR2, not a code change:
+
+1. **Wait one Sunday 02:00 UTC cycle** after PR1 deploys. The first run
+   logs a `noop` (bucket is well under 500 MB at launch) — that's the
+   expected ground state.
+2. **Inspect the next dry-run with a real candidate set** (only matters
+   after we've crossed 500 MB; for early operation, skip to step 4):
+   ```sql
+   SELECT created_at, name, summary
+   FROM command_log
+   WHERE name = 'wids-prune-paper-pdfs'
+   ORDER BY created_at DESC LIMIT 5;
+   ```
+   The `[dry-run] would delete N files:` line lands in the Supabase
+   Function logs for that invocation. Confirm the paths look right
+   (oldest first, no surprise paper_ids, count under ~30).
+3. **Flip the secret:**
+   ```bash
+   supabase secrets set PAPER_PAL_PRUNE_DRY_RUN=false
+   ```
+4. **Update this file** with the cutover date + commit hash so future
+   readers can audit when the safety rail came down.
+
+If a live run ever surfaces a delete candidate count > 30, re-set the
+secret to `true` until the cause is understood — the threshold is the
+"this looks weird, hold off" guardrail in spec §11 Q1.
+
 ## Operational notes
 
 - The 500 MB threshold + Supabase 1 GB free-tier cap leaves a 500 MB
