@@ -94,9 +94,9 @@ export async function getWantToLead(
   const { data } = await sb
     .from("paper_suggestions")
     .select(
-      "id, created_at, note, suggested_by, suggester:suggested_by(name), paper:paper_id(id, title, authors, venue, companion_url)",
+      "id, suggested_at, notes, suggested_by, suggester:suggested_by(name), paper:paper_id(id, title, authors, venue, companion_url)",
     )
-    .order("created_at", { ascending: false });
+    .order("suggested_at", { ascending: false });
 
   const rows = (data ?? []).filter((r: any) => r.paper);
   if (rows.length === 0) return [];
@@ -113,8 +113,8 @@ export async function getWantToLead(
     .filter((r: any) => !assigned.has(r.paper.id))
     .map((r: any) => ({
       suggestion_id: r.id,
-      suggested_at: r.created_at ?? null,
-      note: r.note ?? null,
+      suggested_at: r.suggested_at ?? null,
+      note: r.notes ?? null,
       suggested_by_id: r.suggested_by ?? null,
       suggested_by_name: r.suggester?.name ?? null,
       paper: mapPaper(r.paper)!,
