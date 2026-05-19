@@ -20,7 +20,7 @@ TOP-LEVEL FIELDS (all required unless marked optional):
 - mathExplanations: MathExplanation[]  (may be empty if no equations)
 - diagrams: DiagramBreakdown[]
 - codeSamples?: CodeSample[]
-- learningResources: LearningResource[]
+- learningResources?: LearningResource[]  (OPTIONAL — see note below)
 - keyTakeaways: string[]  (3–7 entries)
 - assessmentQuiz: AssessmentQuiz
 - socraticPrompts?: SocraticPrompt[]  (2–4 recommended)
@@ -72,11 +72,15 @@ CodeSample {
 
 LearningResource {
   title: string;
-  url: string;                                              // real, accessible URL — no inventions
+  url: string;                                              // MUST be a real URL you are confident exists
   category: "foundational" | "survey" | "tutorial" | "course";  // pick ONE
   type: "video" | "article" | "book" | "interactive";       // pick ONE
   description: string;
 }
+IMPORTANT: learningResources is OPTIONAL. If you cannot confidently cite real,
+accessible URLs (e.g. canonical papers, well-known blog posts, official docs),
+OMIT the field entirely or return an empty array []. DO NOT invent or guess URLs.
+A missing field is correct; a fabricated URL is a bug.
 
 AssessmentQuiz {
   title: string;          // REQUIRED, e.g. "Comprehension check"
@@ -107,6 +111,7 @@ GLOBAL CONSTRAINTS:
   node labels (they break the renderer); keep node ids alphanumeric.
 - Enum fields must use EXACTLY one of the listed values, lowercase, no synonyms.
 - learningResources URLs must be real, accessible pages — no inventions.
+  When in doubt, omit the field. An empty/missing array is correct.
 
 Output JSON only.`;
 
