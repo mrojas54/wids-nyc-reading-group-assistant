@@ -114,8 +114,7 @@ export function SocraticMode({
     });
     setHintsUsed(hintsUsed + 1);
     setPulse(false);
-    // SocraticPrompt has no sectionRef; we still surface a generic flag if topic id maps.
-    // Skip recordHint when no SectionRef is available.
+    if (prompt.sectionRef) recordHint(paperId, prompt.sectionRef, "socratic");
   };
 
   const wrapUp = (override = false) => {

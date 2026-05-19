@@ -31,7 +31,36 @@ export type InboxSuggestion = {
   paper: InboxPaper;
 };
 
-function mapPaper(p: any): InboxPaper | null {
+// Row shapes for the joins below. PostgREST returns single-row foreign-key
+// joins as the row itself (not an array) when the FK is non-multivalued.
+type PaperRow = {
+  id: number;
+  title: string | null;
+  authors: string[] | string | null;
+  venue: string | null;
+  companion_url: string | null;
+};
+
+type MeetingRow = {
+  id: number;
+  status: string;
+  scheduled_at: string | null;
+  location: string | null;
+  leader_id: number | null;
+  leader: { name: string | null } | null;
+  paper: PaperRow | null;
+};
+
+type SuggestionRow = {
+  id: number;
+  created_at: string | null;
+  note: string | null;
+  suggested_by: number | null;
+  suggester: { name: string | null } | null;
+  paper: PaperRow | null;
+};
+
+function mapPaper(p: PaperRow | null | undefined): InboxPaper | null {
   if (!p) return null;
   return {
     id: p.id,
@@ -42,7 +71,7 @@ function mapPaper(p: any): InboxPaper | null {
   };
 }
 
-function mapMeeting(m: any): InboxMeeting {
+function mapMeeting(m: MeetingRow): InboxMeeting {
   return {
     meeting_id: m.id,
     scheduled_at: m.scheduled_at ?? null,
@@ -69,7 +98,7 @@ export async function getCurrentReading(
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  return data ? mapMeeting(data) : null;
+  return data ? mapMeeting(data as unknown as MeetingRow) : null;
 }
 
 export async function getUpcomingPicks(
@@ -83,7 +112,7 @@ export async function getUpcomingPicks(
     .gt("scheduled_at", nowIso)
     .not("leader_id", "is", null)
     .order("scheduled_at", { ascending: true });
-  return (data ?? []).map(mapMeeting);
+  return ((data ?? []) as unknown as MeetingRow[]).map(mapMeeting);
 }
 
 export async function getWantToLead(
@@ -98,20 +127,24 @@ export async function getWantToLead(
     )
     .order("created_at", { ascending: false });
 
-  const rows = (data ?? []).filter((r: any) => r.paper);
+  const rows = ((data ?? []) as unknown as SuggestionRow[]).filter(
+    (r): r is SuggestionRow & { paper: PaperRow } => r.paper != null,
+  );
   if (rows.length === 0) return [];
 
-  const paperIds = Array.from(new Set(rows.map((r: any) => r.paper.id)));
+  const paperIds = Array.from(new Set(rows.map((r) => r.paper.id)));
   const { data: ledMeetings } = await sb
     .from("meetings")
     .select("paper_id")
     .in("paper_id", paperIds)
     .not("leader_id", "is", null);
-  const assigned = new Set((ledMeetings ?? []).map((m: any) => m.paper_id));
+  const assigned = new Set(
+    ((ledMeetings ?? []) as { paper_id: number }[]).map((m) => m.paper_id),
+  );
 
   return rows
-    .filter((r: any) => !assigned.has(r.paper.id))
-    .map((r: any) => ({
+    .filter((r) => !assigned.has(r.paper.id))
+    .map((r) => ({
       suggestion_id: r.id,
       suggested_at: r.created_at ?? null,
       note: r.note ?? null,
@@ -132,7 +165,7 @@ export async function getRecentlyDiscussed(
     .or(`status.eq.done,and(status.neq.cancelled,scheduled_at.lt.${nowIso})`)
     .order("scheduled_at", { ascending: false })
     .limit(limit);
-  return (data ?? []).map(mapMeeting);
+  return ((data ?? []) as unknown as MeetingRow[]).map(mapMeeting);
 }
 
 export async function getInbox(sb: SupabaseClient) {

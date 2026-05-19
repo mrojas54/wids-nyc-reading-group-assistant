@@ -16,7 +16,7 @@ export default async function NewPaperPage({
 }) {
   const sb = createSupabaseServerClient();
   const { data: memberId } = await sb.rpc("current_member_id");
-  if (!memberId) redirect("/?next=/new");
+  if (!memberId) redirect("/");
 
   const { data: member } = await sb
     .from("members")
@@ -24,7 +24,10 @@ export default async function NewPaperPage({
     .eq("id", memberId)
     .maybeSingle();
 
-  const isOperator = member?.role === "operator";
+  // /new is operator+admin (no per-paper context to evaluate leadership).
+  // The /papers/[id] CTA route uses canSynthesizePaperPal which also
+  // includes leader-of-paper; the RLS policy in migration 015 matches.
+  const canGenerate = member?.role === "operator" || member?.role === "admin";
 
   return (
     <div className="min-h-screen bg-[var(--color-paper-50)] text-[var(--color-paper-800)]">
@@ -43,7 +46,7 @@ export default async function NewPaperPage({
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-12 space-y-6">
-        {!isOperator ? (
+        {!canGenerate ? (
           <p
             className="rounded-[var(--radius-lg)] border p-4"
             style={{
@@ -52,7 +55,10 @@ export default async function NewPaperPage({
               color: "var(--color-paper-700)",
             }}
           >
-            Only operators can add papers.
+            Only operators or admins can add papers from this screen. If you
+            were assigned as the leader for a specific paper, open
+            <code> /papers/&lt;id&gt; </code> instead — you&apos;ll see a
+            Generate companion button.
           </p>
         ) : (
           <>

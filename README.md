@@ -40,7 +40,7 @@ Before running `/wids-bootstrap`, the operator must:
   - `migrations/014_members_role_leader_admin.sql` — widens `members.role` to `member | operator | leader | admin`; `operator` remains unique, `leader` / `admin` are uncapped.
   - `migrations/015_paper_companions_role_widening.sql` — extends `paper_companions` write policies so admins (always) and leaders (for their assigned paper) can also insert/update.
   - `supabase/migrations/20260518040000_015_availability_created_at.sql` — adds `availability.created_at` plus `(meeting_id, created_at)` index for reminder-chase queries. Existing rows are backfilled with migration time, not their true historical submission time.
-  - Note: 013 / 014 / 015 are new in the Paper-Pal-replaces-companion branch; apply them in order.
+  - Note: 013 and 015 are new in the Paper-Pal-replaces-companion branch (companion payload table + role-widened RLS); 014 came in from PR #47 (role widening) and must be applied before 015 since 015's policies reference the `admin` and `leader` role values 014 introduces.
 - Verify 10 base tables exist: `members, topics, papers, paper_topics, meetings, volunteers, availability, meeting_attendance, paper_suggestions, command_log`.
 - Verify portal columns and helpers exist: `members.auth_user_id`, `members.role` accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`, `availability.created_at`, the `current_member_id()` function, and 10 RLS policies.
 

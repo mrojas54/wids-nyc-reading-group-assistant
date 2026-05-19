@@ -1,6 +1,12 @@
 // Domain types for the PaperPal synthesis dashboard.
 // Mirrors the Gemini companion payload stored in `paper_companions.payload`.
 // See design_handoff/architecture.md (Data model) for the source of truth.
+//
+// IMPORTANT: every type below MUST stay JSON-serializable. The payload
+// crosses the server -> client component boundary and is also stored as
+// jsonb in Postgres; functions, classes, dates, regexps, undefined values
+// inside objects, and Maps/Sets will silently break either the React
+// serializer or the DB write.
 
 export type Lens = "beginner" | "engineer" | "expert";
 export type SectionRef = "abstract" | "method" | "math" | "diagram";
@@ -75,6 +81,10 @@ export interface CodeSample {
 export interface SocraticPrompt {
   id: string;
   topic: string;
+  // Section this prompt drives at. When present, hints taken in the
+  // Socratic surface flow into useHintFlags() and surface the same
+  // "Wobbled · N" pill on the synthesis dashboard as MCQ hints.
+  sectionRef?: SectionRef;
   openingQuestion: string;
   goalInsight: string;
   scriptedProbes: string[];
