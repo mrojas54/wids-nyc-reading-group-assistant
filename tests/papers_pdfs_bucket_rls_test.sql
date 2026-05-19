@@ -1,7 +1,7 @@
 -- tests/papers_pdfs_bucket_rls_test.sql
 --
 -- Tests the RLS policy on storage.objects for the papers-pdfs bucket
--- introduced in migration 017_papers_pdfs_bucket.sql:
+-- introduced in migration 018_papers_pdfs_bucket.sql:
 --
 --   * Operator/admin can INSERT into <paper_id>/foo.pdf
 --   * Meeting leader for that paper can INSERT into <paper_id>/foo.pdf
@@ -10,12 +10,12 @@
 --   * INSERT to bucket root (no <paper_id>/ prefix) is REJECTED
 --
 -- Driven through the gate function can_synthesize_paper_pal(int) defined
--- in migration 016.
+-- in migration 017 (renumbered from 016 post-#52).
 --
 -- Run via:
 --   psql "$SUPABASE_DB_URL" -f tests/papers_pdfs_bucket_rls_test.sql
 --
--- Must be applied AFTER migrations 015, 016, 017. The entire test runs in
+-- Must be applied AFTER migrations 016, 017, 018. The entire test runs in
 -- one transaction and ROLLBACKs at the end, leaving no fixture data behind.
 --
 -- Authentication: simulated by setting request.jwt.claim.sub via
