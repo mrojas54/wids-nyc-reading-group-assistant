@@ -98,9 +98,17 @@ export function NewPaperForm({ paperId }: { paperId: number }) {
       pdf_storage_path: path,
     };
 
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      reset();
+      setError("Configuration error: Supabase URL is not set.");
+      return;
+    }
+    const fnUrl = `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/analyze-paper`;
+
     let res: Response;
     try {
-      res = await fetch("/functions/v1/analyze-paper", {
+      res = await fetch(fnUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

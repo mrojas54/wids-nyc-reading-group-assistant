@@ -44,14 +44,17 @@ vi.mock("@/lib/supabase/browser", () => ({
 
 // crypto.randomUUID is deterministic so we can assert the path.
 const RANDOM_UUID = "11111111-2222-3333-4444-555555555555";
+const SUPABASE_URL = "https://test.supabase.co";
 beforeEach(() => {
   vi.stubGlobal("crypto", { ...globalThis.crypto, randomUUID: () => RANDOM_UUID });
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE_URL);
   routerPush.mockReset();
   uploadResult = { data: { path: "ok" }, error: null };
   session = { access_token: "tok-1" };
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   cleanup();
 });
@@ -136,7 +139,7 @@ describe("NewPaperForm — submission paths", () => {
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/papers/42"));
     const call = fetchSpy.mock.calls[0];
-    expect(call[0]).toBe("/functions/v1/analyze-paper");
+    expect(call[0]).toBe(`${SUPABASE_URL}/functions/v1/analyze-paper`);
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body).toEqual({
       paper_id: 42,
