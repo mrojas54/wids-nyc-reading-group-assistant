@@ -4,10 +4,10 @@
 // Prompt caching is enabled on the system prompt via cache_control, per
 // the claude-api skill recommendation — synthesis re-runs on the same
 // paper hit the cache for ~90% input-token cost savings.
-import { researchPaperAnalysisSchema } from "./schema";
-import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts";
-import { parseProviderJson } from "./parse";
-import { fetchPdfAsBase64 } from "./pdf";
+import { researchPaperAnalysisSchema } from "./schema.ts";
+import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts.ts";
+import { parseProviderJson } from "./parse.ts";
+import { fetchPdfAsBase64 } from "./pdf.ts";
 import type {
   HintInput,
   HintResult,
@@ -17,7 +17,7 @@ import type {
   SynthesizeOpts,
   SynthesizePaperInput,
   SynthesizePaperResult,
-} from "./types";
+} from "./types.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-4-7";
 const ENDPOINT = "https://api.anthropic.com/v1/messages";

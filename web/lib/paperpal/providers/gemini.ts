@@ -4,10 +4,10 @@
 // Why not the Google SDK: it pulls a Node-only dependency tree (zlib,
 // streams) that fails to import in the Deno Edge Function runtime.
 // fetch + a typed response shape is ~20 lines and works everywhere.
-import { researchPaperAnalysisSchema } from "./schema";
-import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts";
-import { parseProviderJson } from "./parse";
-import { fetchPdfAsBase64 } from "./pdf";
+import { researchPaperAnalysisSchema } from "./schema.ts";
+import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts.ts";
+import { parseProviderJson } from "./parse.ts";
+import { fetchPdfAsBase64 } from "./pdf.ts";
 import type {
   HintInput,
   HintResult,
@@ -17,7 +17,7 @@ import type {
   SynthesizeOpts,
   SynthesizePaperInput,
   SynthesizePaperResult,
-} from "./types";
+} from "./types.ts";
 
 const DEFAULT_MODEL = "gemini-2.5-pro";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
