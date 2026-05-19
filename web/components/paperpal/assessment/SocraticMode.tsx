@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
 import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
+import { fetchSocratic } from "@/lib/paperpal/socratic";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
 import "./assessment.css";
 
 type Role = "tutor" | "learner";
@@ -53,6 +56,8 @@ export function SocraticMode({
 
   const [input, setInput] = useState("");
   const [pulse, setPulse] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
   // Seed opener once.
@@ -80,23 +85,79 @@ export function SocraticMode({
 
   const append = (msg: Message) => setThread([...thread, msg]);
 
-  const send = () => {
+  function buildHistory(): SocraticHistoryEntry[] {
+    return thread
+      .filter((m) => m.kind !== "hint" && m.kind !== "synthesis")
+      .map<SocraticHistoryEntry>((m) => ({
+        role: m.role === "tutor" ? "ai" : "user",
+        text: m.body,
+      }));
+  }
+
+  const send = async () => {
     const text = input.trim();
-    if (!text || synthesized) return;
+    if (!text || synthesized || sending) return;
     setInput("");
+    setNetworkError(null);
     const learnerMsg: Message = { role: "learner", body: text, ts: Date.now() };
-    const probeIdx = Math.min(
-      learnerTurns,
-      (prompt.scriptedProbes?.length ?? 1) - 1,
-    );
-    const probe =
-      prompt.scriptedProbes?.[probeIdx] ?? "Say more about that.";
+    setSending(true);
+    let probe: string | null = null;
+    let summaryOut: string | null = null;
+    try {
+      const sb = createSupabaseBrowserClient();
+      const { data } = await sb.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) throw new Error("not_signed_in");
+      const result = await fetchSocratic(
+        {
+          paperId: Number.parseInt(paperId, 10),
+          promptId: prompt.id,
+          promptTopic: prompt.topic,
+          openingQuestion: prompt.openingQuestion,
+          scriptedProbes: prompt.scriptedProbes,
+          history: buildHistory(),
+          userResponse: text,
+          turnNumber: learnerTurns + 1,
+        },
+        { accessToken: token },
+      );
+      probe = result.next_question;
+      summaryOut = result.summary;
+    } catch (e) {
+      // Fall back to the scripted probe so the conversation continues
+      // when the LLM is unreachable. Surface the error so the learner
+      // can decide whether to retry; the scripted fallback keeps the
+      // session usable offline.
+      const message = e instanceof Error ? e.message : String(e);
+      setNetworkError(
+        message === "not_attending_meeting_for_paper"
+          ? "RSVP to a meeting using this paper to use the AI tutor."
+          : "Tutor call failed — falling back to a scripted probe.",
+      );
+      const probeIdx = Math.min(
+        learnerTurns,
+        (prompt.scriptedProbes?.length ?? 1) - 1,
+      );
+      probe = prompt.scriptedProbes?.[probeIdx] ?? "Say more about that.";
+    } finally {
+      setSending(false);
+    }
+
     const tutorMsg: Message = {
       role: "tutor",
-      body: probe,
+      body: probe ?? "Say more about that.",
       ts: Date.now() + 1,
     };
     setThread([...thread, learnerMsg, tutorMsg]);
+    if (summaryOut) {
+      setThread([...thread, learnerMsg, tutorMsg, {
+        role: "tutor",
+        body: summaryOut,
+        ts: Date.now() + 2,
+        kind: "synthesis",
+      }]);
+      setSynthesized(true);
+    }
   };
 
   const askHint = () => {
@@ -133,7 +194,7 @@ export function SocraticMode({
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   };
 
@@ -250,13 +311,22 @@ export function SocraticMode({
           />
           <button
             className="pp-socratic-send"
-            onClick={send}
-            disabled={!input.trim() || synthesized}
+            onClick={() => void send()}
+            disabled={!input.trim() || synthesized || sending}
             aria-label="Send"
           >
-            ↑
+            {sending ? "…" : "↑"}
           </button>
         </div>
+        {networkError && (
+          <p
+            role="alert"
+            className="pp-hint-note"
+            style={{ marginTop: 8 }}
+          >
+            {networkError}
+          </p>
+        )}
       </div>
 
       {synthesized && (
