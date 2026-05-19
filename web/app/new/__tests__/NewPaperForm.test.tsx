@@ -110,7 +110,10 @@ describe("NewPaperForm — pre-flight", () => {
     render(<NewPaperForm paperId={42} />);
     const input = screen.getByLabelText(/pdf/i);
     const txt = new File(["hi"], "n.txt", { type: "text/plain" });
-    await userEvent.upload(input, txt);
+    // applyAccept:false — userEvent honours the input's `accept` attribute
+    // by default and silently drops mismatching files. We're testing the
+    // component's own MIME guard, so bypass userEvent's check.
+    await userEvent.upload(input, txt, { applyAccept: false });
     expect(await screen.findByRole("alert")).toHaveTextContent(/pdf/i);
   });
 });
