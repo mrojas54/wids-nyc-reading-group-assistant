@@ -1,9 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { AssessmentQuiz, Lens, QuizQuestion } from "@/lib/paperpal/types";
 import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
+import { fetchHint } from "@/lib/paperpal/hint";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import type { AnalyzeHintResponse, HintConfidence } from "@/lib/paperpal/wire";
 import "./assessment.css";
+
+type AiHintState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; hint: string; confidence: HintConfidence }
+  | { status: "error"; message: string };
+
+const CONFIDENCE_COLOR: Record<HintConfidence, string> = {
+  low: "var(--color-paper-400)",
+  medium: "var(--color-indigo-400)",
+  high: "var(--color-sage-600)",
+};
 
 interface McqState {
   idx: number;
@@ -48,6 +63,7 @@ export function McqMode({
     "assessment:mcq",
     INITIAL,
   );
+  const [aiHint, setAiHint] = useState<Record<number, AiHintState>>({});
 
   const idx = Math.min(
     Math.max(0, state.idx || 0),
@@ -96,6 +112,39 @@ export function McqMode({
     }
     update({ hints: nextHints, answers: nextAnswers });
     if (current.sectionRef) recordHint(paperId, current.sectionRef);
+  };
+
+  const askAiHint = async () => {
+    if (selected == null || showFeedback) return;
+    if (aiHint[idx]?.status === "loading") return;
+    setAiHint((s) => ({ ...s, [idx]: { status: "loading" } }));
+    try {
+      const sb = createSupabaseBrowserClient();
+      const { data } = await sb.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) throw new Error("not_signed_in");
+      const result: AnalyzeHintResponse = await fetchHint(
+        {
+          paperId: Number.parseInt(paperId, 10),
+          questionText: current.question,
+          questionOptions: current.options,
+          userAnswer: current.options[selected],
+        },
+        { accessToken: token },
+      );
+      setAiHint((s) => ({
+        ...s,
+        [idx]: { status: "ready", hint: result.hint, confidence: result.confidence },
+      }));
+      if (current.sectionRef) recordHint(paperId, current.sectionRef);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const friendly =
+        message === "not_attending_meeting_for_paper"
+          ? "RSVP to a meeting using this paper to unlock written hints."
+          : "Couldn't fetch a hint. Try again in a moment.";
+      setAiHint((s) => ({ ...s, [idx]: { status: "error", message: friendly } }));
+    }
   };
 
   const submit = () => {
@@ -297,6 +346,48 @@ export function McqMode({
               </div>
             )}
 
+            {aiHint[idx] && aiHint[idx].status !== "idle" && (
+              <div
+                className="pp-hint-note"
+                role="status"
+                style={{ flexDirection: "column", alignItems: "stretch" }}
+              >
+                {aiHint[idx].status === "loading" && (
+                  <span>Asking the AI for a hint…</span>
+                )}
+                {aiHint[idx].status === "ready" && (
+                  <>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: CONFIDENCE_COLOR[
+                            (aiHint[idx] as { confidence: HintConfidence }).confidence
+                          ],
+                          color: "white",
+                          textTransform: "capitalize",
+                        }}
+                      >
+                        {(aiHint[idx] as { confidence: HintConfidence }).confidence}{" "}
+                        confidence
+                      </span>
+                      <strong>AI hint</strong>
+                    </div>
+                    <p style={{ marginTop: 6, lineHeight: 1.55 }}>
+                      {(aiHint[idx] as { hint: string }).hint}
+                    </p>
+                  </>
+                )}
+                {aiHint[idx].status === "error" && (
+                  <span>
+                    {(aiHint[idx] as { message: string }).message}
+                  </span>
+                )}
+              </div>
+            )}
+
             {showFeedback && (
               <div
                 className={`pp-quiz-feedback ${
@@ -339,6 +430,20 @@ export function McqMode({
                     {eliminated.length === 0
                       ? "Hint"
                       : `Hint · ${HINT_CAP - eliminated.length} left`}
+                  </button>
+                  <button
+                    className="pp-btn-hint"
+                    onClick={askAiHint}
+                    disabled={
+                      selected == null || aiHint[idx]?.status === "loading"
+                    }
+                    title={
+                      selected == null
+                        ? "Pick an answer first"
+                        : "Ask the AI for a written hint"
+                    }
+                  >
+                    {aiHint[idx]?.status === "loading" ? "Thinking…" : "Ask AI"}
                   </button>
                   <button
                     className="pp-btn pp-btn-primary"
