@@ -39,8 +39,7 @@ export default async function DashboardPage() {
   const history = await myHistory(sb, 10);
 
   // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
-  // The role CHECK currently permits 'member' and 'operator'; the set below is
-  // forward-compatible for if/when 'leader' / 'admin' are added.
+  // Role values are constrained in migrations/014_members_role_leader_admin.sql.
   const {
     data: { user },
   } = await sb.auth.getUser();
