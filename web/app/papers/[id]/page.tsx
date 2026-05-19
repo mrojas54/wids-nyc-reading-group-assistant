@@ -10,7 +10,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { notFound } from "next/navigation";
-import { readPaperContent, listPaperContentIds } from "@/lib/paperContent";
+import { readPaperContent } from "@/lib/paperContent";
 import { PaperCompanion } from "@/components/PaperCompanion";
 import { PaperPalSynthesizePrompt } from "@/components/PaperPalSynthesizePrompt";
 import { PaperPalEmptyState } from "@/components/PaperPalEmptyState";
@@ -21,13 +21,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { canSynthesizePaperPal, paperCatalogRow } from "@/lib/queries";
 import type { ResearchPaperAnalysis } from "@/lib/paperpal/types";
 
-export const dynamicParams = true;
 export const dynamic = "force-dynamic";
-
-export async function generateStaticParams() {
-  const ids = await listPaperContentIds();
-  return ids.map((id) => ({ id }));
-}
 
 export default async function PaperPage({
   params,
