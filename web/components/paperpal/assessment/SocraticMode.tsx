@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
-import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
+import { usePaperLocalState } from "@/lib/paperpal/hooks";
 import { fetchSocratic } from "@/lib/paperpal/socratic";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
@@ -148,16 +148,17 @@ export function SocraticMode({
       body: probe ?? "Say more about that.",
       ts: Date.now() + 1,
     };
-    setThread([...thread, learnerMsg, tutorMsg]);
+    const next: Message[] = [...thread, learnerMsg, tutorMsg];
     if (summaryOut) {
-      setThread([...thread, learnerMsg, tutorMsg, {
+      next.push({
         role: "tutor",
         body: summaryOut,
         ts: Date.now() + 2,
         kind: "synthesis",
-      }]);
+      });
       setSynthesized(true);
     }
+    setThread(next);
   };
 
   const askHint = () => {
@@ -175,8 +176,6 @@ export function SocraticMode({
     });
     setHintsUsed(hintsUsed + 1);
     setPulse(false);
-    // SocraticPrompt has no sectionRef; we still surface a generic flag if topic id maps.
-    // Skip recordHint when no SectionRef is available.
   };
 
   const wrapUp = (override = false) => {
