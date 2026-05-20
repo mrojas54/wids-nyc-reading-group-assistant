@@ -10,8 +10,13 @@ Two phases: present pick → confirm or override.
 ## Step 1 — Find the upcoming reading_group
 
 ```sql
+-- planned_by_admin_id IS NOT NULL excludes member-proposed placeholders
+-- from proposePaper: those are also type='reading_group' status='prep'
+-- with leader_id NULL, so without this filter a newer placeholder would
+-- win ORDER BY created_at and step 6 would stamp a leader onto it.
 SELECT id FROM meetings
 WHERE type='reading_group' AND status='prep' AND leader_id IS NULL
+  AND planned_by_admin_id IS NOT NULL
 ORDER BY created_at DESC LIMIT 1;
 ```
 

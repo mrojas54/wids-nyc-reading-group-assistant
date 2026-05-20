@@ -9,8 +9,13 @@ Mirrors `/wids-schedule-admin` but with a venue prompt because reading groups ar
 ## Step 1 — Find the reading_group meeting
 
 ```sql
+-- planned_by_admin_id IS NOT NULL selects the cycle's canonical
+-- reading_group and excludes member-proposed placeholders from
+-- proposePaper, which are also type='reading_group' status='prep'
+-- but never carry planned_by_admin_id.
 SELECT id, leader_id, paper_id FROM meetings
 WHERE type='reading_group' AND status='prep'
+  AND planned_by_admin_id IS NOT NULL
 ORDER BY created_at DESC LIMIT 1;
 ```
 

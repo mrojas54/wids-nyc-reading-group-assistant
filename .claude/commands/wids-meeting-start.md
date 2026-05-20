@@ -83,9 +83,14 @@ VALUES ('slash_command', '/wids-meeting-start',
 ### Step R1 — Find the existing reading_group row
 
 ```sql
+-- planned_by_admin_id IS NOT NULL selects the cycle's canonical
+-- reading_group (set in step A2) and excludes member-proposed
+-- placeholders from proposePaper, which are also type='reading_group'
+-- status='prep' but never carry planned_by_admin_id.
 SELECT m.id, m.leader_id, m.paper_id
 FROM meetings m
 WHERE m.type='reading_group' AND m.status='prep'
+  AND m.planned_by_admin_id IS NOT NULL
 ORDER BY m.created_at DESC LIMIT 1;
 ```
 
