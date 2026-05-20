@@ -129,50 +129,10 @@ async function renderPaperPage({
         )}
       </pre>
     );
-    // Unreachable while debug dump is active:
-    // eslint-disable-next-line no-unreachable
-    return (
-      <>
-        <PaperDashboard
-          paperId={String(paperIdNum)}
-          payload={payload}
-          paper={{
-            title: catalog.title ?? undefined,
-            authors: catalog.authors ?? undefined,
-            venue: paperFull?.venue ?? undefined,
-            pdf_drive_url: paperFull?.pdf_drive_url ?? null,
-            presentHref: `/papers/${paperIdNum}/present`,
-          }}
-          nextMeeting={
-            meeting?.scheduled_at
-              ? {
-                  whenLabel: new Date(meeting.scheduled_at).toLocaleString(
-                    undefined,
-                    {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    },
-                  ),
-                  venue: meeting.location,
-                }
-              : null
-          }
-        />
-        {payload.assessmentQuiz && (
-          <section className="pp-page" id="assessment">
-            <AssessmentPanel
-              paperId={String(paperIdNum)}
-              quiz={payload.assessmentQuiz}
-              socraticPrompts={payload.socraticPrompts}
-            />
-          </section>
-        )}
-        <TweaksPanel />
-      </>
-    );
+    // NOTE: the real PaperDashboard render lives in commit ae2c8d5's parent.
+    // `git revert ae2c8d5` restores it once digest 3829607229 is resolved —
+    // it was deleted here only because TypeScript performs no narrowing in
+    // code after an unconditional return, which broke the production build.
   }
 
   // Catalog row exists but no synthesized content yet → CTA or read-only.
