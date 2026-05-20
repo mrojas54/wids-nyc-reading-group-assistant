@@ -2,7 +2,8 @@
 // abstract + method breakdowns with inline term + math-variable highlights.
 
 import { Eyebrow, Tile } from "../primitives";
-import { Highlighted, mathVarsFromExplanations } from "../Highlighted";
+import { Highlighted } from "../Highlighted";
+import { mathVarsFromExplanations } from "../mathVars";
 import type {
   MathExplanation,
   TerminologyItem,
