@@ -36,9 +36,13 @@ Before running `/wids-bootstrap`, the operator must:
   - `migrations/010_paper_embeddings.sql` — enables `pgvector` and creates the `paper_embeddings` cache used by paper suggestion ranking.
   - `migrations/011_papers_s2_paper_id.sql` — adds `papers.s2_paper_id` for Semantic Scholar lookups.
   - `migrations/012_papers_s2_paper_id_constraint.sql` — replaces the partial S2 ID index with a full unique constraint for Supabase upserts.
+  - `migrations/013_paper_companions.sql` — creates the `paper_companions` table (the JSONB Paper Pal synthesis payload, keyed by `paper_id`) and its four RLS policies.
   - `migrations/014_members_role_leader_admin.sql` — widens `members.role` to `member | operator | leader | admin`; `operator` remains unique, `leader` / `admin` are uncapped.
   - `supabase/migrations/20260518040000_015_availability_created_at.sql` — adds `availability.created_at` plus `(meeting_id, created_at)` index for reminder-chase queries. Existing rows are backfilled with migration time, not their true historical submission time.
-  - Note: the current repository has no `013` migration file; apply the files that exist in the order shown.
+  - `migrations/016_paper_pal_provider_metadata.sql` — adds provider/rate-limit/telemetry columns to `paper_companions`, creates `paper_socratic_turns`, and the atomic `upsert_paper_companion()` write RPC.
+  - `migrations/017_synthesis_gate_rpc.sql` — `can_synthesize_paper_pal()` and `current_member_role()` RPCs; the single source of truth for the Paper Pal synthesis gate.
+  - `migrations/018_papers_pdfs_bucket.sql` — creates the private `papers-pdfs` Storage bucket and the INSERT RLS policy gating PDF uploads to synthesis-eligible callers.
+  - Note: file numbering jumps from `014` to `015` (the `015` file lives under `supabase/migrations/`); `016`–`018` resume in `migrations/`. Apply all files in numeric order regardless of directory.
 - Verify 10 base tables exist: `members, topics, papers, paper_topics, meetings, volunteers, availability, meeting_attendance, paper_suggestions, command_log`.
 - Verify portal columns and helpers exist: `members.auth_user_id`, `members.role` accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`, `availability.created_at`, the `current_member_id()` function, and 10 RLS policies.
 
