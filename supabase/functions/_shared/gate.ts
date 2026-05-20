@@ -36,13 +36,9 @@ export async function currentMemberId(sb: SupabaseClient): Promise<number | null
  * RPC (migration 017). The RPC reads `members.role` with definer rights,
  * so this works even if the `members` SELECT policy is tightened to
  * exclude the `role` column from regular authenticated reads.
- *
- * memberId parameter is unused but kept for call-site stability — the RPC
- * already derives identity from auth.uid().
  */
 export async function getMemberRole(
   sb: SupabaseClient,
-  _memberId: number,
 ): Promise<string | null> {
   const { data, error } = await sb.rpc("current_member_role");
   if (error) {
@@ -65,7 +61,7 @@ export async function canRequestHint(
   memberId: number,
 ): Promise<boolean> {
   // Owners always pass.
-  const role = await getMemberRole(sb, memberId);
+  const role = await getMemberRole(sb);
   if (role === "operator" || isAdmin(role)) return true;
 
   // Anyone with an attending RSVP for a meeting that uses this paper.
