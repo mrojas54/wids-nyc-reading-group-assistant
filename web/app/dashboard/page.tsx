@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  currentMemberId,
   myAvailabilitySubmitted,
   myHistory,
   myRsvp,
@@ -20,22 +21,21 @@ export default async function DashboardPage() {
 
   const meeting = await nextMeeting(sb);
 
-  const { data: prepMeeting } = await sb
-    .from("meetings")
-    .select("id, type")
-    .eq("status", "prep")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // nextMeeting() falls back to the most recent prep meeting when nothing is
+  // scheduled, so derive the prep meeting from that result instead of issuing
+  // a second, overlapping query.
+  const prepMeeting = meeting?.status === "prep" ? meeting : null;
+
+  const memberId = await currentMemberId(sb);
 
   const submitted = prepMeeting
-    ? await myAvailabilitySubmitted(sb, prepMeeting.id)
+    ? await myAvailabilitySubmitted(sb, prepMeeting.id, memberId)
     : true;
 
   const rsvp =
     meeting?.status === "scheduled" ? await myRsvp(sb, meeting.id) : null;
 
-  const stats = await myStats(sb, submitted);
+  const stats = await myStats(sb, submitted, memberId);
   const history = await myHistory(sb, 10);
 
   // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.

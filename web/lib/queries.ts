@@ -68,8 +68,8 @@ export async function currentMemberId(sb: SupabaseClient): Promise<number | null
 export async function myAvailabilitySubmitted(
   sb: SupabaseClient,
   prepMeetingId: number,
+  memberId: number | null,
 ): Promise<boolean> {
-  const memberId = await currentMemberId(sb);
   if (memberId == null) return false;
   const { count } = await sb
     .from("availability")
@@ -100,9 +100,8 @@ export type Stats = {
 export async function myStats(
   sb: SupabaseClient,
   availabilitySubmitted: boolean,
+  memberId: number | null,
 ): Promise<Stats> {
-  const memberId = await currentMemberId(sb);
-
   const attendedQ = sb
     .from("meeting_attendance")
     .select("meetings!inner(id, status)", { count: "exact", head: true })
@@ -203,30 +202,30 @@ export async function paperCatalogRow(
 }
 
 export async function myHistory(sb: SupabaseClient, limit = 10): Promise<HistoryItem[]> {
+  // `!inner` makes the meetings embed an INNER JOIN, so `meetings.status` filters
+  // the meeting_attendance rows themselves — letting the DB do the filtering and
+  // ordering and return exactly `limit` rows (no JS post-filter / sort / pad).
   const { data } = await sb
     .from("meeting_attendance")
     .select(
-      "meetings:meeting_id(id, scheduled_at, status, papers:paper_id(title, companion_url))",
+      "meetings:meeting_id!inner(id, scheduled_at, status, papers:paper_id(title, companion_url))",
     )
     .eq("rsvp_status", "attending")
-    .limit(limit * 2);
+    .eq("meetings.status", "done")
+    .order("scheduled_at", {
+      referencedTable: "meetings",
+      ascending: false,
+      nullsFirst: false,
+    })
+    .limit(limit);
 
-  const items: HistoryItem[] = (data ?? [])
+  return (data ?? [])
     .map((r: any) => r.meetings)
-    .filter((m: any) => m && m.status === "done")
+    .filter((m: any) => m)
     .map((m: any) => ({
       meeting_id: m.id,
       paper_title: m.papers?.title ?? null,
       date: m.scheduled_at ?? null,
       companion_url: m.papers?.companion_url ?? null,
     }));
-
-  items.sort((a, b) => {
-    if (!a.date && !b.date) return 0;
-    if (!a.date) return 1;
-    if (!b.date) return -1;
-    return b.date.localeCompare(a.date);
-  });
-
-  return items.slice(0, limit);
 }
