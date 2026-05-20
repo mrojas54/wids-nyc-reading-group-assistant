@@ -151,7 +151,8 @@ export async function proposePaper(input: {
   let createdMeeting = false;
 
   if (existing) {
-    // Dedupe: reuse this paper's existing placeholder.
+    // Sequential reuse: this paper already has a placeholder, so a repeat
+    // propose attaches to it and the paper_suggestions unique check fires.
     meetingId = existing.id;
   } else {
     const { data: meeting, error: meetingError } = await svc
@@ -181,11 +182,14 @@ export async function proposePaper(input: {
       }
       const { data: won, error: wonError } = await findPlaceholder();
       if (wonError || !won) {
+        // wonError: the re-query itself failed. !won: the race winner is
+        // gone — carry the triggering 23505 so the log shows the sequence.
         await logServerAction(
           "proposePaper",
           "failure",
           `paper ${input.paperId}`,
-          wonError?.message ?? "lost the placeholder race but found no winner",
+          wonError?.message ??
+            `lost the placeholder race but found no winner (${meetingError.message})`,
         );
         throw new Error(
           wonError?.message ?? "could not resolve placeholder meeting",

@@ -50,6 +50,9 @@ function setup(opts: {
   const meetingInserts: any[] = [];
   const meetingDeletes: number[] = [];
   const suggestionInserts: any[] = [];
+  // Every .eq()/.is() filter the findPlaceholder() query applies, in order —
+  // lets a test assert the exact filter set so a dropped filter is caught.
+  const placeholderFilters: { fn: string; col: string; val: unknown }[] = [];
   const placeholderResults = opts.placeholderResults ?? [
     { data: null, error: null },
   ];
@@ -58,8 +61,14 @@ function setup(opts: {
   // Self-returning chain for the findPlaceholder() query:
   // select(...).eq().eq().is().eq().maybeSingle()
   const meetingsSelectChain: any = {
-    eq: () => meetingsSelectChain,
-    is: () => meetingsSelectChain,
+    eq: (col: string, val: unknown) => {
+      placeholderFilters.push({ fn: "eq", col, val });
+      return meetingsSelectChain;
+    },
+    is: (col: string, val: unknown) => {
+      placeholderFilters.push({ fn: "is", col, val });
+      return meetingsSelectChain;
+    },
     maybeSingle: () => {
       const r =
         placeholderResults[placeholderCalls] ??
@@ -134,6 +143,7 @@ function setup(opts: {
     meetingInserts,
     meetingDeletes,
     suggestionInserts,
+    placeholderFilters,
     placeholderCalls: () => placeholderCalls,
   };
 }
@@ -215,13 +225,22 @@ describe("proposePaper — create vs reuse", () => {
   });
 
   it("reuses an existing placeholder instead of minting a new meeting", async () => {
-    const { meetingInserts, suggestionInserts } = setup({
+    const { meetingInserts, suggestionInserts, placeholderFilters } = setup({
       placeholderResults: [{ data: { id: 12 }, error: null }],
       suggestionInsertError: SUGGESTION_DUPLICATE,
     });
     await proposePaper({ paperId: 7 });
     expect(meetingInserts).toEqual([]);
     expect(suggestionInserts[0].meeting_id).toBe(12);
+    // The lookup must apply all four filters — in particular the
+    // planned_by_admin_id IS NULL guard that excludes a cycle's canonical
+    // meeting. A dropped filter would silently break dedupe scoping.
+    expect(placeholderFilters).toEqual([
+      { fn: "eq", col: "type", val: "reading_group" },
+      { fn: "eq", col: "status", val: "prep" },
+      { fn: "is", col: "planned_by_admin_id", val: null },
+      { fn: "eq", col: "paper_id", val: 7 },
+    ]);
   });
 
   it("treats a repeat propose as an idempotent no-op", async () => {
@@ -269,6 +288,19 @@ describe("proposePaper — concurrent placeholder race", () => {
     });
     await expect(proposePaper({ paperId: 7 })).rejects.toThrow(
       /could not resolve placeholder meeting/,
+    );
+  });
+
+  it("throws the re-query error when the post-race lookup itself fails", async () => {
+    setup({
+      placeholderResults: [
+        { data: null, error: null },
+        { data: null, error: { message: "re-query DB down" } },
+      ],
+      meetingInsert: { data: null, error: PLACEHOLDER_RACE },
+    });
+    await expect(proposePaper({ paperId: 7 })).rejects.toThrow(
+      /re-query DB down/,
     );
   });
 });
