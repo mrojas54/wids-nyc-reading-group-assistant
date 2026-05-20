@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function PaperNotFound() {
   return (
     <div className="space-y-3 py-8">
@@ -12,13 +14,13 @@ export default function PaperNotFound() {
         paper isn&apos;t in the catalog yet.
       </p>
       <p>
-        <a
+        <Link
           href="/"
           className="text-sm hover:underline"
           style={{ color: "var(--color-sage-700)" }}
         >
           ← Back to home
-        </a>
+        </Link>
       </p>
     </div>
   );

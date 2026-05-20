@@ -15,13 +15,13 @@ export const dynamic = "force-dynamic";
 export default async function NewPaperPage({
   searchParams,
 }: {
-  searchParams: { paperId?: string };
+  searchParams: Promise<{ paperId?: string }>;
 }) {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
   const { data: memberId } = await sb.rpc("current_member_id");
   if (!memberId) redirect("/?next=/new");
 
-  const paperIdRaw = searchParams.paperId;
+  const paperIdRaw = (await searchParams).paperId;
   const paperId = paperIdRaw ? Number.parseInt(paperIdRaw, 10) : NaN;
   const paperIdValid = Number.isInteger(paperId) && paperId > 0;
 

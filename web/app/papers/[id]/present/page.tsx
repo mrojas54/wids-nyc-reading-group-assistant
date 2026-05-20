@@ -11,12 +11,13 @@ export const dynamic = "force-dynamic";
 export default async function PresentPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const paperId = Number(params.id);
+  const { id } = await params;
+  const paperId = Number(id);
   if (!Number.isFinite(paperId)) notFound();
 
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
   const { data } = await sb
     .from("paper_companions")
     .select("payload")

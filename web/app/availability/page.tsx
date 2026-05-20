@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function AvailabilityPage({
   searchParams,
 }: {
-  searchParams?: { meeting?: string };
+  searchParams?: Promise<{ meeting?: string }>;
 }) {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
 
   // Resolution rule:
   // - `?meeting=<id>` provided → must resolve to a prep meeting, else 404.
@@ -21,7 +21,7 @@ export default async function AvailabilityPage({
   // - No `?meeting` param → fall back to the latest prep meeting (legacy
   //   behavior, used by the dashboard's "needed" CTA before per-meeting
   //   routing existed).
-  const rawParam = searchParams?.meeting;
+  const rawParam = (await searchParams)?.meeting;
   const hasParam = typeof rawParam === "string" && rawParam.length > 0;
 
   let prep: { id: number; type?: string } | null = null;

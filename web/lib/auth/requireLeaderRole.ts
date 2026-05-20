@@ -15,7 +15,7 @@ export async function requireLeaderRole(): Promise<LeaderRoleContext> {
   // Import lazily inside the function so this module can be unit-tested
   // by stubbing the import (or simply not imported in non-server contexts).
   const { createSupabaseServerClient } = await import("@/lib/supabase/server");
-  const supabase = createSupabaseServerClient();
+  const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

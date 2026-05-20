@@ -7,7 +7,7 @@ import { logServerAction } from "@/lib/log";
 type RsvpChoice = "attending" | "declined" | "tentative";
 
 export async function setRsvp(meetingId: number, status: RsvpChoice): Promise<void> {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
 
   const { data: { user } } = await sb.auth.getUser();
   if (!user) throw new Error("not signed in");

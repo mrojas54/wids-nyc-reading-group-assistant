@@ -18,7 +18,7 @@ import { signOut } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
 
   // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
   // Role values are constrained in migrations/014_members_role_leader_admin.sql.

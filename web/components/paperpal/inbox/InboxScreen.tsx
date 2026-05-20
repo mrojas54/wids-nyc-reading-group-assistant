@@ -38,7 +38,7 @@ function formatRelativeDate(iso: string | null | undefined): string | null {
 }
 
 export default async function InboxScreen() {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
   const { reading, upcoming, suggestions, past } = await getInbox(sb);
 
   const heroWhen = reading ? formatHero(reading.scheduled_at) : null;

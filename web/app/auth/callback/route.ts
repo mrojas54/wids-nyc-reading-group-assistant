@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   if (!code) return NextResponse.redirect(new URL("/", request.url));
 
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
   const { error } = await sb.auth.exchangeCodeForSession(code);
   if (error) {
     await logServerAction("authCallback", "failure", undefined, error.message);
