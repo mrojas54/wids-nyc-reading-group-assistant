@@ -14,7 +14,12 @@ Idempotent via papers.zotero_item_key + a wids_paper_id correlator in
 Zotero's `extra` field.
 
 Usage:
+    # single paper (invoked by /wids-make-companion):
     uv run scripts/zotero_push.py --paper-id=<id> --meeting-id=<id>
+
+    # backfill historical readings from the enriched CSV:
+    uv run scripts/zotero_push.py --from-csv=docs/superpowers/specs/wids-zotero-historical-readings.csv
+    uv run scripts/zotero_push.py --from-csv=<path> --dry-run   # preview, no writes
 
 Env (from web/.env.local):
     SUPABASE_DB_URL    Postgres connection string for the project DB.
@@ -25,6 +30,7 @@ Env (from web/.env.local):
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import re
 import sys
@@ -557,6 +563,140 @@ def push_to_zotero(
     return item_key
 
 
+# ---------------------------------------------------------------------------
+# Backfill mode: import historical readings from a CSV.
+#
+# Historical readings pre-date the live pipeline but already have `papers`
+# rows, so the backfill reuses the forward-going `wids_paper_id` correlator
+# and the standard idempotency check on `papers.zotero_item_key`. The only
+# difference from a normal push is the note: these meetings never had a
+# companion page, so the note carries no Companion link.
+# ---------------------------------------------------------------------------
+
+_BACKFILL_COLUMNS = (
+    "meeting_date", "paper_title", "paper_url", "leader_name",
+    "topic_name", "paper_id",
+)
+
+
+def _parse_meeting_date(value: str) -> datetime:
+    """Parse a bare `YYYY-MM-DD` into a New-York-local datetime.
+
+    The CSV stores meeting dates without a time or zone. Anchoring to
+    America/New_York keeps `build_note_html`'s weekday rendering stable
+    regardless of the host machine's timezone.
+    """
+    naive = datetime.strptime(value.strip(), "%Y-%m-%d")
+    return naive.replace(tzinfo=_NY_TZ)
+
+
+def read_backfill_csv(path: Path) -> list[dict]:
+    """Read the historical-readings CSV into a list of row dicts.
+
+    Each row must carry a `paper_id` (added as a preprocessing step by
+    matching titles/URLs against the `papers` table); it is parsed to int.
+    """
+    rows: list[dict] = []
+    with path.open(newline="", encoding="utf-8") as fh:
+        for raw in csv.DictReader(fh):
+            row = {col: (raw.get(col) or "").strip() for col in _BACKFILL_COLUMNS}
+            row["paper_id"] = int(row["paper_id"])
+            rows.append(row)
+    return rows
+
+
+def push_backfill_row(
+    conn: Connection,
+    *,
+    row: dict,
+    api_key: str,
+    group_id: str,
+    dry_run: bool,
+) -> tuple[str, str]:
+    """Push one historical-readings row to Zotero.
+
+    Returns `(status, detail)` where status is one of:
+      - "skipped"   — papers.zotero_item_key already set
+      - "recovered" — found on the Zotero side via the correlator
+      - "dry_run"   — metadata resolved, nothing written
+      - "created"   — new item + note created
+    `detail` is the relevant Zotero item key, or a metadata summary for
+    dry runs.
+    """
+    paper_id = row["paper_id"]
+    paper_url, existing_key = _read_paper_for_push(conn, paper_id)
+    if existing_key:
+        return "skipped", existing_key
+
+    if dry_run:
+        meta = extract_metadata(conn, paper_id=paper_id, paper_url=paper_url)
+        return "dry_run", f"{meta['item_type']}: {meta.get('title', '')}"
+
+    recovered = find_existing_zotero_item(
+        paper_id=paper_id, api_key=api_key, group_id=group_id,
+    )
+    if recovered:
+        _save_zotero_item_key(conn, paper_id=paper_id, item_key=recovered)
+        return "recovered", recovered
+
+    meta = extract_metadata(conn, paper_id=paper_id, paper_url=paper_url)
+    item_key = create_zotero_item(
+        meta=meta, paper_id=paper_id, api_key=api_key, group_id=group_id,
+    )
+    _save_zotero_item_key(conn, paper_id=paper_id, item_key=item_key)
+
+    note_html = build_note_html(
+        meeting_at=_parse_meeting_date(row["meeting_date"]),
+        leader_name=row["leader_name"] or None,
+        topic_names=[row["topic_name"]] if row["topic_name"] else [],
+        companion_path=None,  # historical readings never had a companion page
+        prod_host="",
+    )
+    create_zotero_note(
+        parent_item_key=item_key,
+        note_html=note_html,
+        api_key=api_key,
+        group_id=group_id,
+    )
+    return "created", item_key
+
+
+def push_from_csv(
+    conn: Connection,
+    *,
+    csv_path: Path,
+    api_key: str,
+    group_id: str,
+    dry_run: bool,
+) -> int:
+    """Push every row of the historical-readings CSV. Returns the failure count.
+
+    A failing row is logged and skipped; the remaining rows still run. Since
+    each successful row commits its own `zotero_item_key`, a re-run after a
+    partial failure resumes cleanly.
+    """
+    rows = read_backfill_csv(csv_path)
+    mode = "DRY RUN — no writes" if dry_run else "live push"
+    print(f"Zotero backfill ({mode}): {len(rows)} rows from {csv_path}")
+
+    failures = 0
+    for row in rows:
+        label = f"paper {row['paper_id']} ({row['meeting_date']})"
+        try:
+            status, detail = push_backfill_row(
+                conn, row=row, api_key=api_key, group_id=group_id, dry_run=dry_run,
+            )
+        except Exception as e:  # noqa: BLE001 — per-row boundary; keep going
+            failures += 1
+            print(f"  ✗ {label}: {type(e).__name__}: {e}", file=sys.stderr)
+        else:
+            print(f"  · {label}: {status} -> {detail}")
+
+    pushed = len(rows) - failures
+    print(f"Zotero backfill done: {pushed} ok, {failures} failed.")
+    return failures
+
+
 def record_failure(conn: Connection, *, name: str, error: str) -> None:
     """Write a failure row to command_log so /wids-zotero-retry knows what to fix."""
     with conn.cursor() as cur:
@@ -602,17 +742,62 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="zotero_push.py",
         description="Push a paper to the WiDS NYC Zotero group library (6540956).",
     )
-    p.add_argument("--paper-id", type=int, required=True,
-                   help="papers.id of the paper to push")
-    p.add_argument("--meeting-id", type=int, required=True,
-                   help="meetings.id whose context becomes the child note")
+    p.add_argument("--paper-id", type=int,
+                   help="papers.id of the paper to push (single-paper mode)")
+    p.add_argument("--meeting-id", type=int,
+                   help="meetings.id whose context becomes the child note "
+                        "(single-paper mode)")
+    p.add_argument("--from-csv", metavar="PATH",
+                   help="Backfill mode: push every row of a historical-readings "
+                        "CSV (columns include paper_id). Mutually exclusive with "
+                        "--paper-id/--meeting-id.")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Backfill only: resolve and print metadata for each row "
+                        "without writing anything to Zotero or the database.")
     return p
+
+
+def _run_backfill(args: argparse.Namespace, env: dict[str, str]) -> int:
+    """Backfill-mode entry point. Returns process exit code."""
+    required = ["SUPABASE_DB_URL"]
+    if not args.dry_run:
+        required += ["ZOTERO_API_KEY", "ZOTERO_GROUP_ID"]
+    for var in required:
+        if not env.get(var):
+            print(f"error: missing env var {var}", file=sys.stderr)
+            return 2
+
+    csv_path = Path(args.from_csv)
+    if not csv_path.exists():
+        print(f"error: CSV not found: {csv_path}", file=sys.stderr)
+        return 2
+
+    conn = psycopg.connect(env["SUPABASE_DB_URL"])
+    try:
+        failures = push_from_csv(
+            conn,
+            csv_path=csv_path,
+            api_key=env.get("ZOTERO_API_KEY", ""),
+            group_id=env.get("ZOTERO_GROUP_ID", ""),
+            dry_run=args.dry_run,
+        )
+    finally:
+        conn.close()
+    return 1 if failures else 0
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     """CLI entry point. Returns process exit code (0 success, 1 failure, 2 config)."""
     args = _build_parser().parse_args(argv)
     env = _load_env()
+
+    if args.from_csv:
+        return _run_backfill(args, env)
+
+    if args.paper_id is None or args.meeting_id is None:
+        print("error: --paper-id and --meeting-id are required "
+              "(or use --from-csv for backfill)", file=sys.stderr)
+        return 2
 
     for required in ("SUPABASE_DB_URL", "ZOTERO_API_KEY",
                      "ZOTERO_GROUP_ID", "WIDS_PROD_HOST"):
