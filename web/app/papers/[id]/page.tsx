@@ -23,7 +23,26 @@ import type { ResearchPaperAnalysis } from "@/lib/paperpal/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function PaperPage({
+export default async function PaperPage(props: {
+  params: { id: string };
+}) {
+  try {
+    return await renderPaperPage(props);
+  } catch (err) {
+    // TEMP: surface unminified server error so we can debug the
+    // `Application error: server-side exception` (digest 3829607229).
+    // Remove once /papers/[id] is stable.
+    // eslint-disable-next-line no-console
+    console.error("[/papers/[id]] render failed", {
+      paperId: props.params.id,
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    throw err;
+  }
+}
+
+async function renderPaperPage({
   params,
 }: {
   params: { id: string };
