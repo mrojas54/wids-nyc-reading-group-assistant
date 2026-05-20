@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
+  currentMemberId,
   myAvailabilitySubmitted,
   myHistory,
   myRsvp,
@@ -20,23 +21,22 @@ export default async function DashboardPage() {
 
   // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
   // Role values are constrained in migrations/014_members_role_leader_admin.sql.
-  const [meeting, prepResult, history, userResult] = await Promise.all([
+  const [meeting, history, memberId, userResult] = await Promise.all([
     nextMeeting(sb),
-    sb
-      .from("meetings")
-      .select("id, type")
-      .eq("status", "prep")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
     myHistory(sb, 10),
+    currentMemberId(sb),
     sb.auth.getUser(),
   ]);
-  const prepMeeting = prepResult.data;
+  // nextMeeting() falls back to the most recent prep meeting when nothing is
+  // scheduled, so derive the prep meeting from that result instead of issuing
+  // a second, overlapping query.
+  const prepMeeting = meeting?.status === "prep" ? meeting : null;
   const user = userResult.data.user;
 
   const [submitted, rsvp, memberResult] = await Promise.all([
-    prepMeeting ? myAvailabilitySubmitted(sb, prepMeeting.id) : Promise.resolve(true),
+    prepMeeting
+      ? myAvailabilitySubmitted(sb, prepMeeting.id, memberId)
+      : Promise.resolve(true),
     meeting?.status === "scheduled" ? myRsvp(sb, meeting.id) : Promise.resolve(null),
     user
       ? sb.from("members").select("name, role").eq("auth_user_id", user.id).single()
@@ -44,7 +44,7 @@ export default async function DashboardPage() {
   ]);
   const member = memberResult.data;
 
-  const stats = await myStats(sb, submitted);
+  const stats = await myStats(sb, submitted, memberId);
   const canFindPaper =
     member?.role === "operator" ||
     member?.role === "leader" ||
