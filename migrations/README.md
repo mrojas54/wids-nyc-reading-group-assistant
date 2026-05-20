@@ -1,7 +1,7 @@
 # Database migrations
 
 SQL migrations for the WiDS NYC reading-group Supabase project, applied
-**in numeric order** (`001` → `018`). They are hand-applied — paste each file
+**in numeric order** (`001` → `019`). They are hand-applied — paste each file
 into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool.
 There is no migration-tracking table; filenames define order only.
 
@@ -25,6 +25,7 @@ There is no migration-tracking table; filenames define order only.
 | `016_paper_pal_provider_metadata.sql` | Adds provider/rate-limit/telemetry columns to `paper_companions`, creates `paper_socratic_turns`, and the atomic `upsert_paper_companion()` write RPC. |
 | `017_synthesis_gate_rpc.sql` | `can_synthesize_paper_pal()` and `current_member_role()` RPCs — the single source of truth for the Paper Pal synthesis gate. |
 | `018_papers_pdfs_bucket.sql` | Creates the private `papers-pdfs` Storage bucket and the INSERT RLS policy gating PDF uploads to synthesis-eligible callers. |
+| `019_meetings_propose_placeholder_unique.sql` | Partial unique index on `meetings(paper_id)` for `prep` `reading_group` rows with no `planned_by_admin_id` — one member-proposed placeholder per paper, so concurrent `proposePaper` calls can't mint duplicates. |
 
 ## `ensure_rls` event trigger
 
