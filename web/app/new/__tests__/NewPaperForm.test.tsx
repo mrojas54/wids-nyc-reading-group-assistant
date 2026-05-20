@@ -132,7 +132,7 @@ describe("NewPaperForm — submission paths", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("trims a trailing slash from the Supabase URL before composing fnUrl", async () => {
+  it("trims trailing slashes from the Supabase URL before composing fnUrl", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", `${SUPABASE_URL}///`);
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       sseStream([stage("parsing_pdf"), complete(42)]),
