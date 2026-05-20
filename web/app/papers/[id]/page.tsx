@@ -97,6 +97,40 @@ async function renderPaperPage({
   if (payload && catalog) {
     const paperFull = (paperFullRes as { data: { venue: string | null; pdf_drive_url: string | null } | null })?.data ?? null;
     const meeting = (meetingRes as { data: { scheduled_at: string | null; location: string | null } | null })?.data ?? null;
+    // TEMP DEBUG: binary-bisect for digest 3829607229. Raw dump only
+    // (no PaperDashboard, no client components). If this renders, the
+    // bug is downstream in PaperDashboard or its client children.
+    // Revert this whole block once root cause is identified.
+    return (
+      <pre style={{ padding: 16, fontSize: 12, whiteSpace: "pre-wrap" }}>
+        DEBUG /papers/{paperIdNum} — raw dump (PaperDashboard bypassed){"\n\n"}
+        {JSON.stringify(
+          {
+            paperId: paperIdNum,
+            catalogKeys: catalog ? Object.keys(catalog) : null,
+            paperFullKeys: paperFull ? Object.keys(paperFull) : null,
+            meetingKeys: meeting ? Object.keys(meeting) : null,
+            payloadKeys: Object.keys(payload),
+            payloadSample: {
+              title: payload.title,
+              authorsCount: payload.authors?.length ?? 0,
+              terminologyCount: payload.terminology?.length ?? 0,
+              mathCount: payload.mathExplanations?.length ?? 0,
+              diagramsCount: payload.diagrams?.length ?? 0,
+              codeSamplesCount: payload.codeSamples?.length ?? 0,
+              hasAssessmentQuiz: !!payload.assessmentQuiz,
+              socraticPromptsCount: payload.socraticPrompts?.length ?? 0,
+              learningResourcesCount: payload.learningResources?.length ?? 0,
+              keyTakeawaysCount: payload.keyTakeaways?.length ?? 0,
+            },
+          },
+          null,
+          2,
+        )}
+      </pre>
+    );
+    // Unreachable while debug dump is active:
+    // eslint-disable-next-line no-unreachable
     return (
       <>
         <PaperDashboard
