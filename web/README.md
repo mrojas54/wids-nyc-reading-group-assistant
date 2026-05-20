@@ -1,6 +1,6 @@
 # WiDS Member App
 
-Next.js 14 portal for the WiDS NYC AI Reading Group.
+Next.js portal for the WiDS NYC AI Reading Group.
 
 ## Routes
 
@@ -60,14 +60,10 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
   Use `op run` to inject the token without it touching your shell history:
 
   ```sh
+  nvm use 20   # Node 20+; a stale macOS system npm at /usr/local predates node:path support
   op run --env-file <(printf 'BLOB_READ_WRITE_TOKEN=op://Personal/4vsjnrbjyhlqju5mbtw2kcf3ba/credential\nSPECTER2_MODEL_BLOB_URL=https://dzoasz69j2a1a7lp.private.blob.vercel-storage.com/specter2/specter2_int8.onnx\nRUN_PARITY=1\n') -- \
-    /Users/michellerojas/.nvm/versions/node/v20.18.0/bin/npm --prefix . test -- lib/suggest/__tests__/parity.test.ts
+    npm --prefix . test -- lib/suggest/__tests__/parity.test.ts
   ```
 
-  **Why the explicit npm path?** macOS has a stale system npm at `/usr/local` that
-  predates `node:path` support. The nvm binary at the path above is the correct one.
-  If you've updated Node via nvm since this was written, adjust the path.
-
-  Thresholds: median cos ≥ 0.99, min cos ≥ 0.93. Last verified: 2026-05-16,
-  median=0.9914, min=0.9908 (all 11 fixtures). Requires
-  `scripts/specter2_parity_fixtures.json` to exist.
+  Thresholds: median cos ≥ 0.99, min cos ≥ 0.93 across all fixtures in
+  `scripts/specter2_parity_fixtures.json` (which must exist).
