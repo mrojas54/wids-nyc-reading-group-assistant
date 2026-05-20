@@ -38,7 +38,8 @@ export default function ProposePaperForm({
         setPaperId("");
         setNote("");
         setDone(true);
-      } catch {
+      } catch (e) {
+        console.error("proposePaper failed", e);
         setError("Could not propose this paper — please retry.");
       }
     });

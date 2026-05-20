@@ -28,7 +28,8 @@ export default function VolunteerButton({
       try {
         await volunteerForMeeting(meetingId);
         setVolunteered(true);
-      } catch {
+      } catch (e) {
+        console.error("volunteerForMeeting failed", e);
         setError("Could not volunteer — please retry.");
       }
     });
