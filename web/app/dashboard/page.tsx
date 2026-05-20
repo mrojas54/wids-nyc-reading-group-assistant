@@ -12,6 +12,7 @@ import { Brandmark, Icon } from "@/components/ui";
 import { NextMeetingCard, type AvailabilityStatus } from "@/components/NextMeetingCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
+import { canFindPaper } from "@/lib/roles";
 import { signOut } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +46,7 @@ export default async function DashboardPage() {
   const member = memberResult.data;
 
   const stats = await myStats(sb, submitted, memberId);
-  const canFindPaper =
-    member?.role === "operator" ||
-    member?.role === "leader" ||
-    member?.role === "admin";
+  const showFindPaper = canFindPaper(member?.role);
 
   const firstName = member?.name ? String(member.name).split(/\s+/)[0] : null;
 
@@ -100,7 +98,7 @@ export default async function DashboardPage() {
           </a>
         )}
 
-        {canFindPaper && (
+        {showFindPaper && (
           <Link href="/admin/suggest" className="banner banner-info">
             <div className="availability-banner-body">
               <strong className="banner-title">Find a paper</strong>
