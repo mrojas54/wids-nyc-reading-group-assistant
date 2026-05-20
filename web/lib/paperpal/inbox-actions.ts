@@ -9,10 +9,13 @@
 //    member INSERT policy, so the placeholder reading_group meeting is
 //    created with the service client; the paper_suggestions row is then
 //    inserted with the RLS-scoped client so the insert-as-self policy
-//    still enforces suggested_by = current_member_id(). To dedupe, an
-//    already-proposed paper reuses its existing prep placeholder meeting
-//    instead of minting a new one, so UNIQUE(meeting_id, paper_id) on
-//    paper_suggestions fires and a repeat propose is an idempotent no-op.
+//    still enforces suggested_by = current_member_id(). Dedupe: a paper's
+//    placeholder is keyed by paper_id, and migration 019's partial unique
+//    index allows at most one member-proposed prep placeholder per paper.
+//    So while that placeholder is in prep, a repeat propose reuses it and
+//    trips paper_suggestions' UNIQUE(meeting_id, paper_id) — an idempotent
+//    no-op — and a concurrent propose that loses the meeting-insert race
+//    reuses the winner rather than minting a duplicate.
 import { revalidatePath } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
@@ -26,6 +29,11 @@ const VOLUNTEERS_UNIQUE_CONSTRAINT = "volunteers_meeting_id_member_id_key";
 // 23505 naming it means the paper is already proposed on that meeting.
 const PAPER_SUGGESTIONS_UNIQUE_CONSTRAINT =
   "paper_suggestions_meeting_id_paper_id_key";
+// Partial unique index from migration 019 — one member-proposed prep
+// placeholder per paper. A 23505 naming it means a concurrent propose won
+// the race to create the placeholder meeting.
+const MEETINGS_PLACEHOLDER_UNIQUE_INDEX =
+  "meetings_propose_placeholder_paper_unique";
 
 async function resolveMemberId(
   sb: Awaited<ReturnType<typeof createSupabaseServerClient>>,
@@ -111,13 +119,21 @@ export async function proposePaper(input: {
     throw new Error("no such paper");
   }
 
-  // Dedupe: if this paper already has a prep reading_group placeholder, reuse
-  // it instead of minting a new meeting. That makes UNIQUE(meeting_id,
-  // paper_id) on paper_suggestions reachable, so a repeat propose is a no-op.
-  const { data: existing, error: existingError } = await sb
-    .from("paper_suggestions")
-    .select("meeting_id, meeting:meeting_id(type, status)")
-    .eq("paper_id", input.paperId);
+  // A member-proposed placeholder is a prep reading_group meeting with
+  // paper_id set and no planned_by_admin_id (that column is set only on a
+  // cycle's canonical meeting). Migration 019's partial unique index keeps
+  // at most one such row per paper.
+  const findPlaceholder = () =>
+    sb
+      .from("meetings")
+      .select("id")
+      .eq("type", "reading_group")
+      .eq("status", "prep")
+      .is("planned_by_admin_id", null)
+      .eq("paper_id", input.paperId)
+      .maybeSingle();
+
+  const { data: existing, error: existingError } = await findPlaceholder();
   if (existingError) {
     await logServerAction(
       "proposePaper",
@@ -127,10 +143,6 @@ export async function proposePaper(input: {
     );
     throw new Error(existingError.message);
   }
-  const placeholder = (existing ?? []).find(
-    (r: any) =>
-      r.meeting?.type === "reading_group" && r.meeting?.status === "prep",
-  );
 
   // meetings has no member-facing INSERT/DELETE policy — the service client
   // owns the placeholder meeting's lifecycle.
@@ -138,25 +150,60 @@ export async function proposePaper(input: {
   let meetingId: number;
   let createdMeeting = false;
 
-  if (placeholder) {
-    meetingId = placeholder.meeting_id;
+  if (existing) {
+    // Dedupe: reuse this paper's existing placeholder.
+    meetingId = existing.id;
   } else {
     const { data: meeting, error: meetingError } = await svc
       .from("meetings")
-      .insert({ type: "reading_group", status: "prep" })
+      .insert({
+        type: "reading_group",
+        status: "prep",
+        paper_id: input.paperId,
+      })
       .select("id")
       .single();
-    if (meetingError || !meeting) {
+    if (meetingError) {
+      // A concurrent propose of the same paper raced us and inserted its
+      // placeholder first — migration 019's unique index now rejects ours.
+      // Reuse the winner instead of minting a duplicate.
+      const lostPlaceholderRace =
+        meetingError.code === POSTGRES_UNIQUE_VIOLATION &&
+        meetingError.message.includes(MEETINGS_PLACEHOLDER_UNIQUE_INDEX);
+      if (!lostPlaceholderRace) {
+        await logServerAction(
+          "proposePaper",
+          "failure",
+          `paper ${input.paperId}`,
+          meetingError.message,
+        );
+        throw new Error(meetingError.message);
+      }
+      const { data: won, error: wonError } = await findPlaceholder();
+      if (wonError || !won) {
+        await logServerAction(
+          "proposePaper",
+          "failure",
+          `paper ${input.paperId}`,
+          wonError?.message ?? "lost the placeholder race but found no winner",
+        );
+        throw new Error(
+          wonError?.message ?? "could not resolve placeholder meeting",
+        );
+      }
+      meetingId = won.id;
+    } else if (!meeting) {
       await logServerAction(
         "proposePaper",
         "failure",
         `paper ${input.paperId}`,
-        meetingError?.message ?? "meeting insert returned no row",
+        "meeting insert returned no row",
       );
-      throw new Error(meetingError?.message ?? "could not create meeting");
+      throw new Error("could not create meeting");
+    } else {
+      meetingId = meeting.id;
+      createdMeeting = true;
     }
-    meetingId = meeting.id;
-    createdMeeting = true;
   }
 
   const note = input.note?.trim();
