@@ -61,7 +61,7 @@ export async function getCurrentReading(
   sb: SupabaseClient,
 ): Promise<InboxMeeting | null> {
   const nowIso = new Date().toISOString();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("meetings")
     .select(MEETING_SELECT)
     .eq("status", "scheduled")
@@ -69,6 +69,9 @@ export async function getCurrentReading(
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (error) {
+    throw new Error(`getCurrentReading: meetings query failed: ${error.message}`);
+  }
   return data ? mapMeeting(data) : null;
 }
 
@@ -76,13 +79,16 @@ export async function getUpcomingPicks(
   sb: SupabaseClient,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("meetings")
     .select(MEETING_SELECT)
     .eq("status", "scheduled")
     .gt("scheduled_at", nowIso)
     .not("leader_id", "is", null)
     .order("scheduled_at", { ascending: true });
+  if (error) {
+    throw new Error(`getUpcomingPicks: meetings query failed: ${error.message}`);
+  }
   return (data ?? []).map(mapMeeting);
 }
 
@@ -91,22 +97,32 @@ export async function getWantToLead(
 ): Promise<InboxSuggestion[]> {
   // paper_suggestions joined to papers + suggester member name; filter out
   // suggestions whose paper already has a meeting with a leader assigned.
-  const { data } = await sb
+  const { data, error } = await sb
     .from("paper_suggestions")
     .select(
       "id, suggested_at, notes, suggested_by, suggester:suggested_by(name), paper:paper_id(id, title, authors, venue, companion_url)",
     )
     .order("suggested_at", { ascending: false });
+  if (error) {
+    throw new Error(
+      `getWantToLead: paper_suggestions query failed: ${error.message}`,
+    );
+  }
 
   const rows = (data ?? []).filter((r: any) => r.paper);
   if (rows.length === 0) return [];
 
   const paperIds = Array.from(new Set(rows.map((r: any) => r.paper.id)));
-  const { data: ledMeetings } = await sb
+  const { data: ledMeetings, error: ledMeetingsError } = await sb
     .from("meetings")
     .select("paper_id")
     .in("paper_id", paperIds)
     .not("leader_id", "is", null);
+  if (ledMeetingsError) {
+    throw new Error(
+      `getWantToLead: meetings query failed: ${ledMeetingsError.message}`,
+    );
+  }
   const assigned = new Set((ledMeetings ?? []).map((m: any) => m.paper_id));
 
   return rows
@@ -126,12 +142,17 @@ export async function getRecentlyDiscussed(
   limit = 10,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
-  const { data } = await sb
+  const { data, error } = await sb
     .from("meetings")
     .select(MEETING_SELECT)
     .or(`status.eq.done,and(status.neq.cancelled,scheduled_at.lt.${nowIso})`)
     .order("scheduled_at", { ascending: false })
     .limit(limit);
+  if (error) {
+    throw new Error(
+      `getRecentlyDiscussed: meetings query failed: ${error.message}`,
+    );
+  }
   return (data ?? []).map(mapMeeting);
 }
 
