@@ -15,7 +15,6 @@ import { PaperCompanion } from "@/components/PaperCompanion";
 import { PaperPalSynthesizePrompt } from "@/components/PaperPalSynthesizePrompt";
 import { PaperPalEmptyState } from "@/components/PaperPalEmptyState";
 import { PaperDashboard } from "@/components/paperpal/dashboard/PaperDashboard";
-import TweaksPanel from "@/components/paperpal/TweaksPanel";
 import { AssessmentPanel } from "@/components/paperpal/assessment/AssessmentPanel";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { canSynthesizePaperPal, paperCatalogRow } from "@/lib/queries";
@@ -118,7 +117,6 @@ export default async function PaperPage({
             />
           </section>
         )}
-        <TweaksPanel />
       </>
     );
   }

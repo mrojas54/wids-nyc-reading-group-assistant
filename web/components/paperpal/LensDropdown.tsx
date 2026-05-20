@@ -1,11 +1,11 @@
 "use client";
 
 // Topbar difficulty-lens dropdown.
-// Reads/writes tweaks.lens via the same useGlobalLocalState key as TweaksPanel.
+// Reads/writes tweaks.lens via the shared useTweaks hook.
 // Ported from design_handoff/design/app.jsx · LensDropdown.
 import { useEffect, useRef, useState } from "react";
 import type { Lens } from "@/lib/paperpal/types";
-import { useTweaks, DEFAULT_TWEAKS } from "./TweaksPanel";
+import { useTweaks, DEFAULT_TWEAKS } from "@/lib/paperpal/tweaks";
 
 type Option = { value: Lens; label: string; sub: string };
 
