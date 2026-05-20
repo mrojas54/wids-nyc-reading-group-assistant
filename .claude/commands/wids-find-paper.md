@@ -10,8 +10,13 @@ Three sub-modes: `search`, `compare`, `pick`.
 ## Step 1 — Find the active reading_group
 
 ```sql
+-- planned_by_admin_id IS NOT NULL excludes member-proposed placeholders
+-- from proposePaper (also type='reading_group' status='prep'); they
+-- normally have leader_id NULL, but this guards against ever resolving
+-- to one if a leader was mistakenly stamped onto a placeholder.
 SELECT id, leader_id FROM meetings
 WHERE type='reading_group' AND status='prep' AND leader_id IS NOT NULL
+  AND planned_by_admin_id IS NOT NULL
 ORDER BY created_at DESC LIMIT 1;
 ```
 

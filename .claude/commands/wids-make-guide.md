@@ -19,11 +19,15 @@ Three stages: stage 1 produces members' packet (single agent), stage 2 fans out 
 ## Step 0 — Find the active reading_group
 
 ```sql
+-- planned_by_admin_id IS NOT NULL excludes member-proposed placeholders
+-- from proposePaper: those are also type='reading_group' status='prep'
+-- with paper_id set, so paper_id IS NOT NULL alone does not exclude them.
 SELECT m.id AS rg_id, m.paper_id, m.drive_folder_url, m.leader_id,
        p.title, p.pdf_drive_url, p.url
 FROM meetings m
 JOIN papers p ON p.id = m.paper_id
 WHERE m.type='reading_group' AND m.status='prep' AND m.paper_id IS NOT NULL
+  AND m.planned_by_admin_id IS NOT NULL
 ORDER BY m.created_at DESC LIMIT 1;
 ```
 
