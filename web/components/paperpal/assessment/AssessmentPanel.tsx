@@ -37,8 +37,8 @@ export function AssessmentPanel({
     DEFAULT_TWEAKS,
   );
 
-  const mode = tweaks.assessmentMode ?? "mcq";
-  const lens = tweaks.lens ?? "engineer";
+  const mode = tweaks.assessmentMode;
+  const lens = tweaks.lens;
   const setMode = (m: AssessmentMode) =>
     setTweaks({ ...tweaks, assessmentMode: m });
 

@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
   }
 
   // Effective provider: env default unless caller is admin AND provided one.
-  const callerRole = await getMemberRole(sbAuth, memberId);
+  const callerRole = await getMemberRole(sbAuth);
   const effectiveProvider = resolveProvider({
     envDefault: Deno.env.get("PAPER_PAL_PROVIDER"),
     bodyProvider: typeof bodyProvider === "string" ? bodyProvider : undefined,

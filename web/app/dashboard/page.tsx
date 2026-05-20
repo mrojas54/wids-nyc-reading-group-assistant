@@ -19,37 +19,32 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const sb = createSupabaseServerClient();
 
-  const meeting = await nextMeeting(sb);
-
+  // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
+  // Role values are constrained in migrations/014_members_role_leader_admin.sql.
+  const [meeting, history, memberId, userResult] = await Promise.all([
+    nextMeeting(sb),
+    myHistory(sb, 10),
+    currentMemberId(sb),
+    sb.auth.getUser(),
+  ]);
   // nextMeeting() falls back to the most recent prep meeting when nothing is
   // scheduled, so derive the prep meeting from that result instead of issuing
   // a second, overlapping query.
   const prepMeeting = meeting?.status === "prep" ? meeting : null;
+  const user = userResult.data.user;
 
-  const memberId = await currentMemberId(sb);
-
-  const submitted = prepMeeting
-    ? await myAvailabilitySubmitted(sb, prepMeeting.id, memberId)
-    : true;
-
-  const rsvp =
-    meeting?.status === "scheduled" ? await myRsvp(sb, meeting.id) : null;
+  const [submitted, rsvp, memberResult] = await Promise.all([
+    prepMeeting
+      ? myAvailabilitySubmitted(sb, prepMeeting.id, memberId)
+      : Promise.resolve(true),
+    meeting?.status === "scheduled" ? myRsvp(sb, meeting.id) : Promise.resolve(null),
+    user
+      ? sb.from("members").select("name, role").eq("auth_user_id", user.id).single()
+      : Promise.resolve({ data: null }),
+  ]);
+  const member = memberResult.data;
 
   const stats = await myStats(sb, submitted, memberId);
-  const history = await myHistory(sb, 10);
-
-  // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
-  // Role values are constrained in migrations/014_members_role_leader_admin.sql.
-  const {
-    data: { user },
-  } = await sb.auth.getUser();
-  const { data: member } = user
-    ? await sb
-        .from("members")
-        .select("name, role")
-        .eq("auth_user_id", user.id)
-        .single()
-    : { data: null };
   const canFindPaper =
     member?.role === "operator" ||
     member?.role === "leader" ||
