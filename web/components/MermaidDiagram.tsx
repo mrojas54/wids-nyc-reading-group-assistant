@@ -73,7 +73,6 @@ export function ensureTierClassDefs(source: string): string {
   if (missing.length === 0) return source;
 
   if (process.env.NODE_ENV !== "production") {
-    // eslint-disable-next-line no-console
     console.warn(
       `[MermaidDiagram] Auto-injected tier classDefs: ${missing.join(", ")}. ` +
         `Author should declare these explicitly. See project/mermaid-theme.md.`,
@@ -104,6 +103,15 @@ export function MermaidDiagram({
   const ref = useRef<HTMLDivElement>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // Clear a stale error when the source changes — adjusting state during
+  // render (React docs) instead of an effect, so the ref div is mounted
+  // before the render effect runs.
+  const [renderedSource, setRenderedSource] = useState(source);
+  if (source !== renderedSource) {
+    setRenderedSource(source);
+    setErr(null);
+  }
+
   // mermaid.initialize mutates global state; idempotent but only run once per mount.
   useEffect(() => {
     (async () => {
@@ -120,7 +128,6 @@ export function MermaidDiagram({
 
   useEffect(() => {
     let cancelled = false;
-    setErr(null);
     (async () => {
       const mermaid = (await import("mermaid")).default;
       try {

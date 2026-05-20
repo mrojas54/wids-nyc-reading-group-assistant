@@ -3,6 +3,8 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getInbox, type InboxMeeting } from "@/lib/paperpal/inbox";
 import InboxCard from "./InboxCard";
+import VolunteerButton from "./VolunteerButton";
+import ProposePaperForm from "./ProposePaperForm";
 import "./inbox.css";
 
 function formatMonthYear(d: Date): string {
@@ -39,7 +41,8 @@ function formatRelativeDate(iso: string | null | undefined): string | null {
 
 export default async function InboxScreen() {
   const sb = await createSupabaseServerClient();
-  const { reading, upcoming, suggestions, past } = await getInbox(sb);
+  const { reading, upcoming, suggestions, past, viewer, catalogPapers } =
+    await getInbox(sb);
 
   const heroWhen = reading ? formatHero(reading.scheduled_at) : null;
   const heroLead = reading?.leader_name ?? null;
@@ -137,26 +140,41 @@ export default async function InboxScreen() {
           </div>
         ) : (
           <div className="inbox-grid">
-            {suggestions.map((s) => (
-              <InboxCard
-                key={s.suggestion_id}
-                paper={s.paper}
-                variant="proposed"
-                badge={{ tone: "neutral", label: "Suggested" }}
-                pickPill={{ label: "Wants to lead", ghost: true }}
-                pickAttribution={
-                  s.suggested_by_name
-                    ? {
-                        who: s.suggested_by_name,
-                        when: formatRelativeDate(s.suggested_at),
-                      }
-                    : undefined
-                }
-                note={s.note}
-              />
-            ))}
+            {suggestions.map((s) => {
+              const isLeader =
+                viewer.memberId != null &&
+                s.meeting_leader_id === viewer.memberId;
+              return (
+                <div className="inbox-card-stack" key={s.suggestion_id}>
+                  <InboxCard
+                    paper={s.paper}
+                    variant="proposed"
+                    badge={{ tone: "neutral", label: "Suggested" }}
+                    pickPill={{ label: "Wants to lead", ghost: true }}
+                    pickAttribution={
+                      s.suggested_by_name
+                        ? {
+                            who: s.suggested_by_name,
+                            when: formatRelativeDate(s.suggested_at),
+                          }
+                        : undefined
+                    }
+                    note={s.note}
+                  />
+                  {viewer.memberId != null && !isLeader && (
+                    <VolunteerButton
+                      meetingId={s.meeting_id}
+                      alreadyVolunteered={viewer.volunteeredMeetingIds.includes(
+                        s.meeting_id,
+                      )}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
+        <ProposePaperForm papers={catalogPapers} />
       </section>
 
       {/* Recently discussed */}

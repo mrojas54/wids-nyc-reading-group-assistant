@@ -282,6 +282,143 @@
   border-color: var(--color-magenta-200);
 }
 
+/* Want-to-lead card + its volunteer action, stacked as one grid cell. */
+.inbox-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.volunteer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.volunteer-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: white;
+  background: var(--color-sage-700);
+  border: 1px solid var(--color-sage-800);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-2) var(--ease-out);
+}
+.volunteer-btn:hover:not(:disabled) {
+  background: var(--color-sage-800);
+}
+.volunteer-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.volunteer-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.volunteer-done {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-sage-800);
+  background: var(--color-sage-50);
+  border: 1px solid var(--color-sage-200);
+  border-radius: var(--radius-pill);
+}
+.volunteer-error {
+  font-size: 12px;
+  color: var(--color-magenta-700);
+}
+
+/* Propose-a-paper composer. */
+.propose-form {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-lg);
+}
+.propose-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.propose-field > span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.propose-field select,
+.propose-field textarea {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--fg-1);
+  background: var(--bg-page-warm);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+}
+.propose-field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.propose-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.propose-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: white;
+  background: var(--color-sage-700);
+  border: 1px solid var(--color-sage-800);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-2) var(--ease-out);
+}
+.propose-btn:hover:not(:disabled) {
+  background: var(--color-sage-800);
+}
+.propose-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.propose-ok {
+  font-size: 13px;
+  color: var(--color-sage-700);
+}
+.propose-error {
+  font-size: 13px;
+  color: var(--color-magenta-700);
+}
+.propose-empty {
+  margin-top: 14px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--fg-3);
+}
+
 .inbox-empty {
   font-family: var(--font-serif);
   font-style: italic;

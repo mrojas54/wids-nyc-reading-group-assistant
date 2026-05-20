@@ -24,11 +24,20 @@ export type InboxMeeting = {
 
 export type InboxSuggestion = {
   suggestion_id: number;
+  meeting_id: number;
+  meeting_leader_id: number | null;
   suggested_at: string | null;
   note: string | null;
   suggested_by_id: number | null;
   suggested_by_name: string | null;
   paper: InboxPaper;
+};
+
+export type CatalogPaper = { id: number; title: string };
+
+export type InboxViewer = {
+  memberId: number | null;
+  volunteeredMeetingIds: number[];
 };
 
 function mapPaper(p: any): InboxPaper | null {
@@ -100,7 +109,7 @@ export async function getWantToLead(
   const { data, error } = await sb
     .from("paper_suggestions")
     .select(
-      "id, suggested_at, notes, suggested_by, suggester:suggested_by(name), paper:paper_id(id, title, authors, venue, companion_url)",
+      "id, meeting_id, suggested_at, notes, suggested_by, suggester:suggested_by(name), meeting:meeting_id(leader_id), paper:paper_id(id, title, authors, venue, companion_url)",
     )
     .order("suggested_at", { ascending: false });
   if (error) {
@@ -129,12 +138,50 @@ export async function getWantToLead(
     .filter((r: any) => !assigned.has(r.paper.id))
     .map((r: any) => ({
       suggestion_id: r.id,
+      meeting_id: r.meeting_id,
+      meeting_leader_id: r.meeting?.leader_id ?? null,
       suggested_at: r.suggested_at ?? null,
       note: r.notes ?? null,
       suggested_by_id: r.suggested_by ?? null,
       suggested_by_name: r.suggester?.name ?? null,
       paper: mapPaper(r.paper)!,
     }));
+}
+
+// Viewer-scoped facts the Inbox needs to decide which actions to show:
+// the current member id and the meetings they've already volunteered for.
+export async function getInboxViewer(
+  sb: SupabaseClient,
+): Promise<InboxViewer> {
+  const { data: memberId } = await sb.rpc("current_member_id");
+  if (typeof memberId !== "number") {
+    return { memberId: null, volunteeredMeetingIds: [] };
+  }
+  const { data, error } = await sb
+    .from("volunteers")
+    .select("meeting_id")
+    .eq("member_id", memberId);
+  if (error) {
+    throw new Error(`getInboxViewer: volunteers query failed: ${error.message}`);
+  }
+  return {
+    memberId,
+    volunteeredMeetingIds: (data ?? []).map((v: any) => v.meeting_id),
+  };
+}
+
+// Catalog papers a member can propose to lead, newest first.
+export async function listCatalogPapers(
+  sb: SupabaseClient,
+): Promise<CatalogPaper[]> {
+  const { data, error } = await sb
+    .from("papers")
+    .select("id, title")
+    .order("added_at", { ascending: false });
+  if (error) {
+    throw new Error(`listCatalogPapers: papers query failed: ${error.message}`);
+  }
+  return (data ?? []).map((p: any) => ({ id: p.id, title: p.title ?? "" }));
 }
 
 export async function getRecentlyDiscussed(
@@ -157,15 +204,25 @@ export async function getRecentlyDiscussed(
 }
 
 export async function getInbox(sb: SupabaseClient) {
-  const [reading, upcoming, suggestions, past] = await Promise.all([
-    getCurrentReading(sb),
-    getUpcomingPicks(sb),
-    getWantToLead(sb),
-    getRecentlyDiscussed(sb),
-  ]);
+  const [reading, upcoming, suggestions, past, viewer, catalogPapers] =
+    await Promise.all([
+      getCurrentReading(sb),
+      getUpcomingPicks(sb),
+      getWantToLead(sb),
+      getRecentlyDiscussed(sb),
+      getInboxViewer(sb),
+      listCatalogPapers(sb),
+    ]);
   // Drop the "reading now" meeting from "upcoming picks" so it isn't listed twice.
   const filteredUpcoming = reading
     ? upcoming.filter((m) => m.meeting_id !== reading.meeting_id)
     : upcoming;
-  return { reading, upcoming: filteredUpcoming, suggestions, past };
+  return {
+    reading,
+    upcoming: filteredUpcoming,
+    suggestions,
+    past,
+    viewer,
+    catalogPapers,
+  };
 }

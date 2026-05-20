@@ -197,14 +197,18 @@ export function SocraticMode({
     }
   };
 
-  // 60s idle pulse on hint button
+  // 60s idle pulse on hint button. When the timer is armed, its cleanup
+  // clears the pulse on the next dep change (typing, spending a hint, a new
+  // message); the early returns below skip arming it.
   useEffect(() => {
-    setPulse(false);
     if (input.trim().length > 0) return;
     if (hintsLeft <= 0) return;
     if (synthesized) return;
     const t = setTimeout(() => setPulse(true), IDLE_PULSE_MS);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      setPulse(false);
+    };
   }, [input, hintsLeft, synthesized, thread.length]);
 
   const reset = () => {

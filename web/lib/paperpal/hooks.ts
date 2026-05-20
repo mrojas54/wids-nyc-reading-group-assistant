@@ -4,7 +4,7 @@
 // `typeof window` so server renders return the initial value and hydration
 // catches up on mount.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { HintFlags, SectionRef } from "./types";
 
 const NS = "paperpal:v1:";
@@ -36,12 +36,11 @@ export function useLocalState<T>(
   fullKey: string,
   initial: T | (() => T),
 ): [T, (v: T | ((prev: T) => T)) => void] {
-  const init = useRef(initial);
+  // The lazy initializer runs once on mount; closing over the first-render
+  // `initial` matches the previous useRef-captured behavior.
   const [value, setValue] = useState<T>(() => {
     const base =
-      typeof init.current === "function"
-        ? (init.current as () => T)()
-        : (init.current as T);
+      typeof initial === "function" ? (initial as () => T)() : initial;
     return readJSON<T>(fullKey, base);
   });
 
@@ -104,12 +103,18 @@ export function clearHintFlags(paperId: string): void {
 export function useHintFlags(paperId: string): HintFlags {
   const [flags, setFlags] = useState<HintFlags>(() => readHintFlags(paperId));
 
+  // Re-read when the paper changes, during render rather than in an effect.
+  const [trackedPaper, setTrackedPaper] = useState(paperId);
+  if (paperId !== trackedPaper) {
+    setTrackedPaper(paperId);
+    setFlags(readHintFlags(paperId));
+  }
+
   const refresh = useCallback(() => {
     setFlags(readHintFlags(paperId));
   }, [paperId]);
 
   useEffect(() => {
-    refresh();
     if (typeof window === "undefined") return;
     window.addEventListener(HINT_EVENT, refresh);
     window.addEventListener("storage", refresh);

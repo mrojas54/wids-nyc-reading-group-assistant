@@ -5,7 +5,7 @@
 // Q&A per discussion slide is persisted via usePaperLocalState.
 // Ported from design_handoff/design/ideas-screens.jsx · PresenterScreen.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePaperLocalState } from "@/lib/paperpal/hooks";
 import type { Slide } from "@/lib/paperpal/presenter";
@@ -48,18 +48,21 @@ export default function PresenterScreen({
   const [totalStart, setTotalStart] = useState<number>(() => Date.now());
   const [slideStart, setSlideStart] = useState<number>(() => Date.now());
   const [now, setNow] = useState<number>(() => Date.now());
-  const iRef = useRef(i);
-  iRef.current = i;
+
+  // Reset the per-slide timer when the slide changes, during render. Uses
+  // the `now` tick (state — pure to read) rather than Date.now(); the timer
+  // displays whole seconds, so sub-tick skew is invisible.
+  const [slideStartIdx, setSlideStartIdx] = useState(i);
+  if (i !== slideStartIdx) {
+    setSlideStartIdx(i);
+    setSlideStart(now);
+  }
 
   useEffect(() => {
     if (paused) return;
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [paused]);
-
-  useEffect(() => {
-    setSlideStart(Date.now());
-  }, [i]);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -69,13 +72,15 @@ export default function PresenterScreen({
 
   const goTo = useCallback(
     (n: number) => {
-      const clamped = Math.max(0, Math.min(slides.length - 1, n));
-      setI(clamped);
+      setI(Math.max(0, Math.min(slides.length - 1, n)));
     },
     [slides.length, setI],
   );
-  const next = useCallback(() => goTo(iRef.current + 1), [goTo]);
-  const prev = useCallback(() => goTo(iRef.current - 1), [goTo]);
+  const next = useCallback(
+    () => setI((cur) => Math.min(slides.length - 1, cur + 1)),
+    [slides.length, setI],
+  );
+  const prev = useCallback(() => setI((cur) => Math.max(0, cur - 1)), [setI]);
 
   const exit = useCallback(() => {
     if (onExit) onExit();
