@@ -1,0 +1,91 @@
+# Continuous integration — runs the web and Python test suites on every PR
+# and on pushes to main.
+#
+# Security note: every run: block references only static strings; no
+# github.event.* inputs are interpolated, so this workflow is not exposed to
+# script-injection per
+# https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+
+name: CI
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: web (lint + vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+  python:
+    name: python (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Cache uv archives
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py311-ci-v1
+
+      # Each test file declares its own dependency set in its module docstring;
+      # the union of those is installed here. pilot_test.py is intentionally
+      # excluded — it is a CLI script (not a pytest module) and needs a live DB.
+      - name: Run unit tests
+        run: |
+          uv run --python 3.11 \
+                 --with pytest \
+                 --with pytest-asyncio \
+                 --with respx \
+                 --with httpx \
+                 --with numpy \
+                 --with pydantic \
+                 --with tenacity \
+                 --with responses \
+                 --with 'psycopg[binary]' \
+                 --with pyzotero \
+                 pytest -c tests/pytest.ini -v \
+                 tests/find_paper_suggest_test.py \
+                 tests/zotero_push_test.py
