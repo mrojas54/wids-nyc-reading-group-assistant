@@ -44,14 +44,17 @@ vi.mock("@/lib/supabase/browser", () => ({
 
 // crypto.randomUUID is deterministic so we can assert the path.
 const RANDOM_UUID = "11111111-2222-3333-4444-555555555555";
+const SUPABASE_URL = "https://test.supabase.co";
 beforeEach(() => {
   vi.stubGlobal("crypto", { ...globalThis.crypto, randomUUID: () => RANDOM_UUID });
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE_URL);
   routerPush.mockReset();
   uploadResult = { data: { path: "ok" }, error: null };
   session = { access_token: "tok-1" };
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   cleanup();
 });
@@ -119,6 +122,28 @@ describe("NewPaperForm — pre-flight", () => {
 });
 
 describe("NewPaperForm — submission paths", () => {
+  it("errors and skips network calls when NEXT_PUBLIC_SUPABASE_URL is unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<NewPaperForm paperId={42} />);
+    await userEvent.upload(screen.getByLabelText(/pdf/i), makePdf(1024));
+    await userEvent.click(screen.getByRole("button", { name: /generate/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/configuration error/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("trims trailing slashes from the Supabase URL before composing fnUrl", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", `${SUPABASE_URL}///`);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseStream([stage("parsing_pdf"), complete(42)]),
+    );
+    render(<NewPaperForm paperId={42} />);
+    await userEvent.upload(screen.getByLabelText(/pdf/i), makePdf(1024));
+    await userEvent.click(screen.getByRole("button", { name: /generate/i }));
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/papers/42"));
+    expect(fetchSpy.mock.calls[0][0]).toBe(`${SUPABASE_URL}/functions/v1/analyze-paper`);
+  });
+
   it("happy path: drives stages, then router.push to /papers/<id> on complete", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       sseStream([
@@ -136,7 +161,7 @@ describe("NewPaperForm — submission paths", () => {
 
     await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/papers/42"));
     const call = fetchSpy.mock.calls[0];
-    expect(call[0]).toBe("/functions/v1/analyze-paper");
+    expect(call[0]).toBe(`${SUPABASE_URL}/functions/v1/analyze-paper`);
     const body = JSON.parse((call[1] as RequestInit).body as string);
     expect(body).toEqual({
       paper_id: 42,

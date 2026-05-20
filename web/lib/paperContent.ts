@@ -44,14 +44,3 @@ export async function readPaperContent(id: string): Promise<PaperContent | null>
     return null;
   }
 }
-
-export async function listPaperContentIds(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(CONTENT_DIR);
-    return files
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.replace(/\.json$/, ""));
-  } catch {
-    return [];
-  }
-}

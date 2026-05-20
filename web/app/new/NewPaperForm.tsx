@@ -70,6 +70,16 @@ export function NewPaperForm({ paperId }: { paperId: number }) {
     setError(null);
     setSubmitting(true);
 
+    // Validate config before the (non-transactional) Storage upload, so a
+    // missing env var can't orphan a PDF object in the bucket.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      reset();
+      setError("Configuration error: Supabase URL is not set.");
+      return;
+    }
+    const fnUrl = `${supabaseUrl.replace(/\/+$/, "")}/functions/v1/analyze-paper`;
+
     const sb = createSupabaseBrowserClient();
     const path = `${paperId}/${crypto.randomUUID()}.pdf`;
 
@@ -100,7 +110,7 @@ export function NewPaperForm({ paperId }: { paperId: number }) {
 
     let res: Response;
     try {
-      res = await fetch("/functions/v1/analyze-paper", {
+      res = await fetch(fnUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

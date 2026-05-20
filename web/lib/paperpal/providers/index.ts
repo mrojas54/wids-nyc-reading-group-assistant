@@ -11,9 +11,13 @@
 // Keep this file (and everything it transitively imports) free of
 // Node-specific APIs (fs, path, Buffer, process.*). The cross-runtime
 // env shim in gemini.ts / claude.ts handles process.env vs Deno.env.
-import { geminiSynthesize, geminiHint, geminiSocratic } from "./gemini";
-import { claudeSynthesize, claudeHint, claudeSocratic } from "./claude";
-import { isProvider } from "./types";
+//
+// Relative imports MUST carry the explicit `.ts` extension — Deno
+// requires it; the Node/bundler side tolerates it via
+// `allowImportingTsExtensions` in web/tsconfig.json.
+import { geminiSynthesize, geminiHint, geminiSocratic } from "./gemini.ts";
+import { claudeSynthesize, claudeHint, claudeSocratic } from "./claude.ts";
+import { isProvider } from "./types.ts";
 import type {
   HintInput,
   HintResult,
@@ -23,16 +27,16 @@ import type {
   SynthesizeOpts,
   SynthesizePaperInput,
   SynthesizePaperResult,
-} from "./types";
+} from "./types.ts";
 
 export type {
   Provider,
   StoredProvider,
   ProviderMeta,
   SynthesizePaperResult,
-} from "./types";
-export { isProvider, isStoredProvider } from "./types";
-export { researchPaperAnalysisSchema } from "./schema";
+} from "./types.ts";
+export { isProvider, isStoredProvider } from "./types.ts";
+export { researchPaperAnalysisSchema } from "./schema.ts";
 
 function unknownProvider(p: string): never {
   throw new Error(`unknown provider ${p}`);

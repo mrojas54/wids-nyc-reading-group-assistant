@@ -103,7 +103,7 @@ export const researchPaperAnalysisSchema = z.object({
   mathExplanations: z.array(mathExplanation),
   diagrams: z.array(diagramBreakdown),
   codeSamples: z.array(codeSample).optional(),
-  learningResources: z.array(learningResource),
+  learningResources: z.array(learningResource).optional(),
   keyTakeaways: z.array(z.string()).min(1),
   assessmentQuiz,
   socraticPrompts: z.array(socraticPrompt).optional(),

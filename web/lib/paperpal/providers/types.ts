@@ -7,7 +7,7 @@
 // the schema and the legacy ResearchPaperAnalysis interface in
 // web/lib/paperpal/types.ts surfaces as a tsc error rather than a
 // silent runtime mismatch.
-import type { ResearchPaperAnalysisParsed } from "./schema";
+import type { ResearchPaperAnalysisParsed } from "./schema.ts";
 
 // Providers that can actually be invoked for a fresh synthesis. Tracks
 // the set the dispatch helpers in index.ts know how to route.

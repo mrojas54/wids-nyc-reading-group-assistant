@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 /**
@@ -7,9 +8,8 @@ import { useState } from "react";
  * catalog but no Paper Pal JSON has been generated yet. Spec:
  * docs/superpowers/specs/2026-05-17-paper-pal-design.md §4.2.
  *
- * v1: surfaces the slash command. In-portal synthesis (Edge Function) is
- * the follow-up; the button is intentionally a clipboard copy, not a
- * server mutation.
+ * Offers two paths: in-portal synthesis at /new?paperId=<id> (PDF upload
+ * + 5-stage SSE), and the legacy slash-command trigger as a fallback.
  */
 export function PaperPalSynthesizePrompt({
   paperId,
@@ -34,6 +34,7 @@ export function PaperPalSynthesizePrompt({
   }
 
   const role = reason === "owner" ? "the chapter operator" : "this paper's leader";
+  const portalHref = `/new?paperId=${paperId}`;
 
   return (
     <section
@@ -71,9 +72,23 @@ export function PaperPalSynthesizePrompt({
           lineHeight: 1.55,
         }}
       >
-        You&rsquo;re seeing this because you&rsquo;re {role}. Run the command
-        below in Claude Code to generate this paper&rsquo;s Paper Pal.
+        You&rsquo;re seeing this because you&rsquo;re {role}. Synthesize the
+        paper directly in the portal, or run the command below in Claude Code
+        as a fallback.
       </p>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+        <Link
+          href={portalHref}
+          className="btn btn-primary"
+          style={{ minWidth: 180, textAlign: "center" }}
+        >
+          Synthesize in portal
+        </Link>
+        <span style={{ fontSize: 12, color: "var(--color-paper-600)" }}>
+          Upload the PDF — runs as a 5-stage stream.
+        </span>
+      </div>
 
       <pre
         style={{
@@ -105,7 +120,7 @@ export function PaperPalSynthesizePrompt({
             color: "var(--color-paper-600)",
           }}
         >
-          In-portal synthesis is coming. This is the v1 trigger.
+          Fallback: run from Claude Code if the portal upload fails.
         </span>
       </div>
     </section>

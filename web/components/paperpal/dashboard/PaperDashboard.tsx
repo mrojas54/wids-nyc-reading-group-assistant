@@ -80,7 +80,9 @@ export function PaperDashboard({
 
         <TakeawaysTile takeaways={payload.keyTakeaways} />
 
-        <ResourcesTile resources={payload.learningResources} />
+        {payload.learningResources && payload.learningResources.length > 0 && (
+          <ResourcesTile resources={payload.learningResources} />
+        )}
 
         <DashboardActionStrip
           presentHref={paper?.presentHref}

@@ -5,11 +5,10 @@
 
 import { Fragment, type MouseEvent as ReactMouseEvent, type ReactNode, useState } from "react";
 import { Tooltip } from "./primitives";
-import type { MathExplanation, TerminologyItem } from "@/lib/paperpal/types";
+import type { TerminologyItem } from "@/lib/paperpal/types";
+import type { MathVar } from "@/lib/paperpal/mathVars";
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-type MathVar = { symbol: string; meaning: string; mathId?: string };
 
 type HoverTerm = {
   kind: "term";
@@ -225,20 +224,4 @@ export function Highlighted({
       )}
     </>
   );
-}
-
-// Helper: derive math-variable list from MathExplanation[] for the prose pass.
-export function mathVarsFromExplanations(
-  explanations: MathExplanation[] | undefined,
-): MathVar[] {
-  if (!explanations) return [];
-  const seen = new Map<string, MathVar>();
-  for (const m of explanations) {
-    for (const v of m.variables || []) {
-      if (!seen.has(v.name)) {
-        seen.set(v.name, { symbol: v.name, meaning: v.meaning });
-      }
-    }
-  }
-  return Array.from(seen.values());
 }

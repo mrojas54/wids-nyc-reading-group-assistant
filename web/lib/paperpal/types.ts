@@ -93,7 +93,7 @@ export interface ResearchPaperAnalysis {
   mathExplanations: MathExplanation[];
   diagrams: DiagramBreakdown[];
   codeSamples?: CodeSample[];
-  learningResources: LearningResource[];
+  learningResources?: LearningResource[];
   keyTakeaways: string[];
   assessmentQuiz: AssessmentQuiz;
   socraticPrompts?: SocraticPrompt[];
