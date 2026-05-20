@@ -34,7 +34,7 @@ function parseHistory(raw: unknown): Array<{ role: "ai" | "user"; text: string }
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((e): e is HistoryEntry => e !== null && typeof e === "object")
-    .map((e) => ({
+    .map((e): { role: "ai" | "user"; text: string } => ({
       role: e.role === "ai" ? "ai" : "user",
       text: typeof e.text === "string" ? e.text : "",
     }))

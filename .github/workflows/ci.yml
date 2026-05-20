@@ -36,6 +36,17 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
+      # setup-node's `cache: npm` only restores the ~/.npm download cache, not
+      # node_modules itself. @xenova/transformers + onnxruntime-web are large,
+      # so caching the installed tree skips the slow extract/link phase on a hit.
+      # npm ci still runs below — correct on a miss, and a fast reconcile on a
+      # hit since the lockfile hash keys the cache.
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: web/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
 
@@ -95,3 +106,28 @@ jobs:
                  pytest -c tests/pytest.ini -v \
                  tests/find_paper_suggest_test.py \
                  tests/zotero_push_test.py
+
+  edge-functions:
+    name: edge-functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        # Run from here so Deno auto-discovers deno.json (strict + lint config)
+        # and the import map it wires via "importMap": "./import_map.json".
+        working-directory: supabase/functions
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check Edge Functions
+        run: deno check '**/*.ts'
+
+      - name: Lint Edge Functions
+        run: deno lint
