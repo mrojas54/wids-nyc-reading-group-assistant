@@ -47,8 +47,8 @@ export function startSseResponse(origin: string | null): SseEmitter {
     return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
-  async function write(event: string, data: Record<string, unknown>): Promise<void> {
-    if (!controller) return;
+  function write(event: string, data: Record<string, unknown>): Promise<void> {
+    if (!controller) return Promise.resolve();
     try {
       controller.enqueue(frame(event, data));
     } catch (e) {
@@ -61,6 +61,7 @@ export function startSseResponse(origin: string | null): SseEmitter {
       console.warn("[sse] enqueue failed, marking emitter closed:", reason);
       controller = null;
     }
+    return Promise.resolve();
   }
 
   return {
