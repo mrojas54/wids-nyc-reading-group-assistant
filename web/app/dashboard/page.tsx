@@ -18,38 +18,33 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const sb = createSupabaseServerClient();
 
-  const meeting = await nextMeeting(sb);
-
-  const { data: prepMeeting } = await sb
-    .from("meetings")
-    .select("id, type")
-    .eq("status", "prep")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const submitted = prepMeeting
-    ? await myAvailabilitySubmitted(sb, prepMeeting.id)
-    : true;
-
-  const rsvp =
-    meeting?.status === "scheduled" ? await myRsvp(sb, meeting.id) : null;
-
-  const stats = await myStats(sb, submitted);
-  const history = await myHistory(sb, 10);
-
   // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
   // Role values are constrained in migrations/014_members_role_leader_admin.sql.
-  const {
-    data: { user },
-  } = await sb.auth.getUser();
-  const { data: member } = user
-    ? await sb
-        .from("members")
-        .select("name, role")
-        .eq("auth_user_id", user.id)
-        .single()
-    : { data: null };
+  const [meeting, prepResult, history, userResult] = await Promise.all([
+    nextMeeting(sb),
+    sb
+      .from("meetings")
+      .select("id, type")
+      .eq("status", "prep")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    myHistory(sb, 10),
+    sb.auth.getUser(),
+  ]);
+  const prepMeeting = prepResult.data;
+  const user = userResult.data.user;
+
+  const [submitted, rsvp, memberResult] = await Promise.all([
+    prepMeeting ? myAvailabilitySubmitted(sb, prepMeeting.id) : Promise.resolve(true),
+    meeting?.status === "scheduled" ? myRsvp(sb, meeting.id) : Promise.resolve(null),
+    user
+      ? sb.from("members").select("name, role").eq("auth_user_id", user.id).single()
+      : Promise.resolve({ data: null }),
+  ]);
+  const member = memberResult.data;
+
+  const stats = await myStats(sb, submitted);
   const canFindPaper =
     member?.role === "operator" ||
     member?.role === "leader" ||
