@@ -23,6 +23,7 @@ import {
   currentMemberId,
   getMemberRole,
 } from "../_shared/gate.ts";
+import { isAdmin } from "../_shared/roles.ts";
 import { errorResponse } from "../_shared/json.ts";
 import { startSseResponse } from "../_shared/sse.ts";
 import {
@@ -108,7 +109,7 @@ Deno.serve(async (req) => {
   const effectiveProvider = resolveProvider({
     envDefault: Deno.env.get("PAPER_PAL_PROVIDER"),
     bodyProvider: typeof bodyProvider === "string" ? bodyProvider : undefined,
-    callerIsAdmin: callerRole === "admin",
+    callerIsAdmin: isAdmin(callerRole),
   });
 
   // Mint a short-lived signed URL for the PDF (service-role only — bucket

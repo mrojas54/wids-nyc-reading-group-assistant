@@ -3,6 +3,7 @@
 //   - the synthesis gate (analyze-paper: write privilege)
 //   - the looser "attending member" gate (analyze-hint / analyze-socratic)
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isAdmin } from "./roles.ts";
 
 // Discriminated union mirrors web/lib/queries.ts — makes the illegal
 // state `{canSynthesize: true, reason: "none"}` a compile error.
@@ -65,7 +66,7 @@ export async function canRequestHint(
 ): Promise<boolean> {
   // Owners always pass.
   const role = await getMemberRole(sb, memberId);
-  if (role === "operator" || role === "admin") return true;
+  if (role === "operator" || isAdmin(role)) return true;
 
   // Anyone with an attending RSVP for a meeting that uses this paper.
   const { data, error } = await sb

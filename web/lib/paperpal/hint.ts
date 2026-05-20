@@ -6,18 +6,13 @@
 // and the JSON response: { hint, confidence, provider, model }.
 
 import type { AnalyzeHintResponse } from "./wire";
+import { postPaperPalJson } from "./client";
 
 export type FetchHintInput = {
   paperId: number;
   questionText: string;
   questionOptions?: string[];
   userAnswer: string;
-};
-
-export type FetchHintError = Error & {
-  status: number;
-  code: string;
-  detail?: unknown;
 };
 
 export async function fetchHint(
@@ -33,29 +28,9 @@ export async function fetchHint(
     body.question_options = input.questionOptions;
   }
 
-  const res = await fetch("/functions/v1/analyze-hint", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const raw = await res.json().catch(() => null);
-    const parsed =
-      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-    const code =
-      parsed && typeof parsed.error === "string"
-        ? (parsed.error as string)
-        : `hint_failed_${res.status}`;
-    const err = new Error(code) as FetchHintError;
-    err.status = res.status;
-    err.code = code;
-    if (parsed?.detail !== undefined) err.detail = parsed.detail;
-    throw err;
-  }
-
-  return (await res.json()) as AnalyzeHintResponse;
+  return postPaperPalJson<AnalyzeHintResponse>(
+    "/functions/v1/analyze-hint",
+    body,
+    accessToken,
+  );
 }

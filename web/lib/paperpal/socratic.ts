@@ -11,6 +11,7 @@ import type {
   AnalyzeSocraticResponse,
   SocraticHistoryEntry,
 } from "./wire";
+import { postPaperPalJson } from "./client";
 
 export type FetchSocraticInput = {
   paperId: number;
@@ -21,12 +22,6 @@ export type FetchSocraticInput = {
   history?: SocraticHistoryEntry[];
   userResponse: string;
   turnNumber: number;
-};
-
-export type FetchSocraticError = Error & {
-  status: number;
-  code: string;
-  detail?: unknown;
 };
 
 export async function fetchSocratic(
@@ -44,29 +39,9 @@ export async function fetchSocratic(
   if (input.scriptedProbes !== undefined) body.scripted_probes = input.scriptedProbes;
   if (input.history !== undefined) body.history = input.history;
 
-  const res = await fetch("/functions/v1/analyze-socratic", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const raw = await res.json().catch(() => null);
-    const parsed =
-      raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-    const code =
-      parsed && typeof parsed.error === "string"
-        ? (parsed.error as string)
-        : `socratic_failed_${res.status}`;
-    const err = new Error(code) as FetchSocraticError;
-    err.status = res.status;
-    err.code = code;
-    if (parsed?.detail !== undefined) err.detail = parsed.detail;
-    throw err;
-  }
-
-  return (await res.json()) as AnalyzeSocraticResponse;
+  return postPaperPalJson<AnalyzeSocraticResponse>(
+    "/functions/v1/analyze-socratic",
+    body,
+    accessToken,
+  );
 }
