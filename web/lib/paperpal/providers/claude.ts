@@ -1,6 +1,9 @@
 // Claude provider implementation. Uses the Anthropic Messages REST API
 // directly via fetch (no SDK) for the same cross-runtime reason as gemini.ts.
 //
+// Relative imports MUST carry the explicit `.ts` extension — Deno requires
+// it; the Node/bundler side tolerates it via `allowImportingTsExtensions`.
+//
 // Prompt caching is enabled on the system prompt via cache_control, per
 // the claude-api skill recommendation — synthesis re-runs on the same
 // paper hit the cache for ~90% input-token cost savings.

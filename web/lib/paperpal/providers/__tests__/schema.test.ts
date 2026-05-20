@@ -74,6 +74,11 @@ describe("researchPaperAnalysisSchema", () => {
     ).toThrow();
   });
 
+  it("accepts a payload with learningResources omitted", () => {
+    const { learningResources: _lr, ...rest } = minimalPayload;
+    expect(() => researchPaperAnalysisSchema.parse(rest)).not.toThrow();
+  });
+
   it("rejects a learningResources URL that is not a URL", () => {
     expect(() =>
       researchPaperAnalysisSchema.parse({

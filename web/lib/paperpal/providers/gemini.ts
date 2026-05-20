@@ -4,6 +4,9 @@
 // Why not the Google SDK: it pulls a Node-only dependency tree (zlib,
 // streams) that fails to import in the Deno Edge Function runtime.
 // fetch + a typed response shape is ~20 lines and works everywhere.
+//
+// Relative imports MUST carry the explicit `.ts` extension — Deno requires
+// it; the Node/bundler side tolerates it via `allowImportingTsExtensions`.
 import { researchPaperAnalysisSchema } from "./schema.ts";
 import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts.ts";
 import { parseProviderJson } from "./parse.ts";

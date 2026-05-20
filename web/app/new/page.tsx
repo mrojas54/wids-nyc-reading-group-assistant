@@ -32,10 +32,13 @@ export default async function NewPaperPage({
   let paperTitle: string | null = null;
   let paperAuthors: string[] | null = null;
   if (paperIdValid) {
-    const [{ data: gate }, { data: paperRow }] = await Promise.all([
+    const [{ data: gate }, { data: paperRow, error: paperErr }] = await Promise.all([
       sb.rpc("can_synthesize_paper_pal", { p_paper_id: paperId }),
       sb.from("papers").select("title, authors").eq("id", paperId).maybeSingle(),
     ]);
+    if (paperErr) {
+      console.error(`[new/page] papers select failed for paperId=${paperId}:`, paperErr);
+    }
     canSynthesize = (gate as { canSynthesize?: boolean } | null)?.canSynthesize === true;
     paperTitle = (paperRow as { title?: string } | null)?.title ?? null;
     paperAuthors = (paperRow as { authors?: string[] } | null)?.authors ?? null;

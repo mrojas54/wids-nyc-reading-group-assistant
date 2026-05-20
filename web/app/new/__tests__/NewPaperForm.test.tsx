@@ -122,6 +122,28 @@ describe("NewPaperForm — pre-flight", () => {
 });
 
 describe("NewPaperForm — submission paths", () => {
+  it("errors and skips network calls when NEXT_PUBLIC_SUPABASE_URL is unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    render(<NewPaperForm paperId={42} />);
+    await userEvent.upload(screen.getByLabelText(/pdf/i), makePdf(1024));
+    await userEvent.click(screen.getByRole("button", { name: /generate/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/configuration error/i);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("trims a trailing slash from the Supabase URL before composing fnUrl", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", `${SUPABASE_URL}///`);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      sseStream([stage("parsing_pdf"), complete(42)]),
+    );
+    render(<NewPaperForm paperId={42} />);
+    await userEvent.upload(screen.getByLabelText(/pdf/i), makePdf(1024));
+    await userEvent.click(screen.getByRole("button", { name: /generate/i }));
+    await waitFor(() => expect(routerPush).toHaveBeenCalledWith("/papers/42"));
+    expect(fetchSpy.mock.calls[0][0]).toBe(`${SUPABASE_URL}/functions/v1/analyze-paper`);
+  });
+
   it("happy path: drives stages, then router.push to /papers/<id> on complete", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       sseStream([

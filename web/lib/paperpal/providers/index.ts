@@ -11,6 +11,10 @@
 // Keep this file (and everything it transitively imports) free of
 // Node-specific APIs (fs, path, Buffer, process.*). The cross-runtime
 // env shim in gemini.ts / claude.ts handles process.env vs Deno.env.
+//
+// Relative imports MUST carry the explicit `.ts` extension — Deno
+// requires it; the Node/bundler side tolerates it via
+// `allowImportingTsExtensions` in web/tsconfig.json.
 import { geminiSynthesize, geminiHint, geminiSocratic } from "./gemini.ts";
 import { claudeSynthesize, claudeHint, claudeSocratic } from "./claude.ts";
 import { isProvider } from "./types.ts";
