@@ -23,26 +23,7 @@ import type { ResearchPaperAnalysis } from "@/lib/paperpal/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function PaperPage(props: {
-  params: { id: string };
-}) {
-  try {
-    return await renderPaperPage(props);
-  } catch (err) {
-    // TEMP: surface unminified server error so we can debug the
-    // `Application error: server-side exception` (digest 3829607229).
-    // Remove once /papers/[id] is stable.
-    // eslint-disable-next-line no-console
-    console.error("[/papers/[id]] render failed", {
-      paperId: props.params.id,
-      message: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-    });
-    throw err;
-  }
-}
-
-async function renderPaperPage({
+export default async function PaperPage({
   params,
 }: {
   params: { id: string };
@@ -97,42 +78,48 @@ async function renderPaperPage({
   if (payload && catalog) {
     const paperFull = (paperFullRes as { data: { venue: string | null; pdf_drive_url: string | null } | null })?.data ?? null;
     const meeting = (meetingRes as { data: { scheduled_at: string | null; location: string | null } | null })?.data ?? null;
-    // TEMP DEBUG: binary-bisect for digest 3829607229. Raw dump only
-    // (no PaperDashboard, no client components). If this renders, the
-    // bug is downstream in PaperDashboard or its client children.
-    // Revert this whole block once root cause is identified.
     return (
-      <pre style={{ padding: 16, fontSize: 12, whiteSpace: "pre-wrap" }}>
-        DEBUG /papers/{paperIdNum} — raw dump (PaperDashboard bypassed){"\n\n"}
-        {JSON.stringify(
-          {
-            paperId: paperIdNum,
-            catalogKeys: catalog ? Object.keys(catalog) : null,
-            paperFullKeys: paperFull ? Object.keys(paperFull) : null,
-            meetingKeys: meeting ? Object.keys(meeting) : null,
-            payloadKeys: Object.keys(payload),
-            payloadSample: {
-              title: payload.title,
-              authorsCount: payload.authors?.length ?? 0,
-              terminologyCount: payload.terminology?.length ?? 0,
-              mathCount: payload.mathExplanations?.length ?? 0,
-              diagramsCount: payload.diagrams?.length ?? 0,
-              codeSamplesCount: payload.codeSamples?.length ?? 0,
-              hasAssessmentQuiz: !!payload.assessmentQuiz,
-              socraticPromptsCount: payload.socraticPrompts?.length ?? 0,
-              learningResourcesCount: payload.learningResources?.length ?? 0,
-              keyTakeawaysCount: payload.keyTakeaways?.length ?? 0,
-            },
-          },
-          null,
-          2,
+      <>
+        <PaperDashboard
+          paperId={String(paperIdNum)}
+          payload={payload}
+          paper={{
+            title: catalog.title ?? undefined,
+            authors: catalog.authors ?? undefined,
+            venue: paperFull?.venue ?? undefined,
+            pdf_drive_url: paperFull?.pdf_drive_url ?? null,
+            presentHref: `/papers/${paperIdNum}/present`,
+          }}
+          nextMeeting={
+            meeting?.scheduled_at
+              ? {
+                  whenLabel: new Date(meeting.scheduled_at).toLocaleString(
+                    undefined,
+                    {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    },
+                  ),
+                  venue: meeting.location,
+                }
+              : null
+          }
+        />
+        {payload.assessmentQuiz && (
+          <section className="pp-page" id="assessment">
+            <AssessmentPanel
+              paperId={String(paperIdNum)}
+              quiz={payload.assessmentQuiz}
+              socraticPrompts={payload.socraticPrompts}
+            />
+          </section>
         )}
-      </pre>
+        <TweaksPanel />
+      </>
     );
-    // NOTE: the real PaperDashboard render lives in commit ae2c8d5's parent.
-    // `git revert ae2c8d5` restores it once digest 3829607229 is resolved —
-    // it was deleted here only because TypeScript performs no narrowing in
-    // code after an unconditional return, which broke the production build.
   }
 
   // Catalog row exists but no synthesized content yet → CTA or read-only.
