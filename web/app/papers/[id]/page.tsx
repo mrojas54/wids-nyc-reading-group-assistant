@@ -26,15 +26,16 @@ export const dynamic = "force-dynamic";
 export default async function PaperPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const paperIdNum = Number(params.id);
+  const { id } = await params;
+  const paperIdNum = Number(id);
   const hasNumericId = Number.isFinite(paperIdNum);
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
 
   const [content, catalog, gate, companionRes, paperFullRes, meetingRes] =
     await Promise.all([
-      readPaperContent(params.id),
+      readPaperContent(id),
       hasNumericId ? paperCatalogRow(sb, paperIdNum) : Promise.resolve(null),
       hasNumericId
         ? canSynthesizePaperPal(sb, paperIdNum)

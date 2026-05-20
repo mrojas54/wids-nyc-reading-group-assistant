@@ -1,20 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: [
-      "@xenova/transformers",
-      "onnxruntime-web",
-      "onnxruntime-node",
+  // Promoted out of `experimental` in Next 15+: these are now stable top-level keys.
+  serverExternalPackages: [
+    "@xenova/transformers",
+    "onnxruntime-web",
+    "onnxruntime-node",
+  ],
+  // onnxruntime-web dynamically imports ort-wasm-simd-threaded.mjs at runtime.
+  // Vercel's NFT can't trace these dynamic ESM imports, so we force-include
+  // the specific files needed by the /api/suggest serverless function.
+  outputFileTracingIncludes: {
+    "/api/suggest": [
+      "./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs",
+      "./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm",
     ],
-    // onnxruntime-web dynamically imports ort-wasm-simd-threaded.mjs at runtime.
-    // Vercel's NFT can't trace these dynamic ESM imports, so we force-include
-    // the specific files needed by the /api/suggest serverless function.
-    outputFileTracingIncludes: {
-      "/api/suggest": [
-        "./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs",
-        "./node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm",
-      ],
-    },
   },
 
   webpack: (config, { isServer }) => {

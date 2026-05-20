@@ -7,7 +7,7 @@ import { logServerAction } from "@/lib/log";
 import { nyDayAtHour } from "@/lib/time";
 
 export async function submitAvailability(meetingId: number, days: string[]): Promise<void> {
-  const sb = createSupabaseServerClient();
+  const sb = await createSupabaseServerClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) throw new Error("not signed in");
 

@@ -4,6 +4,8 @@
  * to synthesize. Names the leader so members know whom to nudge. Spec:
  * docs/superpowers/specs/2026-05-17-paper-pal-design.md §4.2.
  */
+import Link from "next/link";
+
 export function PaperPalEmptyState({
   paperTitle,
   leaderName,
@@ -52,13 +54,13 @@ export function PaperPalEmptyState({
           : "A leader hasn't been assigned yet. The Paper Pal will go up once it has."}
       </p>
 
-      <a
+      <Link
         href="/"
         className="text-sm hover:underline"
         style={{ color: "var(--color-sage-700)" }}
       >
         ← Back to your dashboard
-      </a>
+      </Link>
     </section>
   );
 }

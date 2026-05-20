@@ -19,9 +19,9 @@ import { logServerAction } from "@/lib/log";
  * MUST include each domain you want to redirect to. Add a wildcard
  * like https://*-michellerojas.vercel.app/** to cover preview deploys.
  */
-function deriveSiteUrl(): string {
+async function deriveSiteUrl(): Promise<string> {
   try {
-    const h = headers();
+    const h = await headers();
     const host = h.get("host");
     const proto = h.get("x-forwarded-proto") ?? "https";
     if (host) return `${proto}://${host}`;
@@ -56,8 +56,8 @@ export async function requestMagicLink(
     };
   }
 
-  const sb = createSupabaseServerClient();
-  const siteUrl = deriveSiteUrl();
+  const sb = await createSupabaseServerClient();
+  const siteUrl = await deriveSiteUrl();
   const { error } = await sb.auth.signInWithOtp({
     email: cleaned,
     options: { emailRedirectTo: `${siteUrl}/auth/callback` },
