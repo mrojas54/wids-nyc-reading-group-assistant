@@ -49,3 +49,11 @@ browser (anon/authenticated). `command_log` is the one accepted exception
   accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`,
   `papers.zotero_item_key`, `availability.created_at`, the
   `current_member_id()` function, and 10 RLS policies.
+- Paper Pal artifacts exist: `paper_companions`,
+  `paper_socratic_turns`, `paper_embeddings`, the
+  `upsert_paper_companion()`, `can_synthesize_paper_pal(int)`, and
+  `current_member_role()` functions, plus the
+  `meetings_propose_placeholder_paper_unique` partial unique index.
+- Storage is ready for portal synthesis: the private `papers-pdfs` bucket
+  exists, and `storage.objects` has the
+  `papers_pdfs_owner_or_leader_insert` INSERT policy.
