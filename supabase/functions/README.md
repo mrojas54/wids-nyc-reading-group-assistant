@@ -10,9 +10,10 @@ assessment workflow specified in
 | `analyze-hint` | POST (JSON) | Socratic hint on an assessment attempt | §4.2 |
 | `analyze-socratic` | POST (JSON) | Next turn in a Socratic conversation | §4.3 |
 
-All three require a Supabase JWT in `Authorization: Bearer ...`. The auth
-gate is centralized in the `can_synthesize_paper_pal` RPC (migration 017)
-so Node and Deno enforce the same rules.
+All three require a Supabase JWT in `Authorization: Bearer ...`.
+`analyze-paper` uses the `can_synthesize_paper_pal` RPC (migration 017);
+`analyze-hint` and `analyze-socratic` use the looser attending-member gate
+in `_shared/gate.ts` so RSVP'd readers can use assessment helpers.
 
 ## Layout
 
@@ -74,17 +75,19 @@ buffer, hint/socratic are cheap.
 
 ## Storage bucket
 
-Migrations don't yet create the `papers-pdfs` bucket — do it once in the
-Supabase dashboard (or via `supabase storage create-bucket papers-pdfs`).
-Settings:
+Migration `018_papers_pdfs_bucket.sql` creates the private `papers-pdfs`
+bucket and the authenticated INSERT policy used by `/new`. Upload paths
+must be `<paper_id>/<uuid>.pdf`; the policy extracts the first path segment
+and allows inserts only when `can_synthesize_paper_pal(<paper_id>)` returns
+`canSynthesize=true`.
 
-- **Public:** off
-- **File size limit:** 32 MB (Claude PDF cap; Gemini happy below this)
-- **RLS:** insert allowed for `can_synthesize_paper_pal(<paper_id>) = true`;
-  select allowed only via service-role signed URLs (which the Edge Function
-  mints, see §13.4)
+There are no regular SELECT / UPDATE / DELETE policies. `analyze-paper`
+mints service-role signed URLs for provider fetches, and the weekly
+`wids-prune-paper-pdfs` scheduled task uses the service role for cleanup.
+The browser enforces a 32 MB PDF limit before upload.
 
-The bucket policy SQL lives in PR2 alongside the `/new` page wiring.
+For the member/leader workflow and troubleshooting, see
+[`docs/paper-pal-portal.md`](../../docs/paper-pal-portal.md).
 
 ## Local dev
 

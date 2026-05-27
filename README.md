@@ -11,10 +11,11 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 
 ## Documentation
 
-| Surface | Spec | Plan |
-|---|---|---|
-| Operator | [2026-05-03-wids-nyc-reading-group-design.md](docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md) | [2026-05-03-wids-nyc-reading-group-implementation.md](docs/superpowers/plans/2026-05-03-wids-nyc-reading-group-implementation.md) |
-| Member portal | [2026-05-03-wids-member-app-design.md](docs/superpowers/specs/2026-05-03-wids-member-app-design.md) | [2026-05-03-wids-member-app.md](docs/superpowers/plans/2026-05-03-wids-member-app.md) |
+| Surface | Guide | Spec | Plan |
+|---|---|---|---|
+| Operator | — | [2026-05-03-wids-nyc-reading-group-design.md](docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md) | [2026-05-03-wids-nyc-reading-group-implementation.md](docs/superpowers/plans/2026-05-03-wids-nyc-reading-group-implementation.md) |
+| Member portal | — | [2026-05-03-wids-member-app-design.md](docs/superpowers/specs/2026-05-03-wids-member-app-design.md) | [2026-05-03-wids-member-app.md](docs/superpowers/plans/2026-05-03-wids-member-app.md) |
+| Paper Pal portal | [docs/paper-pal-portal.md](docs/paper-pal-portal.md) | [2026-05-17-paper-pal-design.md](docs/superpowers/specs/2026-05-17-paper-pal-design.md) | [2026-05-18-paper-pal-pr2-implementation.md](docs/superpowers/plans/2026-05-18-paper-pal-pr2-implementation.md) |
 
 ## Prerequisites (one-time operator setup)
 
@@ -23,7 +24,7 @@ Before running `/wids-bootstrap`, the operator must:
 ### 1. Supabase project
 - Sign up at https://supabase.com (free tier).
 - Create a new project (note the project URL and `service_role` key).
-- Apply every file in `migrations/` in numeric order (`001` → `018`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
+- Apply every file in `migrations/` in numeric order (`001` → `019`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
 
 ### 2. Google Drive root folder
 - Create a folder in your Drive named `WiDS NYC AI Reading Group`.
@@ -56,7 +57,7 @@ The operator must have a `reading-group-guide` skill installed. The make-guide c
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
-Currently deployed (6): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, and `availability-chase`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
 
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.
@@ -96,7 +97,7 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
 
-The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`). `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply migrations through `018_papers_pdfs_bucket.sql` before going live.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply migrations through `019_meetings_propose_placeholder_unique.sql` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
 
 ### When something goes wrong
 
@@ -104,7 +105,7 @@ The leader (a different person each cycle) handles `/wids-find-paper` and then g
 - **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
 - **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
 - **Calendar event got rescheduled by someone** → `calendar-rsvp-sync` syncs it back to the DB nightly.
-- **Paper Pal synthesis failed** → the `/new` upload page surfaces the error inline and logs a `failure` row to `command_log`. The leader retries by re-uploading the PDF at `/new?paperId=<id>`. (Legacy fallback only: if running the deprecated `/wids-make-guide` chain, a failure sets `meetings.status='guide_failed'` and is re-run manually.)
+- **Paper Pal synthesis failed** → the `/new` upload page surfaces the error inline; inspect the Supabase Edge Function logs for `analyze-paper`. The leader retries by re-uploading the PDF at `/new?paperId=<id>`. (Legacy fallback only: if running the deprecated `/wids-make-guide` chain, a failure sets `meetings.status='guide_failed'` and is re-run manually.)
 - **CSV upload not picked up** → check `command_log` for the `process-form` rows. Verify CSV path matches the convention exactly. (Goes away post-portal-cutover.)
 
 ### Rolling backups
@@ -148,10 +149,10 @@ Opens http://localhost:3000. See [web/README.md](web/README.md).
 
 ```
 migrations/          SQL migrations, applied in numeric order (see migrations/README.md)
-supabase/functions/  Deno edge functions (Paper Pal synthesis)
+supabase/functions/  Deno edge functions (Paper Pal synthesis + assessment)
 .claude/commands/    Operator slash commands (markdown)
 scheduled_tasks/     Scheduled background task specs (markdown)
-docs/                Specs and plans
+docs/                Guides, specs, and plans
 tests/               SQL smoke tests (RLS)
 web/                 Next.js member portal app
 ```
