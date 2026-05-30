@@ -1,7 +1,7 @@
 # Database migrations
 
 SQL migrations for the WiDS NYC reading-group Supabase project, applied
-**in numeric order** (`001` → `019`). They are hand-applied — paste each file
+**in numeric order** (`001` → `020`). They are hand-applied — paste each file
 into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool.
 There is no migration-tracking table; filenames define order only.
 
@@ -26,6 +26,7 @@ There is no migration-tracking table; filenames define order only.
 | `017_synthesis_gate_rpc.sql` | `can_synthesize_paper_pal()` and `current_member_role()` RPCs — the single source of truth for the Paper Pal synthesis gate. |
 | `018_papers_pdfs_bucket.sql` | Creates the private `papers-pdfs` Storage bucket and the INSERT RLS policy gating PDF uploads to synthesis-eligible callers. |
 | `019_meetings_propose_placeholder_unique.sql` | Partial unique index on `meetings(paper_id)` for `prep` `reading_group` rows with no `planned_by_admin_id` — one member-proposed placeholder per paper, so concurrent `proposePaper` calls can't mint duplicates. |
+| `020_command_log_enrichment.sql` | Adds `command_log.duration_ms`, `metadata` (JSONB, default `{}`), `idempotency_key` (nullable, partial-unique for at-most-once keyed runs), and `actor`. Writers: `web/lib/log.ts` (`logServerAction` 5th arg) and `scripts/zotero_push.py` (`record_failure` kwargs). |
 
 ## `ensure_rls` event trigger
 
@@ -57,3 +58,6 @@ browser (anon/authenticated). `command_log` is the one accepted exception
 - Storage is ready for portal synthesis: the private `papers-pdfs` bucket
   exists, and `storage.objects` has the
   `papers_pdfs_owner_or_leader_insert` INSERT policy.
+- `command_log` carries the enrichment columns `duration_ms`, `metadata`
+  (JSONB, default `{}`), `idempotency_key`, and `actor`, plus the
+  `command_log_idempotency_key_unique` partial unique index.

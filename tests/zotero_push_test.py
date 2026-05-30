@@ -867,6 +867,49 @@ def test_record_failure_inserts_command_log_row():
     conn.commit.assert_called()
 
 
+def test_record_failure_omits_enrichment_columns_when_absent():
+    """No optional kwargs -> the INSERT names only the original four columns."""
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    record_failure(conn, name="/wids-make-companion:zotero-push", error="boom")
+
+    sql = next(
+        c.args[0] for c in cursor.execute.call_args_list
+        if "INSERT INTO command_log" in c.args[0]
+    )
+    for col in ("actor", "duration_ms", "idempotency_key", "metadata"):
+        assert col not in sql
+
+
+def test_record_failure_includes_enrichment_columns_when_given():
+    """Optional kwargs land in the INSERT as named columns + bound params."""
+    import json as _json
+
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
+    record_failure(
+        conn,
+        name="/wids-make-companion:zotero-push",
+        error="boom",
+        actor="cron:zotero-retry",
+        duration_ms=1234,
+        idempotency_key="zotero-push:paper=1",
+        metadata={"paper_id": 1, "meeting_id": 2},
+    )
+
+    sql, params = next(
+        c.args for c in cursor.execute.call_args_list
+        if "INSERT INTO command_log" in c.args[0]
+    )
+    for col in ("actor", "duration_ms", "idempotency_key", "metadata"):
+        assert col in sql
+    assert "cron:zotero-retry" in params
+    assert 1234 in params
+    assert "zotero-push:paper=1" in params
+    assert _json.dumps({"paper_id": 1, "meeting_id": 2}) in params
+    conn.commit.assert_called()
+
+
 # ---------------------------------------------------------------------------
 # Task 16 – _parse_env_file + main CLI
 # ---------------------------------------------------------------------------
