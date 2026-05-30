@@ -25,12 +25,18 @@ WHERE m.status='done'
 
 ## Step 2 — Idempotency
 
-For each, check if thanks already sent:
+For each, check if thanks were already sent — keyed on the exact
+`idempotency_key` written in Step 4 (no brittle `summary LIKE` scan):
 ```sql
-SELECT count(*) FROM command_log
-WHERE name='post-meeting-thanks' AND summary LIKE '%meeting=<id>%' AND status='success';
+SELECT 1 FROM command_log
+WHERE idempotency_key = 'post-meeting-thanks:meeting=<id>'
+LIMIT 1;
 ```
-Skip if > 0.
+Skip if a row exists. The check is status-agnostic on purpose: once a meeting
+has been handled — whether the send went out clean or as the `partial`
+leader-no-reply fallback (Step 3b) — it must not be re-thanked. The
+`command_log_idempotency_key_unique` index is the race backstop (a concurrent
+duplicate INSERT trips SQLSTATE 23505 — treat as already-sent).
 
 ## Step 3a — type='admin': auto-send
 
@@ -86,7 +92,13 @@ When leader replies (a separate step in the workflow — V1 may require this to 
 ## Step 4 — Log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
-        'Sent thanks for meeting=<id> type=<type>');
+        'Sent thanks for meeting=<id> type=<type>',
+        'post-meeting-thanks:meeting=<id>',
+        jsonb_build_object('meeting_id', <id>, 'meeting_type', '<type>'));
 ```
+The `partial` leader-no-reply fallback (Step 3b) logs the **same**
+`idempotency_key` (`'post-meeting-thanks:meeting=<id>'`) so the status-agnostic
+Step-2 check blocks a later duplicate. Only one row per meeting can carry this
+key — the unique index enforces it.
