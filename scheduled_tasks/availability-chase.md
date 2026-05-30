@@ -26,10 +26,18 @@ For each meeting:
   - Send alert. (Step 3.)
 - Otherwise: skip.
 
-(Idempotency: query `command_log` for prior alerts on this meeting:)
+(Cooldown — find the most recent successful operator alert for THIS meeting.
+This is a 5-day cooldown, **not** once-ever: the alert re-fires while the
+meeting stays under-responded. So it keys on an exact structured
+`metadata->>'meeting_id'` match (robust — no `summary LIKE` substring scan) and
+keeps the `MAX(ran_at)` window. It deliberately does **not** use
+`idempotency_key`, which would make the alert once-ever.)
 ```sql
 SELECT MAX(ran_at) FROM command_log
-WHERE name='availability-chase' AND status='success' AND summary LIKE '%meeting=<id>%';
+WHERE name = 'availability-chase'
+  AND status = 'success'
+  AND metadata->>'kind' = 'operator_alert'
+  AND metadata->>'meeting_id' = '<id>';
 ```
 
 ## Step 3 — Send alert email
@@ -60,10 +68,15 @@ assets/emails/template/availability-reminder.html) to non-responders only.
 ## Step 4 — Log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, metadata)
 VALUES ('scheduled_task', 'availability-chase', 'success',
-        'Sent low-response alert to operator for meeting=<id>: <responded>/<total>');
+        'Sent low-response alert to operator for meeting=<id>: <responded>/<total>',
+        jsonb_build_object('kind', 'operator_alert', 'meeting_id', <id>,
+                           'responded', <responded>, 'total', <total>));
 ```
+(No `idempotency_key` here — the cooldown above intentionally permits a repeat
+alert after 5 days. The `meeting_id`/`kind` live in `metadata` so the Step-2
+cooldown query can find this row by an exact match.)
 
 ## Step 5 — Operator 'remind' follow-up (member-facing send)
 
@@ -186,13 +199,15 @@ For each non-responder row:
    `paper.companion_url` (companion preview path).
 
 3. Idempotency check — skip this recipient if a prior reminder for this
-   `meeting × member` is already logged:
+   `meeting × member` is already logged. Keys on the exact `idempotency_key`
+   written in step 5 (no brittle `summary LIKE` scan). The
+   `command_log_idempotency_key_unique` index is the race backstop: if two runs
+   overlap, the second step-5 INSERT trips a unique violation (SQLSTATE 23505) —
+   treat that as "already sent" and move on.
 
    ```sql
    SELECT 1 FROM command_log
-   WHERE name = 'availability-chase'
-     AND status = 'success'
-     AND summary LIKE '%reminder meeting=<meeting_id> member=<member_id>%'
+   WHERE idempotency_key = 'availability-chase:meeting=<meeting_id>:member=<member_id>'
    LIMIT 1;
    ```
 
@@ -204,9 +219,12 @@ For each non-responder row:
 5. Log:
 
    ```sql
-   INSERT INTO command_log (source, name, status, summary)
+   INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent reminder meeting=<meeting_id> member=<member_id> to=<email>');
+           'Sent reminder meeting=<meeting_id> member=<member_id> to=<email>',
+           'availability-chase:meeting=<meeting_id>:member=<member_id>',
+           jsonb_build_object('kind', 'member_reminder', 'meeting_id', <meeting_id>,
+                              'member_id', <member_id>, 'email', '<email>'));
    ```
 
 ### 5d — Confirm back to operator

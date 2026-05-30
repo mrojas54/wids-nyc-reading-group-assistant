@@ -23,14 +23,16 @@ WHERE m.status='scheduled'
 
 ## Step 2 — Check idempotency
 
-For each meeting, check if reminder already sent:
+For each meeting, check if the reminder was already sent — keyed on the exact
+`idempotency_key` written in Step 5 (no brittle `summary LIKE` scan):
 ```sql
-SELECT count(*) FROM command_log
-WHERE name='pre-meeting-reminder'
-  AND summary LIKE '%meeting=<id>%'
-  AND status='success';
+SELECT 1 FROM command_log
+WHERE idempotency_key = 'pre-meeting-reminder:meeting=<id>'
+LIMIT 1;
 ```
-If > 0, skip.
+If a row exists, skip. The `command_log_idempotency_key_unique` index is the
+race backstop: if two runs overlap, the second Step-5 INSERT trips a unique
+violation (SQLSTATE 23505) — treat that as already-sent.
 
 ## Step 3 — Build recipient list (only no_response RSVPs)
 
@@ -74,7 +76,9 @@ Send via Gmail MCP.
 ## Step 5 — Log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'pre-meeting-reminder', 'success',
-        'Reminded N members for meeting=<id>');
+        'Reminded N members for meeting=<id>',
+        'pre-meeting-reminder:meeting=<id>',
+        jsonb_build_object('meeting_id', <id>, 'reminded', N));
 ```

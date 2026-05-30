@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import re
 import sys
@@ -697,14 +698,51 @@ def push_from_csv(
     return failures
 
 
-def record_failure(conn: Connection, *, name: str, error: str) -> None:
-    """Write a failure row to command_log so /wids-zotero-retry knows what to fix."""
+def record_failure(
+    conn: Connection,
+    *,
+    name: str,
+    error: str,
+    actor: Optional[str] = None,
+    duration_ms: Optional[int] = None,
+    idempotency_key: Optional[str] = None,
+    metadata: Optional[dict[str, object]] = None,
+) -> None:
+    """Write a failure row to command_log so /wids-zotero-retry knows what to fix.
+
+    The four originally-required columns (source, name, status, error) are
+    always written; ``source``/``status`` stay SQL literals so the base call
+    is byte-for-byte unchanged. The enrichment columns added in migration 020
+    are appended only when supplied, so callers (and existing rows) that don't
+    care about them are unaffected.
+    """
+    columns = ["source", "name", "status", "error"]
+    placeholders = ["'slash_command'", "%s", "'failure'", "%s"]
+    params: list[object] = [name, error]
+
+    if actor is not None:
+        columns.append("actor")
+        placeholders.append("%s")
+        params.append(actor)
+    if duration_ms is not None:
+        columns.append("duration_ms")
+        placeholders.append("%s")
+        params.append(duration_ms)
+    if idempotency_key is not None:
+        columns.append("idempotency_key")
+        placeholders.append("%s")
+        params.append(idempotency_key)
+    if metadata is not None:
+        columns.append("metadata")
+        placeholders.append("%s::jsonb")
+        params.append(json.dumps(metadata))
+
+    sql = (
+        f"INSERT INTO command_log ({', '.join(columns)}) "
+        f"VALUES ({', '.join(placeholders)})"
+    )
     with conn.cursor() as cur:
-        cur.execute(
-            "INSERT INTO command_log (source, name, status, error) "
-            "VALUES ('slash_command', %s, 'failure', %s)",
-            (name, error),
-        )
+        cur.execute(sql, tuple(params))
     conn.commit()
 
 
