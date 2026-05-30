@@ -73,18 +73,31 @@
   --color-indigo-800: #0f1747;
   --color-indigo-900: #08102f;
 
-  /* status */
+  /* status — full ramps (50/100/200/500/600/700) so dense operator surfaces
+     like /admin/logs can reference the mid steps without unresolved var()s. */
   --color-info-50:    #eaf2fb;
+  --color-info-100:   #c7dcf4;
+  --color-info-200:   #93beea;
   --color-info-500:   #2466b8;
+  --color-info-600:   #1b528f;
   --color-info-700:   #16447d;
   --color-warning-50: #fdf4e4;
+  --color-warning-100:#f9e6c4;
+  --color-warning-200:#f0d29a;
   --color-warning-500:#c4811a;
+  --color-warning-600:#a06911;
   --color-warning-700:#7c4f0a;
   --color-success-50: #ecf6ee;
+  --color-success-100:#cfe8d4;
+  --color-success-200:#a3d3ad;
   --color-success-500:#2f8a4a;
+  --color-success-600:#246e3a;
   --color-success-700:#1f5d33;
   --color-danger-50:  #fbece9;
+  --color-danger-100: #f6d2cc;
+  --color-danger-200: #eea59a;
   --color-danger-500: #c0392b;
+  --color-danger-600: #9d2a1f;
   --color-danger-700: #841f14;
 
   /* semantic */
