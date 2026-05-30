@@ -26,6 +26,10 @@ function row(over: Partial<CommandLogRow>): CommandLogRow {
     status: "success",
     summary: "/papers/999",
     error: null,
+    duration_ms: null,
+    actor: null,
+    metadata: null,
+    idempotency_key: null,
     ...over,
   };
 }
@@ -70,6 +74,34 @@ describe("mapCommandLogRow", () => {
     const ev = mapCommandLogRow(row({ summary: null, error: null }), NOW);
     expect(ev.summary).toBe("");
     expect(ev.error).toBeNull();
+  });
+
+  it("wires migration-020 columns into who/durMs/context", () => {
+    const ev = mapCommandLogRow(
+      row({
+        actor: "cron:availability-chase",
+        duration_ms: 812,
+        idempotency_key: "availability-chase:meeting=12",
+        metadata: { meetingId: 12, recipients: 5 },
+      }),
+      NOW,
+    );
+    expect(ev.who).toBe("cron:availability-chase");
+    expect(ev.durMs).toBe(812);
+    expect(ev.context).toMatchObject({
+      idempotencyKey: "availability-chase:meeting=12",
+      durationMs: 812,
+      metadata: { meetingId: 12, recipients: 5 },
+    });
+  });
+
+  it("omits enrichment keys from context when the columns are null/empty", () => {
+    const ev = mapCommandLogRow(row({ metadata: {} }), NOW);
+    expect(ev.who).toBeNull();
+    expect(ev.durMs).toBeNull();
+    expect(ev.context).not.toHaveProperty("idempotencyKey");
+    expect(ev.context).not.toHaveProperty("durationMs");
+    expect(ev.context).not.toHaveProperty("metadata");
   });
 });
 

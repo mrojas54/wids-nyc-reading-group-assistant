@@ -5,13 +5,14 @@
 // through the service-role client and behind requireLeaderRole().
 //
 // The design (Claude Design handoff "Status Dashboard") asks for richer fields
-// than the table stores — `severity`, `who`, and a JSON `context`. Rather than a
-// schema change, we DERIVE those honestly from the columns that exist:
-//   - severity   ← status   (failure→error, no_action→warn, success→info)
-//   - context    ← a small object built from {source, name, status, ran_at}
-//   - who        ← null      (no actor column today; renders as "—")
-// If/when explicit columns are added, mapCommandLogRow is the single place to wire
-// them in.
+// than the table stores — `severity`, `who`, and a JSON `context`. We DERIVE
+// `severity` from `status`, and read the rest from real columns:
+//   - severity   ← status            (failure→error, no_action→warn, success→info)
+//   - who        ← actor             (migration 020; renders "—" when null)
+//   - durMs      ← duration_ms       (migration 020; drives the duration sort)
+//   - context    ← {source, name, status, ran_at} plus the migration-020
+//                  enrichment (idempotencyKey, durationMs, metadata) when present
+// mapCommandLogRow is the single place these columns are wired in.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatDateTimeNY } from "@/lib/time";
 
@@ -34,6 +35,11 @@ export type CommandLogRow = {
   status: LogStatus;
   summary: string | null;
   error: string | null;
+  // Migration-020 enrichment columns (nullable; metadata defaults to {} in DB).
+  duration_ms: number | null;
+  actor: string | null;
+  metadata: Record<string, unknown> | null;
+  idempotency_key: string | null;
 };
 
 // The view-model the UI renders.
@@ -104,6 +110,20 @@ export function relativeTime(iso: string, nowMs: number): string {
 }
 
 export function mapCommandLogRow(rowData: CommandLogRow, nowMs: number): LogEvent {
+  const context: Record<string, unknown> = {
+    source: rowData.source,
+    name: rowData.name,
+    status: rowData.status,
+    ranAt: rowData.ran_at,
+  };
+  // Surface the migration-020 enrichment in the expandable context pane, but
+  // only when it carries signal — an empty metadata {} or null column is noise.
+  if (rowData.idempotency_key) context.idempotencyKey = rowData.idempotency_key;
+  if (rowData.duration_ms != null) context.durationMs = rowData.duration_ms;
+  if (rowData.metadata && Object.keys(rowData.metadata).length > 0) {
+    context.metadata = rowData.metadata;
+  }
+
   return {
     id: String(rowData.id),
     ranAt: rowData.ran_at,
@@ -113,15 +133,10 @@ export function mapCommandLogRow(rowData: CommandLogRow, nowMs: number): LogEven
     name: rowData.name,
     status: rowData.status,
     sev: deriveSeverity(rowData.status),
-    who: null,
+    who: rowData.actor ?? null,
     summary: rowData.summary ?? "",
-    durMs: null,
-    context: {
-      source: rowData.source,
-      name: rowData.name,
-      status: rowData.status,
-      ranAt: rowData.ran_at,
-    },
+    durMs: rowData.duration_ms ?? null,
+    context,
     error: rowData.error ?? null,
   };
 }
@@ -239,7 +254,9 @@ export async function listCommandLog(
 
   let query = sb
     .from("command_log")
-    .select("id, ran_at, source, name, status, summary, error")
+    .select(
+      "id, ran_at, source, name, status, summary, error, duration_ms, actor, metadata, idempotency_key",
+    )
     .order("ran_at", { ascending: false })
     .limit(limit);
 
