@@ -16,6 +16,7 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Operator | — | [2026-05-03-wids-nyc-reading-group-design.md](docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md) | [2026-05-03-wids-nyc-reading-group-implementation.md](docs/superpowers/plans/2026-05-03-wids-nyc-reading-group-implementation.md) |
 | Member portal | — | [2026-05-03-wids-member-app-design.md](docs/superpowers/specs/2026-05-03-wids-member-app-design.md) | [2026-05-03-wids-member-app.md](docs/superpowers/plans/2026-05-03-wids-member-app.md) |
 | Paper Pal portal | [docs/paper-pal-portal.md](docs/paper-pal-portal.md) | [2026-05-17-paper-pal-design.md](docs/superpowers/specs/2026-05-17-paper-pal-design.md) | [2026-05-18-paper-pal-pr2-implementation.md](docs/superpowers/plans/2026-05-18-paper-pal-pr2-implementation.md) |
+| Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
 
 ## Prerequisites (one-time operator setup)
 
@@ -101,7 +102,7 @@ The leader (a different person each cycle) handles `/wids-find-paper` and then g
 
 ### When something goes wrong
 
-- **DB write failed** → check `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`.
+- **DB write failed** → check `/admin/logs` or query `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`. See [docs/admin-logs.md](docs/admin-logs.md) for filters, enrichment fields, and idempotency-key conventions.
 - **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
 - **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
 - **Calendar event got rescheduled by someone** → `calendar-rsvp-sync` syncs it back to the DB nightly.
