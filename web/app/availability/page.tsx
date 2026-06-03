@@ -48,6 +48,18 @@ export default async function AvailabilityPage({
     prep = latestPrep;
   }
 
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+
+  const { data: memberRow } = user
+    ? await sb
+        .from("members")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+    : { data: null };
+
   if (!prep) {
     return (
       <div className="shell">
@@ -73,10 +85,13 @@ export default async function AvailabilityPage({
     );
   }
 
-  const { data: existing } = await sb
-    .from("availability")
-    .select("range_start")
-    .eq("meeting_id", prep.id);
+  const { data: existing } = memberRow
+    ? await sb
+        .from("availability")
+        .select("range_start")
+        .eq("meeting_id", prep.id)
+        .eq("member_id", memberRow.id)
+    : { data: null };
 
   const initialDays = (existing ?? []).map((r: { range_start: string }) =>
     new Date(r.range_start).toISOString().slice(0, 10),
