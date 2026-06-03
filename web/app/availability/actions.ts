@@ -7,6 +7,8 @@ import { logServerAction } from "@/lib/log";
 import { nyDayAtHour } from "@/lib/time";
 
 export async function submitAvailability(meetingId: number, days: string[]): Promise<void> {
+  if (days.length === 0) throw new Error("select at least one day");
+
   const sb = await createSupabaseServerClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) throw new Error("not signed in");
@@ -28,18 +30,16 @@ export async function submitAvailability(meetingId: number, days: string[]): Pro
     throw new Error(delErr.message);
   }
 
-  if (days.length > 0) {
-    const rows = days.map((day) => ({
-      meeting_id: meetingId,
-      member_id: memberRow.id,
-      range_start: nyDayAtHour(day, 18),
-      range_end: nyDayAtHour(day, 21),
-    }));
-    const { error: insErr } = await sb.from("availability").insert(rows);
-    if (insErr) {
-      await logServerAction("submitAvailability", "failure", `insert: ${insErr.message}`);
-      throw new Error(insErr.message);
-    }
+  const rows = days.map((day) => ({
+    meeting_id: meetingId,
+    member_id: memberRow.id,
+    range_start: nyDayAtHour(day, 18),
+    range_end: nyDayAtHour(day, 21),
+  }));
+  const { error: insErr } = await sb.from("availability").insert(rows);
+  if (insErr) {
+    await logServerAction("submitAvailability", "failure", `insert: ${insErr.message}`);
+    throw new Error(insErr.message);
   }
 
   await logServerAction(
