@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Render the two new email templates with realistic sample data.
+
+Writes `*_rendered.html` and `*_rendered.txt` next to each source template,
+then prints the rendered HTML + text bodies to stdout as a JSON document
+that the Gmail-MCP draft-creation step can consume.
+
+Mustache-style tokens only ({{ name.path }}). No partials, no conditionals
+— the templates resolve all branching server-side before substitution.
+"""
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+TEMPLATES = ROOT / "assets" / "emails" / "template"
+
+RSVP_TOKENS = {
+    "recipient.firstName": "Maya",
+    # event.dateLine removed from the template — the lede no longer
+    # references the scheduled date (the calendar CTA carries the action).
+    "links.calendar": "https://wids-nyc-reading-group-assistant.vercel.app/events/6/cal.ics",
+    "paper.title": "Hybrid LSTM–Transformer Architecture with Multi-Scale Feature Fusion for High-Accuracy Gold Futures Price Forecasting",
+    "paper.authorsShort": "Zhao, Guo & Wang",
+    "paper.companionUrl": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
+    "haiku.line1": "Geese chart their return",
+    "haiku.line2": "the same invisible line —",
+    "haiku.line3": "you, too. Welcome in.",
+    "quote.text": "The beauty of mathematics only shows itself to more patient followers.",
+    "quote.by": "Maryam Mirzakhani",
+    "quote.role": "Fields Medalist, 2014",
+    "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
+    "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+}
+
+AVAIL_TOKENS = {
+    "recipient.firstName": "Maya",
+    # Real paper from meetings.paper_id=2 (current prep meeting #6).
+    # Paper #6 (Poisoning Attacks) was last cycle — meeting #16, status=done.
+    "paper.title": "Hybrid LSTM–Transformer Architecture with Multi-Scale Feature Fusion for High-Accuracy Gold Futures Price Forecasting",
+    "paper.authorsShort": "Zhao, Guo & Wang",
+    # s2_paper_id = DOI:… → citation composition falls to venue branch:
+    # "in <em>Mathematics</em> (2025)"
+    "paper.citation": "in <em>Mathematics</em> (2025)",
+    "paper.citationText": "in Mathematics (2025)",
+    "paper.url": "https://doi.org/10.3390/math13101551",
+    # meetings.location is NULL for meeting #6 → renderer would strip the
+    # location chip and omit the location piece from metaLine. For this
+    # preview we still pass a value so you can see the chip render; the
+    # real send via availability-chase will drop the chip entirely.
+    "paper.location": "Brooklyn, TBD",
+    "paper.duration": "~90 min",
+    "paper.companionDropDay": "Wed",
+    "paper.metaLine": "Brooklyn, TBD · ~90 min · Paper Pal drops Wed",
+    "links.availability": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
+    "links.companionPreview": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
+    "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+    "operator.displayName": "Michelle Rojas",
+}
+
+MUSTACHE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
+
+
+def render(template_text: str, tokens: dict[str, str]) -> tuple[str, list[str]]:
+    """Substitute every {{ token }} with its value. Returns (rendered, unresolved)."""
+    unresolved: list[str] = []
+
+    def sub(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in tokens:
+            unresolved.append(key)
+            return match.group(0)
+        return tokens[key]
+
+    return MUSTACHE.sub(sub, template_text), unresolved
+
+
+def render_pair(stem: str, tokens: dict[str, str]) -> dict[str, str]:
+    """Render the .html + .txt pair for `stem` (e.g. 'rsvp-confirmation')."""
+    out: dict[str, str] = {}
+    for ext in ("html", "txt"):
+        src = TEMPLATES / f"{stem}.{ext}"
+        text = src.read_text(encoding="utf-8")
+        rendered, unresolved = render(text, tokens)
+        if unresolved:
+            print(
+                f"warning: unresolved tokens in {src.name}: {sorted(set(unresolved))}",
+                file=sys.stderr,
+            )
+        dst = TEMPLATES / f"{stem}_rendered.{ext}"
+        dst.write_text(rendered, encoding="utf-8")
+        out[ext] = rendered
+        print(f"wrote {dst.relative_to(ROOT)}", file=sys.stderr)
+    return out
+
+
+def main() -> int:
+    rsvp = render_pair("rsvp-confirmation", RSVP_TOKENS)
+    avail = render_pair("availability-thanks", AVAIL_TOKENS)
+    json.dump(
+        {
+            "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},
+            "availability_thanks": {"html": avail["html"], "text": avail["txt"]},
+        },
+        sys.stdout,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

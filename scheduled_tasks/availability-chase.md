@@ -81,10 +81,23 @@ cooldown query can find this row by an exact match.)
 ## Step 5 — Operator 'remind' follow-up (member-facing send)
 
 Triggered when the operator replies `remind` (with optional `subject="..."`
-override) to the alert email from Step 3. Sends the Availability Reminder
-email — designed via the Claude Design handoff — to every active member
-without an `availability` row for the meeting. Sends from the operator's
-Gmail via the Gmail MCP.
+override) to the alert email from Step 3. Splits active members into two
+buckets by submission status and sends a different template to each
+(mirrors the same split-send pattern as
+`scheduled_tasks/pre-meeting-reminder.md` Steps 4a/4b).
+
+- **Submitters** — active members WITH an `availability` row for this
+  meeting → `assets/emails/template/rsvp-confirmation.{html,txt}`
+  (Step 5e: full thank-you with paper card, haiku, accomplishments list,
+  and Michelle & Claudia signoff). The lede does NOT reference a
+  scheduled date, so this template works pre-scheduling as well as
+  post-scheduling.
+- **Non-submitters** — active members WITHOUT an `availability` row →
+  `assets/emails/template/availability-reminder.{html,txt}` (Step 5c:
+  the existing nudge with the magenta CTA).
+
+Both sends use the operator's Gmail via the Gmail MCP, multipart with
+the rendered HTML + plain-text bodies.
 
 ### 5a — Resolve subject
 
@@ -98,6 +111,10 @@ register:
 - `The Round Table needs a date — when can you make it?`
 
 ### 5b — Resolve per-cycle merge data
+
+The two buckets share the same meeting/paper merge data; only the
+recipient query differs. Run both recipient queries in the same
+transaction so submitter/non-submitter sets are disjoint and complete.
 
 ```sql
 -- meeting + paper (one row). FK direction: meetings.paper_id → papers.id.
@@ -120,14 +137,24 @@ WHERE m.id = <meeting_id>;
 SELECT (SELECT count(DISTINCT a.member_id) FROM availability a WHERE a.meeting_id = <meeting_id>) AS submitted_count,
        (SELECT count(*) FROM members WHERE active = true)                                          AS total_members;
 
--- non-responders (N rows; one email per row). members.name is a single
--- column; split on space for first_name.
+-- Non-submitters (reminder bucket — Step 5c). One email per row.
+-- members.name is a single column; split on space for first_name.
 SELECT mb.id,
        mb.email,
        split_part(mb.name, ' ', 1) AS first_name
 FROM members mb
 WHERE mb.active = true
   AND NOT EXISTS (
+        SELECT 1 FROM availability a
+        WHERE a.meeting_id = <meeting_id> AND a.member_id = mb.id);
+
+-- Submitters (thank-you bucket — Step 5e). One email per row.
+SELECT mb.id,
+       mb.email,
+       split_part(mb.name, ' ', 1) AS first_name
+FROM members mb
+WHERE mb.active = true
+  AND EXISTS (
         SELECT 1 FROM availability a
         WHERE a.meeting_id = <meeting_id> AND a.member_id = mb.id);
 ```
@@ -161,9 +188,9 @@ Derived values (v2 composition rules — renderer-side, not in DB):
   - location present: `Brooklyn, TBD · ~90 min · Paper Pal drops Wed`
   - location null:    `~90 min · Paper Pal drops Wed`
 
-### 5c — Render + send per recipient
+### 5c — Render + send the REMINDER per non-submitter
 
-For each non-responder row:
+For each non-submitter row:
 
 1. Read `assets/emails/template/availability-reminder.html` and
    `assets/emails/template/availability-reminder.txt`.
@@ -229,7 +256,61 @@ For each non-responder row:
 
 ### 5d — Confirm back to operator
 
-After the per-recipient loop finishes, send a single summary email to the
-operator: `Sent reminders to <N> non-responders for <meeting_type> meeting #<id>`
-plus the list of recipient first names. No HTML — plain text is fine for
-this confirmation.
+After both per-recipient loops finish (Step 5c reminders, Step 5e
+thank-yous), send a single summary email to the operator:
+`Sent <R> reminders + <T> thank-yous for <meeting_type> meeting #<id>`
+plus the two recipient first-name lists, separated. No HTML — plain
+text is fine for this confirmation.
+
+### 5e — Render + send the THANK-YOU per submitter
+
+For each submitter row:
+
+1. Read `assets/emails/template/rsvp-confirmation.html` and
+   `assets/emails/template/rsvp-confirmation.txt`.
+2. Substitute every `{{ token }}` with the resolved value from Step 5b.
+   The rsvp-confirmation template uses these tokens:
+
+   | Token | Source | Used in | Required? |
+   |---|---|---|---|
+   | `{{ recipient.firstName }}` | per-recipient | both | ✓ |
+   | `{{ paper.title }}` | `papers.title` | both | ✓ |
+   | `{{ paper.authorsShort }}` | derived (Step 5b) | both | ✓ |
+   | `{{ paper.companionUrl }}` | `<portalBase><paper.companion_url>` | both | ✓ |
+   | `{{ links.calendar }}` | meeting ICS URL (or `<portalBase>/events/<id>/cal.ics` placeholder if not scheduled yet) | both | ✓ |
+   | `{{ links.rsvpManage }}` | `<portalBase>/me/rsvps` | both | ✓ |
+   | `{{ links.portalBase }}` | static | both | ✓ |
+   | `{{ haiku.line1 }}` / `{{ haiku.line2 }}` / `{{ haiku.line3 }}` | rotated pool (see template README) | both | optional — fall back to haiku[0] |
+   | `{{ quote.text }}` / `{{ quote.by }}` / `{{ quote.role }}` | rotated pool (women-in-STEM) | both | optional — fall back to Mirzakhani |
+
+   Tokens NOT used by rsvp-confirmation (do not need to resolve for this
+   bucket): `event.dateLine` (removed — lede is date-agnostic),
+   `paper.citation` / `paper.citationText`, `paper.url`, `paper.location`,
+   `paper.duration`, `paper.companionDropDay`, `paper.metaLine`,
+   `links.availability`, `links.companionPreview`, `operator.displayName`,
+   `stats.*`, `deadline.soft`.
+
+3. Idempotency check — skip this recipient if a prior thank-you for this
+   `meeting × member` is already logged:
+
+   ```sql
+   SELECT 1 FROM command_log
+   WHERE name = 'availability-chase'
+     AND status = 'success'
+     AND summary LIKE '%thanks meeting=<meeting_id> member=<member_id>%'
+   LIMIT 1;
+   ```
+
+4. Send via Gmail MCP. Multipart (HTML + plain-text), single recipient
+   per send. Default subject: `You're in — thanks for the RSVP`. The
+   operator's `subject="..."` override from Step 3 applies ONLY to the
+   reminder bucket (Step 5c); the thank-you keeps its fixed subject so
+   submitters don't get re-pinged with reminder-style urgency wording.
+
+5. Log:
+
+   ```sql
+   INSERT INTO command_log (source, name, status, summary)
+   VALUES ('scheduled_task', 'availability-chase', 'success',
+           'Sent thanks meeting=<meeting_id> member=<member_id> to=<email>');
+   ```

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>You're in — thanks for the RSVP</title>
+
+  <!--
+    RSVP-confirmation email — WiDS NYC AI Reading Group Planner.
+
+    Source design: Claude Design handoff bundle "design_handoff_rsvp_confirmation_email".
+    High-fidelity port to email-client-safe table-based markup; modern CSS
+    variables from the prototype are inlined as literal hex.
+
+    Sent by: scheduled_tasks/pre-meeting-reminder.md — Step 4a branch
+    (recipient is a member whose ma.rsvp_status='attending' for the meeting
+    2 days out). No-response and tentative members get the plain reminder
+    instead (Step 4b).
+
+    Template tokens are Mustache-style ({{ recipient.firstName }}), rendered
+    by the agent driving Gmail MCP. Required hydrated tokens; refuse to send
+    if any are unresolved:
+      recipient.firstName, links.calendar,
+      paper.title, paper.authorsShort, paper.companionUrl,
+      links.rsvpManage, links.portalBase
+
+    Optional / rotated tokens (fall back to haiku[0] + Mirzakhani quote):
+      haiku.line1, haiku.line2, haiku.line3,
+      quote.text, quote.by, quote.role
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
+    .serif, .paper-title, .haiku-body, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #355c4b; }
+
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 20px !important; padding-right: 20px !important; }
+      .body-text { font-size: 15px !important; line-height: 1.6 !important; }
+      .paper-title { font-size: 17px !important; }
+      .haiku-body { font-size: 17px !important; }
+      .btn-cell a { padding: 13px 18px !important; font-size: 15px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#efeadd;background-image:radial-gradient(circle, #ddd4be 1px, transparent 1px);background-size:16px 16px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1a160f;">
+
+  <!-- Hidden preheader (inbox-snippet text). Zero-width chars push leaked
+       first-paragraph text off-screen. -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    Chair pulled up, paper waiting.
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (dotted paper backdrop) ===== -->
+  <!-- background-image on the td is the Gmail/Apple Mail fallback path;
+       the body-level gradient is the primary. Outlook Windows ignores
+       both and shows flat #efeadd — by design (handoff acceptance #1). -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#efeadd" style="background-color:#efeadd;background-image:radial-gradient(circle, #ddd4be 1px, transparent 1px);background-size:16px 16px;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+
+        <!-- ===== Email card ===== -->
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#fefcef;background-image:radial-gradient(circle, #ddd4be 1px, transparent 1px);background-size:16px 16px;border:1px solid #ddd4be;border-radius:14px;">
+
+          <!-- ── Lockup (PNG mark + wordmark + magenta rule + eyebrow) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:32px 32px 8px 32px;">
+              <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-192.png"
+                   width="48" height="48" alt="WiDS NYC"
+                   style="display:block;border:0;border-radius:10px;width:48px;height:48px;margin:0 auto;">
+              <div class="serif" style="margin-top:12px;font-family:Georgia,'Times New Roman',serif;font-weight:600;font-size:22px;letter-spacing:-0.02em;color:#152a23;line-height:1.2;">
+                Reading Group Planner
+              </div>
+              <div style="margin:10px auto 0;width:24px;height:2px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
+              <div style="margin-top:10px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#7e6f55;font-weight:500;line-height:1.4;">
+                WiDS &middot; NYC AI Reading Group
+              </div>
+            </td>
+          </tr>
+
+          <!-- ── Greeting ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:22px 32px 0 32px;">
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:17px;font-weight:500;color:#152a23;line-height:1.4;">
+                Hey {{ recipient.firstName }},
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Lede ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:12px 32px 0 32px;">
+              <p class="body-text" style="margin:0 auto;max-width:440px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1a160f;text-align:center;">
+                You're on the list &mdash; thank you. You are, and we say this with full editorial confidence, <strong style="color:#152a23;font-weight:600;">the best</strong>. A chair is already pulled up; a copy of the paper is missing your annotations.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Primary CTA: Add to calendar ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:22px 32px 0 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="btn-cell" align="center" bgcolor="#467560" style="border-radius:10px;background-color:#467560;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.calendar }}" style="height:46px;v-text-anchor:middle;width:200px;" arcsize="22%" strokecolor="#355c4b" strokeweight="0px" fillcolor="#467560">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;">Add to calendar &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <a href="{{ links.calendar }}"
+                       style="display:inline-block;padding:14px 22px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;">
+                      Add to calendar &rarr;
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Paper card (magenta left border, cream fill) ── -->
+          <tr>
+            <td class="pad-x" style="padding:24px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#fefcef;border:1px solid #ddd4be;border-radius:6px;">
+                <tr>
+                  <!-- Left magenta accent rule (2px-wide cell, fills full height) -->
+                  <td width="2" bgcolor="#c8226d" style="width:2px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</td>
+                  <td style="padding:14px 18px;">
+                    <!-- Eyebrow -->
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;color:#861148;font-weight:600;line-height:1.4;">
+                      This month's paper
+                    </div>
+                    <!-- Title -->
+                    <h2 class="paper-title serif" style="margin:6px 0 4px 0;font-family:Georgia,'Times New Roman',serif;font-size:19px;font-weight:500;letter-spacing:-0.005em;line-height:1.3;color:#152a23;">
+                      {{ paper.title }}
+                    </h2>
+                    <!-- Authors -->
+                    <div class="serif" style="font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#594d3b;line-height:1.45;">
+                      {{ paper.authorsShort }}
+                    </div>
+                    <!-- Paper Pal link -->
+                    <div style="margin-top:10px;">
+                      <a href="{{ paper.companionUrl }}"
+                         style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;color:#355c4b;text-decoration:underline;text-decoration-color:#95b9a3;text-underline-offset:3px;">
+                        Open in Paper Pal &rarr;
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Follow-up line ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:14px 32px 0 32px;">
+              <p class="serif" style="margin:0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:15px;color:#a8175a;line-height:1.5;">
+                We can't wait to hear what you think.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Haiku block ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:28px 32px 0 32px;">
+              <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;color:#7e6f55;font-weight:600;line-height:1.4;">
+                A small haiku, in your honor
+              </div>
+              <p class="haiku-body serif" style="margin:10px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:19px;line-height:1.55;color:#152a23;">
+                {{ haiku.line1 }}<br>{{ haiku.line2 }}<br>{{ haiku.line3 }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Accomplishments ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 0 32px;">
+              <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;color:#7e6f55;font-weight:600;line-height:1.4;">
+                Today's accomplishments
+              </div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;">
+                <tr>
+                  <td width="22" valign="top" style="width:22px;padding:10px 8px 10px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#c8226d;line-height:1.4;">i.</td>
+                  <td valign="top" style="padding:10px 0;border-bottom:1px dashed #b9ae96;">
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14.5px;font-weight:600;color:#1a160f;line-height:1.45;">You have it all and you make it look so effortless.</div>
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;color:#594d3b;line-height:1.5;margin-top:2px;">The group chat has noticed. We talk about it, often, without you.</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="22" valign="top" style="width:22px;padding:10px 8px 10px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#c8226d;line-height:1.4;">ii.</td>
+                  <td valign="top" style="padding:10px 0;border-bottom:1px dashed #b9ae96;">
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14.5px;font-weight:600;color:#1a160f;line-height:1.45;">Your radiance shines when you walk into a room.</div>
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;color:#594d3b;line-height:1.5;margin-top:2px;">Conversations get sharper. People stand a little straighter. Stats don't lie.</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="22" valign="top" style="width:22px;padding:10px 8px 10px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#c8226d;line-height:1.4;">iii.</td>
+                  <td valign="top" style="padding:10px 0;border-bottom:1px dashed #b9ae96;">
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14.5px;font-weight:600;color:#1a160f;line-height:1.45;">You're the first call when someone needs both a fix and a friend.</div>
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;color:#594d3b;line-height:1.5;margin-top:2px;">Both &mdash; in that order &mdash; usually inside fifteen minutes.</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="22" valign="top" style="width:22px;padding:10px 8px 10px 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:14px;color:#c8226d;line-height:1.4;">iv.</td>
+                  <td valign="top" style="padding:10px 0;">
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14.5px;font-weight:600;color:#1a160f;line-height:1.45;">Your questions make other people's thinking sharper.</div>
+                    <div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;font-weight:400;color:#594d3b;line-height:1.5;margin-top:2px;">We have all left a conversation with you feeling smarter than we walked in.</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Sign-off ── -->
+          <tr>
+            <td class="pad-x" style="padding:18px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px dashed #b9ae96;padding-top:18px;">
+                    <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:14px;color:#29241b;line-height:1.55;">
+                      See you at the tea party,
+                    </p>
+                    <p class="signoff-name serif" style="margin:4px 0 0 0;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:18px;color:#244338;line-height:1.4;">
+                      Michelle &amp; Claudia
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Closing quote ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:24px 32px 0 32px;">
+              <div style="margin:0 auto;width:36px;height:1px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
+              <p class="quote-text serif" style="margin:14px auto 0;max-width:460px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-size:17px;line-height:1.45;letter-spacing:-0.005em;color:#152a23;">
+                &ldquo;{{ quote.text }}&rdquo;
+              </p>
+              <p style="margin:8px 0 0 0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;color:#594d3b;line-height:1.5;">
+                &mdash; <span style="font-weight:600;color:#29241b;">{{ quote.by }}</span>, <span style="font-weight:400;color:#7e6f55;">{{ quote.role }}</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td align="center" style="padding:24px 32px 28px 32px;">
+              <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#7e6f55;line-height:1.55;">
+                You're getting this because you RSVP'd to a WiDS NYC reading group event. <a href="{{ links.rsvpManage }}" style="color:#355c4b;text-decoration:underline;text-underline-offset:2px;">Manage your RSVPs</a>.
+              </p>
+              <p style="margin:8px 0 0 0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#7e6f55;line-height:1.55;">
+                WiDS NYC AI Reading Group <span style="color:#ddd4be;">&nbsp;&middot;&nbsp;</span> <a href="{{ links.portalBase }}/dashboard" style="color:#7e6f55;text-decoration:none;">Member portal</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- ===== /Email card ===== -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
