@@ -1,0 +1,63 @@
+WiDS NYC AI Reading Group
+=========================
+
+Hey {{ recipient.firstName }},
+
+You're on the list — thank you. You are, and we say this with full
+editorial confidence, the best. A chair is already pulled up; a
+copy of the paper is missing your annotations.
+
+Add to calendar:
+{{ links.calendar }}
+
+
+THIS MONTH'S PAPER
+{{ paper.title }}
+{{ paper.authorsShort }}
+
+Open in Paper Pal:
+{{ paper.companionUrl }}
+
+We can't wait to hear what you think.
+
+
+A SMALL HAIKU, IN YOUR HONOR
+
+{{ haiku.line1 }}
+{{ haiku.line2 }}
+{{ haiku.line3 }}
+
+
+TODAY'S ACCOMPLISHMENTS
+
+  i.   You have it all and you make it look so effortless.
+       The group chat has noticed. We talk about it, often,
+       without you.
+
+  ii.  Your radiance shines when you walk into a room.
+       Conversations get sharper. People stand a little
+       straighter. Stats don't lie.
+
+  iii. You're the first call when someone needs both a fix
+       and a friend. Both — in that order — usually inside
+       fifteen minutes.
+
+  iv.  Your questions make other people's thinking sharper.
+       We have all left a conversation with you feeling
+       smarter than we walked in.
+
+
+See you at the tea party,
+— Michelle & Claudia
+
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
+---
+You're getting this because you RSVP'd to a WiDS NYC reading group
+event. Manage your RSVPs:
+{{ links.rsvpManage }}
+
+WiDS NYC AI Reading Group
+Member portal: {{ links.portalBase }}/dashboard

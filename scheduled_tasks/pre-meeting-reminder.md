@@ -34,18 +34,55 @@ If a row exists, skip. The `command_log_idempotency_key_unique` index is the
 race backstop: if two runs overlap, the second Step-5 INSERT trips a unique
 violation (SQLSTATE 23505) — treat that as already-sent.
 
-## Step 3 — Build recipient list (only no_response RSVPs)
+## Step 3 — Build recipient list (split by RSVP status)
+
+Active members who RSVP'd **attending** get the templated thank-you
+(`assets/emails/template/rsvp-confirmation.{html,txt}`). Everyone else who
+hasn't already declined gets the plain reminder. Declined members are
+skipped entirely — they already gave their answer.
 
 ```sql
-SELECT mem.email, mem.name
+SELECT mem.email, mem.name, ma.rsvp_status
 FROM meeting_attendance ma
 JOIN members mem ON mem.id = ma.member_id
-WHERE ma.meeting_id = <id> AND ma.rsvp_status='no_response' AND mem.active=true;
+WHERE ma.meeting_id = <id>
+  AND mem.active = true
+  AND ma.rsvp_status IN ('attending', 'tentative', 'no_response');
 ```
 
-(Members who already RSVP'd attending/declined/tentative don't need a reminder; they have their answer.)
+Partition the result:
+- **Thank-you bucket:** `rsvp_status = 'attending'` → Step 4a
+- **Reminder bucket:** `rsvp_status IN ('tentative', 'no_response')` → Step 4b
 
-## Step 4 — Compose and send
+## Step 4a — Send RSVP thank-you (attending bucket)
+
+Reading-group meetings only — skip this branch for admin meetings (use the
+plain reminder for those regardless of RSVP status).
+
+Render `assets/emails/template/rsvp-confirmation.html` (and the matching
+`.txt` as the multipart alternative). Required tokens — refuse to send if
+any are unresolved:
+
+| Token | Source |
+|---|---|
+| `recipient.firstName` | `members.name` (first token) |
+| `links.calendar` | `meetings.calendar_ics_url` or portal event URL |
+| `paper.title` | `papers.title` |
+| `paper.authorsShort` | `papers.authors_short` |
+| `paper.companionUrl` | `<portal>/papers/<slug>/companion` (Paper Pal) |
+| `links.rsvpManage` | `<portal>/me/rsvps` |
+| `links.portalBase` | `https://planner.widsnyc.org` (or env override) |
+
+Rotated tokens (`haiku.line1/2/3`, `quote.text`, `quote.by`, `quote.role`)
+follow the rotation pool in this template's README. If rotation isn't
+wired yet, ship `haiku[0]` and the Mirzakhani quote — both are documented
+as the defaults in the design handoff.
+
+Subject: `You're in — thanks for the RSVP`
+
+Send via Gmail MCP.
+
+## Step 4b — Send plain reminder (tentative + no_response bucket, and all admin meetings)
 
 For admin meeting:
 ```
@@ -78,7 +115,7 @@ Send via Gmail MCP.
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'pre-meeting-reminder', 'success',
-        'Reminded N members for meeting=<id>',
+        'meeting=<id>: thanked <T> RSVPers, reminded <R> pending',
         'pre-meeting-reminder:meeting=<id>',
-        jsonb_build_object('meeting_id', <id>, 'reminded', N));
+        jsonb_build_object('meeting_id', <id>, 'thanked', <T>, 'reminded', <R>));
 ```

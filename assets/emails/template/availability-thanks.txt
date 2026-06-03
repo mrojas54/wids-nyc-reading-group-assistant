@@ -1,0 +1,32 @@
+WiDS NYC AI Reading Group
+=========================
+
+Hi {{ recipient.firstName }},
+
+Got your availability — thank you. You're locked in for whichever
+date we land on. I'll send the calendar invite by Monday once the
+rest of the group has weighed in.
+
+
+NEXT PAPER
+{{ paper.title }}
+{{ paper.authorsShort }} — {{ paper.citationText }}
+Link: {{ paper.url }}
+{{ paper.metaLine }}
+
+
+If you need to change your availability, just resubmit at the same
+link — the latest answer wins:
+{{ links.availability }}
+
+
+See you soon,
+— {{ operator.displayName }}
+
+PS — Paper Pal goes live Wednesday morning. Preview link if you
+want a head start:
+{{ links.companionPreview }}
+
+---
+WiDS NYC AI Reading Group
+Member portal: {{ links.portalBase }}/dashboard
