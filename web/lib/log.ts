@@ -1,6 +1,7 @@
 // Append a row to command_log from a server action.
 // Uses the service-role client because command_log isn't in any RLS policy.
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import type { Json, TablesInsert } from "@/lib/database.types";
 
 // Optional enrichment columns added in migration 020. Each is written only
 // when supplied so call sites that don't care keep the row (and the table
@@ -21,12 +22,12 @@ export async function logServerAction(
   extra?: LogExtra,
 ) {
   const sb = createSupabaseServiceClient();
-  const row: Record<string, unknown> = {
+  const row: TablesInsert<"command_log"> = {
     source: "server_action",
     name, status, summary, error,
   };
   if (extra?.durationMs !== undefined) row.duration_ms = extra.durationMs;
-  if (extra?.metadata !== undefined) row.metadata = extra.metadata;
+  if (extra?.metadata !== undefined) row.metadata = extra.metadata as Json;
   if (extra?.idempotencyKey !== undefined) row.idempotency_key = extra.idempotencyKey;
   if (extra?.actor !== undefined) row.actor = extra.actor;
   await sb.from("command_log").insert(row);
