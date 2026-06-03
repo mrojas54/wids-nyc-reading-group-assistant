@@ -14,6 +14,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | `/papers/[id]` | Paper Pal reading page. If `paper_companions.payload` exists, renders the synthesized dashboard + assessment panel; else falls back to a static `web/content/papers/<id>.json` fixture; else shows a synthesize CTA (owner/leader) or read-only empty state; else 404s. No auth is required to read existing content — only synthesis is gated. |
 | `/papers/[id]/present` | Presenter mode. Requires `paper_companions.payload`; derives slides from the synthesized companion and 404s when no payload exists. |
 | `/admin/suggest` | Paper search/rank tool. Linked from the dashboard as "Find a paper" when the member's role is `operator` / `leader` / `admin`; the API enforces the same leader-role requirement. See [../docs/admin-suggest.md](../docs/admin-suggest.md). |
+| `/admin/logs` | Operator event log over `command_log`. Requires the same leader-role gate as `/admin/suggest`, reads with the service-role client because the table is RLS-locked, and shows failures/warnings, filters, expandable context, and keyset "Load more" pagination. See [../docs/admin-logs.md](../docs/admin-logs.md). |
 
 ## UI conventions
 
