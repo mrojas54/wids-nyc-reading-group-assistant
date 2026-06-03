@@ -25,12 +25,18 @@ WHERE m.status='done'
 
 ## Step 2 — Idempotency
 
-For each, check if thanks already sent:
+For each, check if thanks were already sent — keyed on the exact
+`idempotency_key` written in Step 4 (no brittle `summary LIKE` scan):
 ```sql
-SELECT count(*) FROM command_log
-WHERE name='post-meeting-thanks' AND summary LIKE '%meeting=<id>%' AND status='success';
+SELECT 1 FROM command_log
+WHERE idempotency_key = 'post-meeting-thanks:meeting=<id>'
+LIMIT 1;
 ```
-Skip if > 0.
+Skip if a row exists. The check is status-agnostic on purpose: once a meeting
+has been handled — whether the send went out clean or as the degraded
+leader-no-reply fallback (Step 3b) — it must not be re-thanked. The
+`command_log_idempotency_key_unique` index is the race backstop (a concurrent
+duplicate INSERT trips SQLSTATE 23505 — treat as already-sent).
 
 ## Step 3a — type='admin': auto-send
 
@@ -81,12 +87,43 @@ The next reading group is being planned. More soon.
 
 When leader replies (a separate step in the workflow — V1 may require this to be a manual operator action, since the scheduled task can't easily wait for a reply mid-run), build the final email with the leader's line slotted in and send to active members.
 
-(For V1: if leader doesn't reply within 24h, send the draft as-is with `[YOUR 1-LINE ADDITION HERE]` placeholder removed. Log this as `partial`.)
+(For V1: if leader doesn't reply within 24h, send the draft as-is with the
+`[YOUR 1-LINE ADDITION HERE]` placeholder removed.)
+
+The email still went out, so this degraded send is logged with `status='success'`
+— the same valid status as a clean send (the only difference is the missing
+leader line). `command_log.status` is CHECK-constrained to
+`('success', 'failure', 'no_action')`, so there is no `partial` status to use;
+`no_action` would be wrong (an email *was* sent) and `failure` would be wrong (it
+succeeded). Write the **same** `idempotency_key` as a clean send (so the
+status-agnostic Step 2 check still blocks a re-send), and record the degraded
+nature with a `metadata.degraded` flag — that is the only thing distinguishing
+this row from a clean Step 4 send:
+
+```sql
+INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
+VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
+        'Sent thanks for meeting=<id> type=reading_group (leader line missing)',
+        'post-meeting-thanks:meeting=<id>',
+        jsonb_build_object('meeting_id', <id>, 'meeting_type', 'reading_group',
+                           'degraded', 'leader_no_reply'));
+```
+
+On the `/admin/logs` page this renders as `info` severity (see
+`deriveSeverity` in `web/lib/logs.ts`: `success→info`), which is the right signal
+— the send succeeded, it was just missing the leader's one-line addition.
 
 ## Step 4 — Log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
-        'Sent thanks for meeting=<id> type=<type>');
+        'Sent thanks for meeting=<id> type=<type>',
+        'post-meeting-thanks:meeting=<id>',
+        jsonb_build_object('meeting_id', <id>, 'meeting_type', '<type>'));
 ```
+The degraded leader-no-reply fallback (Step 3b) logs the **same**
+`idempotency_key` (`'post-meeting-thanks:meeting=<id>'`) so the status-agnostic
+Step-2 check blocks a later duplicate. Only one row per meeting can carry this
+key — the unique index enforces it; the fallback is told apart only by its
+`metadata.degraded` flag.

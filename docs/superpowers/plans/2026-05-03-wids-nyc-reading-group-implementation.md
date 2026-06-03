@@ -2056,7 +2056,7 @@ The next reading group is being planned. More soon.
 
 When leader replies (a separate step in the workflow — V1 may require this to be a manual operator action, since the scheduled task can't easily wait for a reply mid-run), build the final email with the leader's line slotted in and send to active members.
 
-(For V1: if leader doesn't reply within 24h, send the draft as-is with `[discussion was great]` placeholder removed. Log this as `partial`.)
+(For V1: if leader doesn't reply within 24h, send the draft as-is with `[discussion was great]` placeholder removed. The email still went out, so log it with `status='success'` — `command_log.status` has no `partial` value — writing the same `idempotency_key` as a clean send and marking the degraded nature with a `metadata.degraded='leader_no_reply'` flag.)
 
 ## Step 4 — Log
 
