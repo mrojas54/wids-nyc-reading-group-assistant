@@ -30,5 +30,8 @@ export async function logServerAction(
   if (extra?.metadata !== undefined) row.metadata = extra.metadata as Json;
   if (extra?.idempotencyKey !== undefined) row.idempotency_key = extra.idempotencyKey;
   if (extra?.actor !== undefined) row.actor = extra.actor;
-  await sb.from("command_log").insert(row);
+  const { error: insertError } = await sb.from("command_log").insert(row);
+  if (insertError) {
+    console.error(`logServerAction: failed to write command_log row for "${name}":`, insertError);
+  }
 }
