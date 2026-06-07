@@ -97,3 +97,17 @@ def test_render_typescript_is_parseable_and_in_sync():
         if line.strip().startswith("{")
     ]
     assert rows == to_json_obj(cats, generated_at="x")["categories"]
+
+
+def test_sanity_guard_rejects_too_few_categories():
+    from scripts.build_arxiv_taxonomy import passes_sanity
+    # Fixture has 5 categories — below the MIN_CATEGORIES floor.
+    from scripts.build_arxiv_taxonomy import parse_taxonomy
+    cats = parse_taxonomy(FIXTURE.read_text(encoding="utf-8"))
+    assert passes_sanity(cats) is False
+
+
+def test_sanity_guard_requires_some_relevant():
+    from scripts.build_arxiv_taxonomy import passes_sanity, Category
+    only_physics = [Category("astro-ph.CO", "X", "", "Physics", False)] * 150
+    assert passes_sanity(only_physics) is False
