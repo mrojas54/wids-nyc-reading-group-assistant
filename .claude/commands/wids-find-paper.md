@@ -1,6 +1,6 @@
 ---
 description: Research assistant for the leader to search arXiv or compare candidate papers
-argument-hint: search "<query>" | compare <url1> <url2> ... | pick <suggestion_id> | suggest [--top N] [--limit M]
+argument-hint: search "<query>" [--category <code>]... | compare <url1> <url2> ... | pick <suggestion_id> | suggest [--top N] [--limit M]
 ---
 
 # /wids-find-paper
@@ -31,13 +31,39 @@ Invocation: `/wids-find-paper search "RAG evaluation"`
 SELECT name FROM topics ORDER BY weight DESC;
 ```
 
-### 2b — Search arXiv via WebFetch
-Construct an arXiv search URL like:
+### 2b — Search arXiv
+
+Parse optional `--category <code>` flags (repeatable) from the invocation.
+
+**Validate categories.** For each `<code>`, check it against `data/arxiv-taxonomy.json`
+(the `categories[].code` values). If any code is unknown, halt with:
+`"Unknown arXiv category '<code>'. See data/arxiv-taxonomy.json for valid codes (e.g. cs.LG, stat.ML)."`
+Make no HTTP calls when validation fails.
+
+**No category given** → current behavior: WebFetch the HTML search page
 `https://arxiv.org/search/?searchtype=all&query=<encoded_query>&start=0`
+(optionally biased with topic names from 2a). Then print a one-line hint:
+`"Tip: scope to subject areas with --category cs.LG (see data/arxiv-taxonomy.json for the relevant list)."`
 
-Optionally bias with topic names: e.g., `"<query> <topic1> OR <topic2>"`.
+**One or more categories given** → use the arXiv export API (stable Atom XML):
+`http://export.arxiv.org/api/query?search_query=<filter>+AND+all:<encoded_query>&start=0&max_results=5`
 
-WebFetch the search result page. Parse out the top 5 papers (title, authors, abstract, arXiv ID, year).
+Build `<filter>` from the validated codes, URL-encoding by hand (the API takes raw
+query syntax):
+- Single code: `cat:cs.LG`
+- Multiple codes: OR-group inside percent-encoded parentheses —
+  `%28cat:cs.LG+OR+cat:stat.ML%29`
+- Spaces → `+`, boolean operators → `+AND+` / `+OR+`, `(` → `%28`, `)` → `%29`.
+- `<encoded_query>` is the URL-encoded search string.
+
+Full example for `search "diffusion" --category cs.LG --category stat.ML`:
+`http://export.arxiv.org/api/query?search_query=%28cat:cs.LG+OR+cat:stat.ML%29+AND+all:diffusion&start=0&max_results=5`
+
+WebFetch that URL. Parse the Atom `<entry>` elements: `<title>`, `<author><name>`,
+`<summary>` (abstract), the arXiv id from `<id>` (e.g. `http://arxiv.org/abs/2501.12345v1`
+→ `2501.12345`), and the year from `<published>`.
+
+Either way, continue to 2c with the top 5 papers (title, authors, abstract, arXiv ID, year).
 
 ### 2c — Insert candidates into papers + paper_suggestions
 
