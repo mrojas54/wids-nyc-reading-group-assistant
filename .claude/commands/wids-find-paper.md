@@ -174,6 +174,16 @@ SELECT id, name FROM topics ORDER BY weight DESC;
 
 If zero rows: skip this step entirely (no Claude call, no INSERT). Print one line: `"Note: topics table is empty; skipping topic tagging."` This indicates wids-bootstrap was never run or topics were deleted; not a fail state.
 
+**arXiv category enrichment (optional hint).** If `papers.url` is an arXiv URL,
+fetch the paper's metadata from the export API:
+`http://export.arxiv.org/api/query?id_list=<arxiv_id>` (derive `<arxiv_id>` with the
+same regex as Step 5b). Read the `<category term="...">` elements (primary +
+cross-list). Map each `term` (e.g. `cs.LG`) to its human name via
+`data/arxiv-taxonomy.json`; drop any code not present in the file. Hold the result
+as `arxiv_label_hint`, e.g. `"Machine Learning (cs.LG), Computation and Language (cs.CL)"`.
+If the paper is not on arXiv, or the fetch fails, set `arxiv_label_hint` to empty
+and proceed unchanged (graceful degradation — never block tagging on this).
+
 Otherwise, read the paper's title and abstract (from the `papers` row) and run this prompt against Claude:
 
 > Given this paper's title and abstract, pick 0–3 topics from the list below that the paper is *primarily* about (not just mentions). Return the topic NAMES exactly as they appear in the list, as a JSON array of strings. Use existing names only — do not invent new topics. If no topic clearly fits, return `[]`. Prefer fewer, more confident matches over many weak ones.
@@ -181,6 +191,8 @@ Otherwise, read the paper's title and abstract (from the `papers` row) and run t
 > Title: `<title>`
 >
 > Abstract: `<abstract>`
+>
+> arXiv categories (for context only — still choose from the Topics list below): `<arxiv_label_hint>`
 >
 > Topics: `<topic_name_1>, <topic_name_2>, ...`
 
@@ -211,10 +223,12 @@ If validated set is empty (Claude returned `[]`, all names were hallucinations, 
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-find-paper', 'success',
         'Picked paper "<title>" for reading_group <rg_id>; '
-        'tagged with topics: <names_joined>');
+        'tagged with topics: <names_joined>; '
+        'arXiv categories: <arxiv_codes_joined>');
 ```
 
 Where `<names_joined>` is a comma-separated list of the canonical topic names that were inserted in 4d.5, or the literal string `no topics` if the validated set was empty.
+Where `<arxiv_codes_joined>` is a comma-separated list of the mapped arXiv codes (e.g. `cs.LG, cs.CL`), or the literal `none` when `arxiv_label_hint` was empty.
 
 ### 4f — Render to leader
 
