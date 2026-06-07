@@ -1,6 +1,6 @@
 ---
 description: Research assistant for the leader to search arXiv or compare candidate papers
-argument-hint: search "<query>" | compare <url1> <url2> ... | pick <suggestion_id> | suggest [--top N] [--limit M]
+argument-hint: search "<query>" [--category <code>]... | compare <url1> <url2> ... | pick <suggestion_id> | suggest [--top N] [--limit M]
 ---
 
 # /wids-find-paper
@@ -31,13 +31,42 @@ Invocation: `/wids-find-paper search "RAG evaluation"`
 SELECT name FROM topics ORDER BY weight DESC;
 ```
 
-### 2b — Search arXiv via WebFetch
-Construct an arXiv search URL like:
+### 2b — Search arXiv
+
+Parse optional `--category <code>` flags (repeatable) from the invocation.
+
+**Validate categories.** For each `<code>`, check it against `data/arxiv-taxonomy.json`
+(the `categories[].code` values). If any code is unknown, halt with:
+`"Unknown arXiv category '<code>'. See data/arxiv-taxonomy.json for valid codes (e.g. cs.LG, stat.ML)."`
+Make no HTTP calls when validation fails.
+
+**No category given** → current behavior: WebFetch the HTML search page
 `https://arxiv.org/search/?searchtype=all&query=<encoded_query>&start=0`
+(optionally biased with topic names from 2a). Then print a one-line hint:
+`"Tip: scope to subject areas with --category cs.LG (see data/arxiv-taxonomy.json for the relevant list)."`
 
-Optionally bias with topic names: e.g., `"<query> <topic1> OR <topic2>"`.
+**One or more categories given** → use the arXiv export API (stable Atom XML):
+`http://export.arxiv.org/api/query?search_query=<filter>+AND+all:<encoded_query>&start=0&max_results=5`
 
-WebFetch the search result page. Parse out the top 5 papers (title, authors, abstract, arXiv ID, year).
+Build `<filter>` from the validated codes, URL-encoding by hand (the API takes raw
+query syntax):
+- Single code: `cat:cs.LG`
+- Multiple codes: OR-group inside percent-encoded parentheses —
+  `%28cat:cs.LG+OR+cat:stat.ML%29`
+- Spaces → `+`, boolean operators → `+AND+` / `+OR+`, `(` → `%28`, `)` → `%29`.
+- `<encoded_query>` is the user's search string fully URL-encoded (use
+  `urllib.parse.quote_plus` or equivalent — percent-encode `"`, `#`, `&`, `?`,
+  etc., not just spaces). The same applies to the `query=<encoded_query>` value on
+  the no-category HTML path above.
+
+Full example for `search "diffusion" --category cs.LG --category stat.ML`:
+`http://export.arxiv.org/api/query?search_query=%28cat:cs.LG+OR+cat:stat.ML%29+AND+all:diffusion&start=0&max_results=5`
+
+WebFetch that URL. Parse the Atom `<entry>` elements: `<title>`, `<author><name>`,
+`<summary>` (abstract), the arXiv id from `<id>` (e.g. `http://arxiv.org/abs/2501.12345v1`
+→ `2501.12345`), and the year from `<published>`.
+
+Either way, continue to 2c with the top 5 papers (title, authors, abstract, arXiv ID, year).
 
 ### 2c — Insert candidates into papers + paper_suggestions
 
@@ -148,6 +177,16 @@ SELECT id, name FROM topics ORDER BY weight DESC;
 
 If zero rows: skip this step entirely (no Claude call, no INSERT). Print one line: `"Note: topics table is empty; skipping topic tagging."` This indicates wids-bootstrap was never run or topics were deleted; not a fail state.
 
+**arXiv category enrichment (optional hint).** If `papers.url` is an arXiv URL,
+fetch the paper's metadata from the export API:
+`http://export.arxiv.org/api/query?id_list=<arxiv_id>` (derive `<arxiv_id>` with the
+same regex as Step 5b). Read the `<category term="...">` elements (primary +
+cross-list). Map each `term` (e.g. `cs.LG`) to its human name via
+`data/arxiv-taxonomy.json`; drop any code not present in the file. Hold the result
+as `arxiv_label_hint`, e.g. `"Machine Learning (cs.LG), Computation and Language (cs.CL)"`.
+If the paper is not on arXiv, or the fetch fails, set `arxiv_label_hint` to empty
+and proceed unchanged (graceful degradation — never block tagging on this).
+
 Otherwise, read the paper's title and abstract (from the `papers` row) and run this prompt against Claude:
 
 > Given this paper's title and abstract, pick 0–3 topics from the list below that the paper is *primarily* about (not just mentions). Return the topic NAMES exactly as they appear in the list, as a JSON array of strings. Use existing names only — do not invent new topics. If no topic clearly fits, return `[]`. Prefer fewer, more confident matches over many weak ones.
@@ -155,6 +194,8 @@ Otherwise, read the paper's title and abstract (from the `papers` row) and run t
 > Title: `<title>`
 >
 > Abstract: `<abstract>`
+>
+> arXiv categories (for context only — still choose from the Topics list below): `<arxiv_label_hint>`
 >
 > Topics: `<topic_name_1>, <topic_name_2>, ...`
 
@@ -185,10 +226,12 @@ If validated set is empty (Claude returned `[]`, all names were hallucinations, 
 INSERT INTO command_log (source, name, status, summary)
 VALUES ('slash_command', '/wids-find-paper', 'success',
         'Picked paper "<title>" for reading_group <rg_id>; '
-        'tagged with topics: <names_joined>');
+        'tagged with topics: <names_joined>; '
+        'arXiv categories: <arxiv_codes_joined>');
 ```
 
 Where `<names_joined>` is a comma-separated list of the canonical topic names that were inserted in 4d.5, or the literal string `no topics` if the validated set was empty.
+Where `<arxiv_codes_joined>` is a comma-separated list of the mapped arXiv codes (e.g. `cs.LG, cs.CL`), or the literal `none` when `arxiv_label_hint` was empty.
 
 ### 4f — Render to leader
 
