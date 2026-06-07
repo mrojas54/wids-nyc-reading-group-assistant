@@ -25,3 +25,45 @@ def test_is_relevant_uses_archive_allowlist():
     assert is_relevant("q-fin.PM") is True
     assert is_relevant("astro-ph.CO") is False
     assert is_relevant("hep-th") is False
+
+
+import pathlib
+
+FIXTURE = pathlib.Path(__file__).parent / "fixtures" / "arxiv_taxonomy.html"
+
+
+def _parse_fixture():
+    from scripts.build_arxiv_taxonomy import parse_taxonomy
+    return parse_taxonomy(FIXTURE.read_text(encoding="utf-8"))
+
+
+def test_parse_extracts_all_categories():
+    cats = _parse_fixture()
+    by_code = {c.code: c for c in cats}
+    assert set(by_code) == {"cs.AI", "cs.LG", "math.AG", "stat.ML", "astro-ph.CO"}
+
+
+def test_parse_resolves_code_name_pairs():
+    by_code = {c.code: c for c in _parse_fixture()}
+    assert by_code["cs.AI"].name == "Artificial Intelligence"
+    assert by_code["stat.ML"].name == "Machine Learning"
+    assert by_code["math.AG"].name == "Algebraic Geometry"
+
+
+def test_parse_captures_group_and_description():
+    by_code = {c.code: c for c in _parse_fixture()}
+    assert by_code["cs.LG"].group == "Computer Science"
+    assert by_code["astro-ph.CO"].group == "Physics"
+    assert by_code["cs.LG"].description.startswith("Papers on all aspects")
+
+
+def test_parse_sets_relevance_flag():
+    by_code = {c.code: c for c in _parse_fixture()}
+    assert by_code["cs.LG"].relevant is True
+    assert by_code["stat.ML"].relevant is True
+    assert by_code["astro-ph.CO"].relevant is False
+
+
+def test_parse_returns_codes_sorted():
+    cats = _parse_fixture()
+    assert [c.code for c in cats] == sorted(c.code for c in cats)
