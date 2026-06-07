@@ -67,3 +67,33 @@ def test_parse_sets_relevance_flag():
 def test_parse_returns_codes_sorted():
     cats = _parse_fixture()
     assert [c.code for c in cats] == sorted(c.code for c in cats)
+
+
+import json as _json
+
+
+def test_to_json_obj_shape():
+    from scripts.build_arxiv_taxonomy import parse_taxonomy, to_json_obj
+    cats = parse_taxonomy(FIXTURE.read_text(encoding="utf-8"))
+    obj = to_json_obj(cats, generated_at="2026-06-07")
+    assert obj["generated_at"] == "2026-06-07"
+    assert obj["source"] == "https://arxiv.org/category_taxonomy"
+    assert isinstance(obj["categories"], list)
+    first = obj["categories"][0]
+    assert set(first) == {"code", "name", "description", "group", "relevant"}
+
+
+def test_render_typescript_is_parseable_and_in_sync():
+    from scripts.build_arxiv_taxonomy import parse_taxonomy, render_typescript, to_json_obj
+    cats = parse_taxonomy(FIXTURE.read_text(encoding="utf-8"))
+    ts = render_typescript(cats)
+    assert ts.startswith("// AUTO-GENERATED")
+    assert "export const ARXIV_TAXONOMY" in ts
+    assert "export const RELEVANT_CATEGORIES" in ts
+    # The array literal rows are valid JSON objects; extract and compare to JSON.
+    rows = [
+        _json.loads(line.strip().rstrip(","))
+        for line in ts.splitlines()
+        if line.strip().startswith("{")
+    ]
+    assert rows == to_json_obj(cats, generated_at="x")["categories"]
