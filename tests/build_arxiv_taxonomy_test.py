@@ -111,3 +111,69 @@ def test_sanity_guard_requires_some_relevant():
     from scripts.build_arxiv_taxonomy import passes_sanity, Category
     only_physics = [Category("astro-ph.CO", "X", "", "Physics", False)] * 150
     assert passes_sanity(only_physics) is False
+
+
+def test_sanity_guard_boundary_at_min_categories():
+    from scripts.build_arxiv_taxonomy import passes_sanity, Category, MIN_CATEGORIES
+    relevant = Category("cs.AI", "Artificial Intelligence", "d", "Computer Science", True)
+    assert passes_sanity([relevant] * MIN_CATEGORIES) is True
+    assert passes_sanity([relevant] * (MIN_CATEGORIES - 1)) is False
+
+
+def test_category_rejects_inconsistent_relevant_flag():
+    import pytest
+    from scripts.build_arxiv_taxonomy import Category
+    # cs.* is in the relevant allowlist, so relevant=False is inconsistent.
+    with pytest.raises(ValueError):
+        Category("cs.LG", "Machine Learning", "", "Computer Science", False)
+    # astro-ph.* is NOT relevant, so relevant=True is inconsistent.
+    with pytest.raises(ValueError):
+        Category("astro-ph.CO", "Cosmology", "", "Physics", True)
+
+
+def test_parse_with_diagnostics_counts_skipped_h4():
+    from scripts.build_arxiv_taxonomy import parse_with_diagnostics, parse_taxonomy
+    html = (
+        '<div id="category_taxonomy_list">'
+        "<h2>Computer Science</h2>"
+        '<div class="columns"><h4>cs.AI <span>(Artificial Intelligence)</span></h4>'
+        "<p>desc</p></div>"
+        '<div class="columns"><h4>Heading Without Parens</h4><p>x</p></div>'
+        "</div>"
+    )
+    cats, diag = parse_with_diagnostics(html)
+    assert [c.code for c in cats] == ["cs.AI"]
+    assert diag.total_h4 == 2
+    assert diag.parsed == 1
+    assert diag.skipped == 1
+    # parse_taxonomy delegates to parse_with_diagnostics and returns just the rows.
+    assert parse_taxonomy(html) == cats
+
+
+def test_parse_with_diagnostics_counts_blank_description():
+    from scripts.build_arxiv_taxonomy import parse_with_diagnostics
+    html = (
+        '<div id="category_taxonomy_list">'
+        "<h2>Computer Science</h2>"
+        '<div class="columns"><h4>cs.AI <span>(Artificial Intelligence)</span></h4></div>'
+        "</div>"
+    )
+    cats, diag = parse_with_diagnostics(html)
+    assert cats[0].description == ""
+    assert diag.blank_description == 1
+    assert diag.blank_group == 0
+
+
+def test_render_typescript_escapes_special_characters():
+    from scripts.build_arxiv_taxonomy import Category, render_typescript
+    # cs.AI is relevant → relevant=True keeps the Category invariant satisfied.
+    cat = Category("cs.AI", 'Name with "quotes"', "Back\\slash and é",
+                   "Computer Science", True)
+    ts = render_typescript([cat])
+    rows = [
+        _json.loads(line.strip().rstrip(","))
+        for line in ts.splitlines()
+        if line.strip().startswith("{")
+    ]
+    assert rows[0]["name"] == 'Name with "quotes"'
+    assert rows[0]["description"] == "Back\\slash and é"

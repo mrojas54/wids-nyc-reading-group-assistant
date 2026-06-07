@@ -1,13 +1,13 @@
 import { ARXIV_TAXONOMY, RELEVANT_CATEGORIES, type ArxivCategory } from "./taxonomy";
 
 export interface CategoryOption {
-  code: string;
-  name: string;
+  readonly code: string;
+  readonly name: string;
 }
 
 export interface CategoryGroup {
-  group: string;
-  options: CategoryOption[];
+  readonly group: string;
+  readonly options: readonly CategoryOption[];
 }
 
 /** Group categories for an <optgroup>-based <select>. Relevant-only by default. */

@@ -1,11 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { buildCategoryOptions } from "@/lib/arxiv/options";
 
 export function CategoryBrowser() {
   const [showAll, setShowAll] = useState(false);
   const [code, setCode] = useState("");
-  const groups = buildCategoryOptions(showAll);
+  const groups = useMemo(() => buildCategoryOptions(showAll), [showAll]);
 
   return (
     <section className="mb-6 rounded border p-3">

@@ -46,20 +46,46 @@ class Category:
     group: str
     relevant: bool
 
+    def __post_init__(self) -> None:
+        # Invariant: `relevant` is a pure function of `code` (its archive).
+        # Guard against a caller (or a future bug) constructing a row whose
+        # flag disagrees with the archive allowlist.
+        if self.relevant != is_relevant(self.code):
+            raise ValueError(
+                f"Category.relevant={self.relevant} is inconsistent with "
+                f"is_relevant({self.code!r})={is_relevant(self.code)}"
+            )
 
-def parse_taxonomy(html: str) -> list[Category]:
-    """Parse the taxonomy page HTML into a code-sorted list of Category rows.
+
+@dataclass(frozen=True)
+class ParseDiagnostics:
+    """Parse-health counters surfaced by parse_with_diagnostics for drift detection."""
+    total_h4: int
+    parsed: int
+    skipped: int
+    blank_group: int
+    blank_description: int
+
+
+def parse_with_diagnostics(html: str) -> tuple[list[Category], ParseDiagnostics]:
+    """Parse the taxonomy HTML, returning code-sorted rows plus health counters.
 
     Structure assumed: group names in <h2>, each category in an <h4> of the
     form 'cs.AI (Artificial Intelligence)', with its description in a <p>
-    inside the same enclosing `.columns` block.
+    inside the same enclosing `.columns` block. `<h4>` elements that don't
+    match the code/name shape are counted as `skipped`; missing group/description
+    fall back to "" and are counted, so a silent structural change in the page
+    becomes visible to the operator rather than producing blank fields quietly.
     """
     soup = BeautifulSoup(html, "html.parser")
+    h4s = soup.select("#category_taxonomy_list h4")
     out: list[Category] = []
-    for h4 in soup.select("#category_taxonomy_list h4"):
+    skipped = 0
+    for h4 in h4s:
         text = h4.get_text(" ", strip=True)
         m = _CODE_NAME_RE.match(text)
         if not m:
+            skipped += 1
             continue
         code = m.group(1)
         name = m.group(2).strip()
@@ -71,7 +97,20 @@ def parse_taxonomy(html: str) -> list[Category]:
         out.append(Category(code=code, name=name, description=description,
                             group=group, relevant=is_relevant(code)))
     out.sort(key=lambda c: c.code)
-    return out
+    diagnostics = ParseDiagnostics(
+        total_h4=len(h4s),
+        parsed=len(out),
+        skipped=skipped,
+        blank_group=sum(1 for c in out if not c.group),
+        blank_description=sum(1 for c in out if not c.description),
+    )
+    return out, diagnostics
+
+
+def parse_taxonomy(html: str) -> list[Category]:
+    """Parse the taxonomy page HTML into a code-sorted list of Category rows."""
+    categories, _ = parse_with_diagnostics(html)
+    return categories
 
 
 SOURCE_URL = "https://arxiv.org/category_taxonomy"
@@ -101,11 +140,11 @@ def render_typescript(categories: list[Category]) -> str:
         f"// Source: {SOURCE_URL}",
         "",
         "export interface ArxivCategory {",
-        "  code: string;",
-        "  name: string;",
-        "  description: string;",
-        "  group: string;",
-        "  relevant: boolean;",
+        "  readonly code: string;",
+        "  readonly name: string;",
+        "  readonly description: string;",
+        "  readonly group: string;",
+        "  readonly relevant: boolean;",
         "}",
         "",
         "export const ARXIV_TAXONOMY: readonly ArxivCategory[] = [",
@@ -126,7 +165,7 @@ def main() -> int:
     import httpx
     resp = httpx.get(SOURCE_URL, timeout=15.0, follow_redirects=True)
     resp.raise_for_status()
-    categories = parse_taxonomy(resp.text)
+    categories, diagnostics = parse_with_diagnostics(resp.text)
     if not passes_sanity(categories):
         print(
             f"ERROR: parsed {len(categories)} categories "
@@ -135,6 +174,14 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if diagnostics.skipped or diagnostics.blank_group or diagnostics.blank_description:
+        print(
+            f"WARNING: parse health — {diagnostics.skipped} <h4> skipped "
+            f"(no code/name match), {diagnostics.blank_group} blank group, "
+            f"{diagnostics.blank_description} blank description "
+            f"(of {diagnostics.parsed} parsed). arXiv page structure may have changed.",
+            file=sys.stderr,
+        )
     generated_at = dt.date.today().isoformat()
     JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     TS_PATH.parent.mkdir(parents=True, exist_ok=True)

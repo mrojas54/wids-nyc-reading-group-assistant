@@ -54,7 +54,10 @@ query syntax):
 - Multiple codes: OR-group inside percent-encoded parentheses —
   `%28cat:cs.LG+OR+cat:stat.ML%29`
 - Spaces → `+`, boolean operators → `+AND+` / `+OR+`, `(` → `%28`, `)` → `%29`.
-- `<encoded_query>` is the URL-encoded search string.
+- `<encoded_query>` is the user's search string fully URL-encoded (use
+  `urllib.parse.quote_plus` or equivalent — percent-encode `"`, `#`, `&`, `?`,
+  etc., not just spaces). The same applies to the `query=<encoded_query>` value on
+  the no-category HTML path above.
 
 Full example for `search "diffusion" --category cs.LG --category stat.ML`:
 `http://export.arxiv.org/api/query?search_query=%28cat:cs.LG+OR+cat:stat.ML%29+AND+all:diffusion&start=0&max_results=5`

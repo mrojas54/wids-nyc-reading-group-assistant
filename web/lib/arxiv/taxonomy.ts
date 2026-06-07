@@ -2,11 +2,11 @@
 // Source: https://arxiv.org/category_taxonomy
 
 export interface ArxivCategory {
-  code: string;
-  name: string;
-  description: string;
-  group: string;
-  relevant: boolean;
+  readonly code: string;
+  readonly name: string;
+  readonly description: string;
+  readonly group: string;
+  readonly relevant: boolean;
 }
 
 export const ARXIV_TAXONOMY: readonly ArxivCategory[] = [
