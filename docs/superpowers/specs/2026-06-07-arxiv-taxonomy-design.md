@@ -144,10 +144,20 @@ Add an optional, repeatable `--category <code>` argument.
   Unknown code → halt with: `"Unknown arXiv category '<code>'. See data/arxiv-taxonomy.json for valid codes."` (typo/hallucination guard — the data file's validation role).
 - **When categories are present:** discovery uses the arXiv **export API** instead
   of scraping the HTML search page:
-  `http://export.arxiv.org/api/query?search_query=(cat:cs.LG+OR+cat:stat.ML)+AND+all:<encoded_query>&start=0&max_results=5`
+  `http://export.arxiv.org/api/query?search_query=%28cat:cs.LG+OR+cat:stat.ML%29+AND+all:<encoded_query>&start=0&max_results=5`
   The response is Atom XML — parse `<entry>` elements for title, authors, summary
   (abstract), arXiv id, published year. This is markedly more stable than the
   current HTML scrape.
+
+  **URL-encoding contract (confirmed against the arXiv API user manual):** the
+  `search_query` value is raw query syntax, so reserved characters must be
+  percent-encoded by hand — spaces → `+`, boolean operators → `+AND+` / `+OR+` /
+  `+ANDNOT+`, grouping parentheses → `%28` / `%29`, phrase quotes → `%22`. The
+  `<encoded_query>` term must itself be URL-encoded. A single category needs no
+  parentheses (`search_query=cat:cs.LG+AND+all:<encoded_query>`); multiple
+  categories are OR-grouped inside `%28…%29` as shown above. Verbatim doc example
+  confirming the grouping encoding:
+  `search_query=au:del_maestro+ANDNOT+%28ti:checkerboard+OR+ti:Pyrochlore%29`.
 - **When no category is given:** behavior is unchanged (current HTML `/search/`
   flow), but the command prints a one-line hint listing the relevant-subset codes
   so the leader knows the option exists.
@@ -224,6 +234,7 @@ Each step depends only on step 1, so 2–4 are independent once the foundation l
 
 - **arXiv page structure drift** breaks the parser. Mitigated by the §3 sanity
   guard and the fixture test; re-running the script is the fix.
-- **export API category-filter syntax** must be confirmed at implementation time
-  (the `cat:` field is documented and stable, but the exact OR-grouping is worth a
-  live check before finalizing 4.1).
+- **export API category-filter syntax** — confirmed against the arXiv API user
+  manual (2026-06-07). The `cat:` field, `%28…%29` OR-grouping, and `+AND+`/`+OR+`
+  operator encoding are documented and used in §4.1. No longer an open risk;
+  retained here as the provenance for the §4.1 encoding contract.
