@@ -125,6 +125,10 @@ def to_json_obj(categories: list[Category], generated_at: str) -> dict:
 
 
 MIN_CATEGORIES = 100
+# Relative drift: warn (non-fatal) when a fresh parse drops more than this
+# fraction below the committed baseline count. Complements the absolute
+# MIN_CATEGORIES floor, which a partial corruption can clear silently.
+DRIFT_THRESHOLD = 0.20
 REPO_ROOT = Path(__file__).resolve().parent.parent
 JSON_PATH = REPO_ROOT / "data" / "arxiv-taxonomy.json"
 TS_PATH = REPO_ROOT / "web" / "lib" / "arxiv" / "taxonomy.ts"
@@ -132,6 +136,26 @@ TS_PATH = REPO_ROOT / "web" / "lib" / "arxiv" / "taxonomy.ts"
 
 def passes_sanity(categories: list[Category]) -> bool:
     return len(categories) >= MIN_CATEGORIES and any(c.relevant for c in categories)
+
+
+def drift_warning(
+    new_count: int, baseline_count: int, *, threshold: float = DRIFT_THRESHOLD
+) -> str | None:
+    """Return a warning string when `new_count` drops more than `threshold`
+    below `baseline_count`, else None.
+
+    The boundary is exclusive: a drop of exactly `threshold` does not warn.
+    Non-fatal by design — arXiv may legitimately retire categories, so this
+    surfaces a relative regression for the operator without gating the build.
+    """
+    if new_count < baseline_count * (1 - threshold):
+        pct = (1 - new_count / baseline_count) * 100 if baseline_count else 0.0
+        return (
+            f"WARNING: parsed {new_count} categories vs baseline {baseline_count} "
+            f"({pct:.0f}% drop, threshold {threshold:.0%}). arXiv page structure "
+            "may have changed, or categories were removed."
+        )
+    return None
 
 
 def render_typescript(categories: list[Category]) -> str:
@@ -182,6 +206,22 @@ def main() -> int:
             f"(of {diagnostics.parsed} parsed). arXiv page structure may have changed.",
             file=sys.stderr,
         )
+    # Relative drift check against the committed baseline (non-fatal). Skipped
+    # silently on first run; a malformed/old baseline never crashes the build.
+    if JSON_PATH.exists():
+        try:
+            existing = json.loads(JSON_PATH.read_text(encoding="utf-8"))
+            baseline_count = len(existing["categories"])
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            print(
+                f"NOTE: skipping relative drift check — could not read baseline "
+                f"{JSON_PATH} ({exc}).",
+                file=sys.stderr,
+            )
+        else:
+            message = drift_warning(len(categories), baseline_count)
+            if message:
+                print(message, file=sys.stderr)
     generated_at = dt.date.today().isoformat()
     JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
     TS_PATH.parent.mkdir(parents=True, exist_ok=True)
