@@ -15,9 +15,10 @@ This guide is written for three audiences:
 
 ## TL;DR
 
-You paste 1–10 candidate papers (arXiv URLs, DOIs, or Semantic Scholar
-IDs). The system compares them against every past pick the group has
-ever read and returns a ranked list, balancing two signals:
+You can browse recent arXiv papers by category, then paste 1-10 candidate
+papers (arXiv URLs, DOIs, or Semantic Scholar IDs). The system compares the
+pasted candidates against every past pick the group has ever read and returns
+a ranked list, balancing two signals:
 
 - **Relevance** — how similar is this candidate to the group's reading
   history?
@@ -40,10 +41,15 @@ paper" link in the dashboard. (If you don't see it, your account isn't
 flagged as `operator`, `leader`, or `admin` in the `members` table — ask the
 operator to bump your role.)
 
-The form has three inputs:
+The page has a discovery helper followed by the ranking form:
 
 ```
 ┌─ Suggest a paper ───────────────────────────────────────────────┐
+│  Browse arXiv by category                                       │
+│    [cs.LG — Machine Learning                         v]         │
+│    Open cs.LG on arXiv                                          │
+│    ☐ Show all categories (not just data-science archives)       │
+│                                                                 │
 │  Candidate papers (one per line, max 10):                       │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │ arXiv:2501.12345                                           │ │
@@ -60,6 +66,18 @@ The form has three inputs:
 │              [ Submit ]                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Browse arXiv by category:**
+- The category dropdown is a link-out helper, not an in-app search or ranking
+  filter. Pick a category to open `https://arxiv.org/list/<code>/recent` in a new
+  tab, review recent papers on arXiv, then copy promising IDs or URLs into the
+  candidate box.
+- By default it shows the 104 categories marked relevant to the group from the
+  155-category taxonomy snapshot. Relevant archives are `cs`, `stat`, `math`,
+  `eess`, `econ`, `q-bio`, and `q-fin`.
+- Check "Show all categories" to include non-default groups such as Physics
+  (`astro-ph.*`, `hep-*`, etc.). This only changes the dropdown; pasted
+  candidates are still ranked the same way.
 
 **The λ slider:**
 - λ = 1.0 → pure relevance ranking. Top result is the candidate most
@@ -87,6 +105,10 @@ Format-wise, the system handles:
 
 Anything that doesn't match these patterns is silently dropped. If all
 your inputs are unparseable, you'll get a 400 error explaining why.
+
+When using the category helper, copy either the arXiv ID (`arXiv:2501.12345`) or
+the abstract URL (`https://arxiv.org/abs/2501.12345`) from arXiv. The category
+you browsed is not submitted with the form; it is only a discovery aid.
 
 ### What the results mean
 
@@ -200,6 +222,27 @@ median + 0.93 min as the threshold. This is plenty for ranking — MMR
 results barely shift between a 0.95-similar vector and a 0.997-similar
 vector.
 
+### How the arXiv category helper works
+
+The category browser is pure client-side UI rendered above `SuggestForm`:
+
+```
+web/app/admin/suggest/page.tsx
+    ├─ CategoryBrowser.tsx  (dropdown + "show all" toggle + arXiv link)
+    └─ SuggestForm.tsx      (candidate resolver + ranking request)
+```
+
+`CategoryBrowser` calls `buildCategoryOptions(showAll)` from
+`web/lib/arxiv/options.ts`. That helper groups options by taxonomy `group`,
+sorts groups and category codes for stable display, and switches between:
+
+- `RELEVANT_CATEGORIES` by default.
+- The full `ARXIV_TAXONOMY` when "Show all categories" is checked.
+
+Both arrays live in `web/lib/arxiv/taxonomy.ts`, an auto-generated TypeScript
+module produced from the canonical `data/arxiv-taxonomy.json`. Do not edit the TS
+module by hand; regenerate both artifacts together with the recipe below.
+
 ### Why these data flow choices
 
 A few decisions worth understanding:
@@ -216,6 +259,39 @@ A few decisions worth understanding:
 ---
 
 ## Maintenance recipes
+
+### Refreshing the arXiv category taxonomy
+
+Refresh when arXiv changes its category list, a leader reports a missing category
+code, or the dropdown/search validation drifts from arXiv.
+
+```bash
+# 1. Validate the parser against the committed fixture.
+uv run --with pytest --with httpx --with beautifulsoup4 \
+  pytest tests/build_arxiv_taxonomy_test.py -v
+
+# 2. Fetch https://arxiv.org/category_taxonomy and regenerate both artifacts.
+uv run --with httpx --with beautifulsoup4 scripts/build_arxiv_taxonomy.py
+
+# 3. Verify the web artifact still matches the canonical JSON and the dropdown
+#    helper keeps the relevant-only/show-all behavior.
+cd web
+npm run test -- \
+  lib/arxiv/__tests__/taxonomy.test.ts \
+  lib/arxiv/__tests__/options.test.ts \
+  app/admin/suggest/__tests__/CategoryBrowser.test.tsx
+```
+
+Expected generator output is `Wrote <N> categories ...`, with `N >= 100`. The
+script exits non-zero if the parsed category count is too low or if no relevant
+categories are found. It also prints a parse-health warning when arXiv's HTML has
+unexpected `<h4>` rows, blank groups, or blank descriptions; investigate before
+committing generated artifacts when that warning appears.
+
+The same canonical JSON is used by `/wids-find-paper search --category <code>` to
+validate category filters and by the `pick` flow to map arXiv category terms into
+topic-tagging context. Unknown codes are intentionally dropped or rejected rather
+than guessed.
 
 ### Re-quantizing the SPECTER2 model
 
@@ -405,11 +481,15 @@ them somewhere durable when (not if) you hit them again.
 │   ├── admin-suggest.md                          ← this file
 │   └── superpowers/
 │       ├── specs/2026-05-09-vercel-suggest-...   ← design spec (the "why")
+│       ├── specs/2026-06-07-arxiv-taxonomy-...   ← taxonomy design
 │       └── plans/2026-05-09-vercel-suggest-...   ← implementation plan (the "what + how")
+├── data/
+│   └── arxiv-taxonomy.json                       ← canonical arXiv category snapshot
 ├── migrations/
 │   ├── 010_paper_embeddings.sql                  ← pgvector cache table
 │   └── 011_papers_s2_paper_id.sql                ← canonical S2 ID column
 ├── scripts/
+│   ├── build_arxiv_taxonomy.py                   ← taxonomy scraper + JSON/TS generator
 │   ├── find_paper_suggest.py                     ← old operator-laptop CLI (still works, kept as offline fast path)
 │   ├── export_specter2_onnx.py                   ← one-time model export
 │   ├── collect_specter2_fixtures.py              ← parity-fixture fetcher
@@ -418,6 +498,7 @@ them somewhere durable when (not if) you hit them again.
 │   ├── app/
 │   │   ├── admin/suggest/                        ← the leader-facing UI
 │   │   │   ├── page.tsx                          ← server component (auth gate)
+│   │   │   ├── CategoryBrowser.tsx               ← arXiv category link-out helper
 │   │   │   └── SuggestForm.tsx                   ← client component (form + progress)
 │   │   └── api/
 │   │       ├── suggest/route.ts                  ← the orchestrator endpoint
@@ -426,6 +507,9 @@ them somewhere durable when (not if) you hit them again.
 │   │           └── resolve-papers/route.ts       ← URL → canonical S2 ID + DB upsert
 │   ├── lib/
 │   │   ├── auth/requireLeaderRole.ts             ← role-gating helper
+│   │   ├── arxiv/
+│   │   │   ├── taxonomy.ts                       ← generated category module
+│   │   │   └── options.ts                        ← grouped dropdown options
 │   │   └── suggest/
 │   │       ├── types.ts                          ← zod schemas + error classes
 │   │       ├── mmr.ts                            ← ranking math (pure function)
@@ -443,11 +527,14 @@ Two complementary tools coexist:
 
 - `/wids-find-paper` Claude Code skill (uses `scripts/find_paper_suggest.py`)
   — operator-only, runs on your laptop, works offline, faster for one-off
-  exploration during paper discovery.
+  exploration during paper discovery. Its `search` mode can also scope arXiv
+  discovery with repeatable `--category <code>` flags validated against
+  `data/arxiv-taxonomy.json`.
 
 - `/admin/suggest` web UI (everything else above) — leader-facing, runs
   on Vercel, anyone with the right role can use it without operator
-  involvement.
+  involvement. Its category browser helps leaders find candidate IDs, but the
+  ranking API only receives the pasted candidates.
 
 Both share the `paper_embeddings` cache table, so an embedding computed
 by either tool benefits the other.
@@ -461,11 +548,11 @@ Things we explicitly punted on for the MVP:
 - **A "save my picks" flow.** Currently you eyeball the ranking and
   decide; the system doesn't track which suggestions were chosen. A
   v2 could feed that signal back into λ tuning per leader.
-- **Corpus-ingestion mode.** Today you provide candidates; the system
-  ranks them. A v2 could ingest, e.g., recent arXiv CS.LG/CS.AI
-  preprints monthly and let leaders just hit "suggest" with no input,
-  surfacing top-K diverse-and-relevant from a curated corpus. This is
-  bookmarked in the design spec under "Out of scope."
+- **Corpus-ingestion mode.** Today the category browser helps you find candidates,
+  but you still paste IDs manually and the system ranks only those candidates. A
+  v2 could ingest recent arXiv CS.LG/CS.AI preprints monthly and let leaders hit
+  "suggest" with no input, surfacing top-K diverse-and-relevant from a curated
+  corpus. This is bookmarked in the design spec under "Out of scope."
 - **Per-leader MMR tuning.** Different leaders have different
   preferences (Maya likes diverse; Tomek likes deeply-relevant). The
   λ slider already exists; we just don't persist it per user.
