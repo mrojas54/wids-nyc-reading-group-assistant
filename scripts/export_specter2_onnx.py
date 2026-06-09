@@ -190,14 +190,14 @@ def main() -> int:
         return 2
     digest = sha256_of(int8)
     print("=" * 60)
-    print(f"PASS")
+    print("PASS")
     print(f"Output: {int8}")
     print(f"Size:   {int8.stat().st_size / 1e6:.1f} MB")
     print(f"SHA256: {digest}")
     print("=" * 60)
     print("Next steps:")
     print(f"  1. vercel blob put {int8}")
-    print(f"  2. Set env var SPECTER2_MODEL_BLOB_URL=<the URL Vercel returns>")
+    print("  2. Set env var SPECTER2_MODEL_BLOB_URL=<the URL Vercel returns>")
     print(f"  3. Pin EXPECTED_MODEL_SHA256 = '{digest}' in web/lib/suggest/specter2-wasm.ts")
     return 0
 
