@@ -10,7 +10,7 @@ Three subcommands:
   revert-rsvp  — transition meeting #6 scheduled → prep, clear attendance (idempotent)
   rls          — run tests/rls.sql via psql against $SUPABASE_DB_URL
 
-Run via: uv run tests/pilot_test.py <subcommand>
+Run via: uv run scripts/pilot_cli.py <subcommand>
 """
 from __future__ import annotations
 
@@ -114,7 +114,9 @@ def cmd_flip_rsvp(env: Env) -> int:
             "RETURNING scheduled_at",
             (env.meeting_id,),
         )
-        new_scheduled_at = cur.fetchone()[0]
+        row = cur.fetchone()
+        assert row is not None  # RETURNING after a successful UPDATE yields one row
+        new_scheduled_at = row[0]
         conn.commit()
         print(
             f"meeting #{env.meeting_id} flipped prep → scheduled "
