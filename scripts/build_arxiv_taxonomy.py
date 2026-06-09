@@ -17,6 +17,7 @@ import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from bs4 import BeautifulSoup
 
@@ -116,7 +117,7 @@ def parse_taxonomy(html: str) -> list[Category]:
 SOURCE_URL = "https://arxiv.org/category_taxonomy"
 
 
-def to_json_obj(categories: list[Category], generated_at: str) -> dict:
+def to_json_obj(categories: list[Category], generated_at: str) -> dict[str, Any]:
     return {
         "generated_at": generated_at,
         "source": SOURCE_URL,

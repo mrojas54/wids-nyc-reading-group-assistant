@@ -245,6 +245,81 @@ def test_mmr_default_lambda_balances():
     assert selected[1] == 2
 
 
+# ---------------------- candidate assembly ----------------------
+# These two helpers were extracted from main() so the ranking/assembly stage
+# is testable without mocking the async HTTP pipeline.
+
+def test_filter_recs_with_embeddings_keeps_only_vectored():
+    from scripts.find_paper_suggest import filter_recs_with_embeddings
+    recs = [
+        {"paperId": "a", "embedding": {"vector": [0.1, 0.2]}},  # keep
+        {"paperId": "b", "embedding": {"vector": []}},          # drop: empty vector
+        {"paperId": "c", "embedding": None},                    # drop: enrich failed
+        {"paperId": "d"},                                       # drop: never enriched
+    ]
+    kept = filter_recs_with_embeddings(recs)
+    assert [r["paperId"] for r in kept] == ["a"]
+
+
+def test_build_candidates_ranks_and_matches_closest_past_paper():
+    from scripts.find_paper_suggest import PastPaper, build_candidates
+    # Two orthogonal candidates; each should match the past paper it aligns with.
+    recs_with_emb = [
+        {
+            "paperId": "rec-x",
+            "title": "Candidate X",
+            "abstract": "Abstract X",
+            "year": 2026,
+            "authors": [{"name": "Xavier"}],
+            "externalIds": {"ArXiv": "2604.00001"},
+            "embedding": {"vector": [1.0, 0.0]},
+        },
+        {
+            "paperId": "rec-y",
+            "title": "Candidate Y",
+            "abstract": "Abstract Y",
+            "year": 2025,
+            "authors": [{"name": "Yvonne"}],
+            "externalIds": {},
+            "embedding": {"vector": [0.0, 1.0]},
+        },
+    ]
+    past_embeddings = {11: [1.0, 0.0], 22: [0.0, 1.0]}
+    past_papers = [
+        PastPaper(paper_id=11, s2_paper_id="ARXIV:1", title="Past Eleven"),
+        PastPaper(paper_id=22, s2_paper_id="ARXIV:2", title="Past Twenty-two"),
+    ]
+
+    candidates = build_candidates(recs_with_emb, past_embeddings, past_papers, top=2)
+
+    by_title = {c.title: c for c in candidates}
+    assert set(by_title) == {"Candidate X", "Candidate Y"}
+
+    cand_x = by_title["Candidate X"]
+    assert cand_x.matched_past_paper_id == 11
+    assert cand_x.matched_past_paper_title == "Past Eleven"
+    assert cand_x.cosine is not None and cand_x.cosine > 0.99
+    assert cand_x.arxiv_id == "2604.00001"
+    assert cand_x.authors == ["Xavier"]
+
+    cand_y = by_title["Candidate Y"]
+    assert cand_y.matched_past_paper_id == 22
+    assert cand_y.arxiv_id is None  # no ArXiv external id
+
+
+def test_build_candidates_respects_top_n():
+    from scripts.find_paper_suggest import PastPaper, build_candidates
+    recs_with_emb = [
+        {"paperId": f"r{i}", "title": f"C{i}", "embedding": {"vector": [1.0, float(i)]}}
+        for i in range(5)
+    ]
+    past_papers = [PastPaper(paper_id=1, s2_paper_id="ARXIV:1", title="P")]
+    candidates = build_candidates(
+        recs_with_emb, {1: [1.0, 0.0]}, past_papers, top=3,
+    )
+    assert len(candidates) == 3
+
+
 # ---------------------- SS embedding fetch ----------------------
 
 import respx

@@ -146,6 +146,26 @@ npm run dev
 
 Opens http://localhost:3000. See [web/README.md](web/README.md).
 
+## Python tooling
+
+The operator-side Python helpers under [scripts/](scripts/) (paper suggestion, Zotero
+push, arXiv taxonomy, email preview rendering) are managed with
+[uv](https://docs.astral.sh/uv/). Dependencies and tool config live in a single
+[pyproject.toml](pyproject.toml); the resolved set is pinned in the committed
+`uv.lock`.
+
+```sh
+uv sync                  # install the locked dependency set (creates .venv/)
+uv run pytest tests      # run the Python test suite
+uv run ruff check scripts tests
+uv run mypy              # type-check (strict) the scripts/ package
+```
+
+`uv sync --frozen` asserts the lockfile is in sync with `pyproject.toml` and is what
+CI runs — re-run `uv lock` after changing a dependency so the lock stays current.
+The optional `ml` extra (`uv sync --extra ml`) pulls the heavy torch/transformers
+stack needed only by the SPECTER2 embedding scripts.
+
 ## Repository layout
 
 ```
@@ -153,7 +173,9 @@ migrations/          SQL migrations, applied in numeric order (see migrations/RE
 supabase/functions/  Deno edge functions (Paper Pal synthesis + assessment)
 .claude/commands/    Operator slash commands (markdown)
 scheduled_tasks/     Scheduled background task specs (markdown)
+scripts/             Operator-side Python helpers (uv-managed; see "Python tooling")
 docs/                Guides, specs, and plans
-tests/               SQL smoke tests (RLS)
+tests/               SQL smoke tests (RLS) + Python unit tests (pytest)
 web/                 Next.js member portal app
+pyproject.toml       Python deps + ruff/mypy config (single source of truth)
 ```

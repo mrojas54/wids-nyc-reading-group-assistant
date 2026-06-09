@@ -38,7 +38,7 @@ import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
@@ -117,7 +117,12 @@ def _arxiv_id_from_url(url: str) -> str:
     return parsed.path[len("/abs/"):]
 
 
-def extract_arxiv_metadata(url: str) -> Optional[dict]:
+def _el_text(el: Optional[ET.Element]) -> str:
+    """Stripped text of an XML element, or '' if the element is absent/empty."""
+    return (el.text or "").strip() if el is not None else ""
+
+
+def extract_arxiv_metadata(url: str) -> Optional[dict[str, Any]]:
     """Fetch metadata from the arXiv API for a normalized abs URL.
 
     Returns None if the API returns no entry (404-equivalent).
@@ -138,7 +143,7 @@ def extract_arxiv_metadata(url: str) -> Optional[dict]:
     summary_el = entry.find("atom:summary", _ARXIV_NS)
     published_el = entry.find("atom:published", _ARXIV_NS)
     authors = [
-        (a.find("atom:name", _ARXIV_NS).text or "").strip()
+        _el_text(a.find("atom:name", _ARXIV_NS))
         for a in entry.findall("atom:author", _ARXIV_NS)
     ]
     year = None
@@ -147,9 +152,9 @@ def extract_arxiv_metadata(url: str) -> Optional[dict]:
 
     return {
         "item_type": "preprint",
-        "title": (title_el.text or "").strip() if title_el is not None else "",
+        "title": _el_text(title_el),
         "authors": authors,
-        "abstract": (summary_el.text or "").strip() if summary_el is not None else "",
+        "abstract": _el_text(summary_el),
         "year": year,
         "arxiv_id": arxiv_id,
         "url": url,
@@ -202,7 +207,7 @@ def _strip_jats(text: str) -> str:
     return _JATS_TAG_RE.sub("", text).strip()
 
 
-def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
+def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict[str, Any]]:
     """Fetch metadata from CrossRef for a DOI.
 
     `paper_url` is the original URL we got from papers.url; we keep it as the
@@ -255,7 +260,7 @@ def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict]:
     }
 
 
-def extract_db_fallback_metadata(conn: Connection, *, paper_id: int) -> dict:
+def extract_db_fallback_metadata(conn: Connection, *, paper_id: int) -> dict[str, Any]:
     """Read metadata for the given paper directly from `papers`.
 
     Always returns a dict (raises ValueError if the row is missing). Used
@@ -282,7 +287,7 @@ def extract_db_fallback_metadata(conn: Connection, *, paper_id: int) -> dict:
     }
 
 
-def extract_metadata(conn: Connection, *, paper_id: int, paper_url: str) -> dict:
+def extract_metadata(conn: Connection, *, paper_id: int, paper_url: str) -> dict[str, Any]:
     """Top-level metadata extractor.
 
     Order: normalize URL -> classify -> try the matching remote source ->
@@ -347,7 +352,7 @@ def build_note_html(
     return "\n".join(lines)
 
 
-def _split_author(name: str) -> dict:
+def _split_author(name: str) -> dict[str, str]:
     """Split a 'First Last' string into Zotero's creator shape.
 
     Single-token names go in lastName (Zotero's convention for mononyms);
@@ -360,7 +365,9 @@ def _split_author(name: str) -> dict:
     return {"creatorType": "author", "firstName": first, "lastName": last}
 
 
-def _fill_item_template(template: dict, meta: dict, paper_id: int) -> dict:
+def _fill_item_template(
+    template: dict[str, Any], meta: dict[str, Any], paper_id: int
+) -> dict[str, Any]:
     """Overlay our metadata onto a pyzotero item template."""
     extra_lines = [f"wids_paper_id:{paper_id}"]
     if meta.get("arxiv_id"):
@@ -392,7 +399,7 @@ def _fill_item_template(template: dict, meta: dict, paper_id: int) -> dict:
 
 def create_zotero_item(
     *,
-    meta: dict,
+    meta: dict[str, Any],
     paper_id: int,
     api_key: str,
     group_id: str,
@@ -411,7 +418,7 @@ def create_zotero_item(
     successful = result.get("successful") or {}
     if "0" not in successful:
         raise RuntimeError(f"Zotero response missing successful[0]: {result}")
-    return successful["0"]["key"]
+    return str(successful["0"]["key"])
 
 
 def create_zotero_note(
@@ -432,7 +439,7 @@ def create_zotero_note(
     result = zot.create_items(payload)
     if result.get("failed"):
         raise RuntimeError(f"Zotero rejected note: {result['failed']}")
-    return result["successful"]["0"]["key"]
+    return str(result["successful"]["0"]["key"])
 
 
 def find_existing_zotero_item(
@@ -455,7 +462,7 @@ def find_existing_zotero_item(
         if correlator in extra:
             key = item.get("key")
             if key:
-                return key
+                return str(key)
     return None
 
 
@@ -591,13 +598,13 @@ def _parse_meeting_date(value: str) -> datetime:
     return naive.replace(tzinfo=_NY_TZ)
 
 
-def read_backfill_csv(path: Path) -> list[dict]:
+def read_backfill_csv(path: Path) -> list[dict[str, Any]]:
     """Read the historical-readings CSV into a list of row dicts.
 
     Each row must carry a `paper_id` (added as a preprocessing step by
     matching titles/URLs against the `papers` table); it is parsed to int.
     """
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     with path.open(newline="", encoding="utf-8") as fh:
         for raw in csv.DictReader(fh):
             row = {col: (raw.get(col) or "").strip() for col in _BACKFILL_COLUMNS}
@@ -609,7 +616,7 @@ def read_backfill_csv(path: Path) -> list[dict]:
 def push_backfill_row(
     conn: Connection,
     *,
-    row: dict,
+    row: dict[str, Any],
     api_key: str,
     group_id: str,
     dry_run: bool,

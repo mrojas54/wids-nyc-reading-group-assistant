@@ -941,7 +941,7 @@ def test_parse_env_file_simple(tmp_path):
 
 def test_main_returns_zero_on_success():
     """main() returns 0 when push_to_zotero completes."""
-    with patch("scripts.zotero_push.psycopg.connect") as connect, \
+    with patch("scripts.zotero_push.psycopg.connect"), \
          patch("scripts.zotero_push.push_to_zotero") as push, \
          patch.dict(os.environ, {
              "SUPABASE_DB_URL": "postgresql://x",
@@ -957,7 +957,7 @@ def test_main_returns_zero_on_success():
 
 def test_main_returns_one_and_records_failure_on_exception():
     """A push exception -> rc=1, command_log row written, no traceback to caller."""
-    with patch("scripts.zotero_push.psycopg.connect") as connect, \
+    with patch("scripts.zotero_push.psycopg.connect"), \
          patch("scripts.zotero_push.push_to_zotero", side_effect=RuntimeError("boom")), \
          patch("scripts.zotero_push.record_failure") as rec, \
          patch.dict(os.environ, {

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+from typing import Any
 
 import httpx
 import numpy as np
@@ -209,7 +210,7 @@ async def _request_with_retry(
     client: httpx.AsyncClient,
     method: str,
     url: str,
-    **kwargs,
+    **kwargs: Any,
 ) -> httpx.Response:
     """Issue an HTTP request with exponential-backoff retry on retryable
     statuses (429, 5xx) and transport errors. Non-retryable statuses
@@ -254,7 +255,7 @@ async def fetch_recommendations(
     client: httpx.AsyncClient,
     positive_ids: list[str],
     limit: int,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """POST to the S2 Recommendations API and return the recommendedPapers list.
 
     Returns [] if positive_ids is empty (short-circuits, no HTTP call).
@@ -276,8 +277,8 @@ async def fetch_recommendations(
 
 async def enrich_recommendations_with_embeddings(
     client: httpx.AsyncClient,
-    recs: list[dict],
-) -> tuple[list[dict], list[str]]:
+    recs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
     """For each recommendation, fetch its SPECTER2 embedding via the Graph API
     and inject it as `rec['embedding'] = {'model': 'specter_v2', 'vector': [...]}`.
 
@@ -293,7 +294,7 @@ async def enrich_recommendations_with_embeddings(
     if not recs:
         return (list(recs), warnings)
 
-    async def _enrich(rec: dict) -> dict:
+    async def _enrich(rec: dict[str, Any]) -> dict[str, Any]:
         paper_id = rec.get("paperId")
         if not paper_id:
             return rec
@@ -350,10 +351,71 @@ async def backfill_missing_embeddings(
     return (full, warnings)
 
 
+def filter_recs_with_embeddings(
+    recs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Keep only recommendations that carry a usable SPECTER2 vector.
+
+    The Recommendations API doesn't return embeddings, so each rec is enriched
+    via a separate Graph-API round-trip first; ones whose fetch failed have no
+    `embedding.vector` and are dropped here before ranking.
+    """
+    return [r for r in recs if (r.get("embedding") or {}).get("vector")]
+
+
+def build_candidates(
+    recs_with_emb: list[dict[str, Any]],
+    past_embeddings: dict[int, list[float]],
+    past_papers: list[PastPaper],
+    top: int,
+) -> list[Candidate]:
+    """Rank embedded recs by MMR and resolve each to its closest past paper.
+
+    Pure (no I/O): given recs that each carry `embedding.vector`, picks a
+    diverse top-N via MMR (trusting S2's order for relevance) and attaches the
+    best-matching past paper by cosine similarity. Caller must filter recs
+    through `filter_recs_with_embeddings` first.
+    """
+    past_vecs_np: dict[int, np.ndarray] = {
+        pid: np.array(v, dtype=float) for pid, v in past_embeddings.items()
+    }
+    cand_embs = np.array(
+        [r["embedding"]["vector"] for r in recs_with_emb], dtype=float,
+    )
+    n = len(recs_with_emb)
+    # Trust S2's ordering: relevance = 1 - rank / N.
+    relevance = np.array([1.0 - i / n for i in range(n)])
+
+    selected = mmr_select(cand_embs, relevance, top_n=top, lam=0.6)
+
+    title_by_id = {p.paper_id: p.title for p in past_papers}
+    candidates: list[Candidate] = []
+    for idx in selected:
+        r = recs_with_emb[idx]
+        cand_vec = cand_embs[idx]
+        best_id, best_score = max_cosine_match(cand_vec, past_vecs_np)
+        external_ids = r.get("externalIds") or {}
+        authors_raw = r.get("authors") or []
+        candidates.append(Candidate(
+            arxiv_id=external_ids.get("ArXiv"),
+            s2_paper_id=r.get("paperId", ""),
+            title=r.get("title", ""),
+            abstract=r.get("abstract") or "",
+            authors=[a.get("name", "") for a in authors_raw],
+            year=r.get("year"),
+            matched_past_paper_id=best_id,
+            matched_past_paper_title=title_by_id.get(best_id) if best_id else None,
+            cosine=best_score if best_id is not None else None,
+        ))
+    return candidates
+
+
 async def main() -> int:
     """Entry point. Reads Input JSON from stdin, emits Output JSON to stdout.
 
-    Exit codes:
+    Thin orchestration: read+validate stdin, then run the async stages
+    (backfill → fetch → enrich) and the pure ranking stage (build_candidates),
+    emitting Output JSON. Exit codes:
         0 — success (may include warnings, may include zero candidates)
         1 — hard failure (input validation, network unreachable after retries)
     """
@@ -409,11 +471,7 @@ async def main() -> int:
         warnings.extend(enrich_warnings)
 
         # Filter to recs with usable SPECTER2 embeddings.
-        recs_with_emb = []
-        for r in recs:
-            emb = (r.get("embedding") or {}).get("vector")
-            if emb:
-                recs_with_emb.append(r)
+        recs_with_emb = filter_recs_with_embeddings(recs)
 
         if not recs_with_emb:
             warnings.append("No recommendations had usable embeddings.")
@@ -425,39 +483,9 @@ async def main() -> int:
             print(output.model_dump_json())
             return 0
 
-        # Build numpy structures for MMR + max-cosine.
-        past_vecs_np: dict[int, np.ndarray] = {
-            pid: np.array(v, dtype=float) for pid, v in full_past_embs.items()
-        }
-        cand_embs = np.array(
-            [r["embedding"]["vector"] for r in recs_with_emb], dtype=float,
+        candidates = build_candidates(
+            recs_with_emb, full_past_embs, inp.past_papers, inp.top,
         )
-        n = len(recs_with_emb)
-        # Trust S2's ordering: relevance = 1 - rank / N.
-        relevance = np.array([1.0 - i / n for i in range(n)])
-
-        selected = mmr_select(cand_embs, relevance, top_n=inp.top, lam=0.6)
-
-        # Build typed output candidates.
-        candidates: list[Candidate] = []
-        title_by_id = {p.paper_id: p.title for p in inp.past_papers}
-        for idx in selected:
-            r = recs_with_emb[idx]
-            cand_vec = cand_embs[idx]
-            best_id, best_score = max_cosine_match(cand_vec, past_vecs_np)
-            external_ids = r.get("externalIds") or {}
-            authors_raw = r.get("authors") or []
-            candidates.append(Candidate(
-                arxiv_id=external_ids.get("ArXiv"),
-                s2_paper_id=r.get("paperId", ""),
-                title=r.get("title", ""),
-                abstract=r.get("abstract") or "",
-                authors=[a.get("name", "") for a in authors_raw],
-                year=r.get("year"),
-                matched_past_paper_id=best_id,
-                matched_past_paper_title=title_by_id.get(best_id) if best_id else None,
-                cosine=best_score if best_id is not None else None,
-            ))
 
         output = Output(
             candidates=candidates,

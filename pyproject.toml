@@ -1,0 +1,79 @@
+[project]
+name = "wids-nyc-reading-group-assistant"
+version = "0.0.0"
+description = "Python helper scripts for the WiDS NYC reading-group assistant."
+requires-python = ">=3.11"
+
+# Runtime dependencies of the maintained, CI-tested scripts. These were
+# previously declared only as inline PEP 723 `# /// script` blocks and as
+# `--with` flags in .github/workflows/ci.yml; this is now the single source
+# of truth, pinned reproducibly via the committed uv.lock.
+dependencies = [
+    "beautifulsoup4>=4.12",   # scripts/build_arxiv_taxonomy.py
+    "httpx>=0.27",            # find_paper_suggest, build_arxiv_taxonomy, collect_specter2_fixtures
+    "numpy>=1.26",            # scripts/find_paper_suggest.py
+    "psycopg[binary]>=3.2",   # scripts/zotero_push.py
+    "pydantic>=2.6",          # scripts/find_paper_suggest.py
+    "pyzotero>=1.5",          # scripts/zotero_push.py
+    "requests>=2.31",         # scripts/zotero_push.py
+    "tenacity>=8.2",          # scripts/find_paper_suggest.py
+]
+
+[project.optional-dependencies]
+# Heavy, platform-specific SPECTER2 export/verification stack. Integration-only
+# — intentionally NOT installed by `uv sync` (default groups) or CI. The exact
+# per-platform invocations live in the module docstrings of
+# scripts/{export,embed,verify}_specter2_*.py (Intel Mac pins differ).
+ml = [
+    "torch>=2.6",
+    "transformers",
+    "adapters",
+    "optimum[onnxruntime]",
+    "onnx",
+    "onnxruntime",
+]
+
+[dependency-groups]
+# Installed by `uv sync` and CI. Mirrors the test + lint + type toolchain.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",        # find_paper_suggest_test (httpx mocking)
+    "responses>=0.25",    # zotero_push_test (requests mocking)
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-requests",     # stubs for scripts/zotero_push.py
+]
+
+[tool.uv]
+# Virtual project: this repo is a collection of scripts, not an installable
+# package. Tests import `scripts` via repo-root on sys.path (see tests/conftest.py),
+# so there is nothing to build or install.
+package = false
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests use a deliberate literate style: a smoke `import` test runs first, then
+# imports are interleaved between test functions. E402 is expected there and
+# would otherwise mask genuine import-ordering bugs in non-test code.
+"tests/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["scripts"]
+# The torch/transformers-dependent SPECTER2 scripts are integration-only
+# (their heavy deps live in the optional `ml` group and are not installed in
+# CI), so type-checking them here would only surface import-not-found cascades.
+exclude = '''(?x)(
+    scripts/export_specter2_onnx\.py$
+  | scripts/embed_specter2_fp32\.py$
+  | scripts/verify_specter2_local_vs_s2\.py$
+)'''
+
+[[tool.mypy.overrides]]
+# Third-party libraries that do not ship type information.
+module = ["pyzotero.*"]
+ignore_missing_imports = true
