@@ -63,6 +63,8 @@ jobs:
         run: npm run test
 
   python:
+    # Display name kept as "python (pytest)" to match the required status check
+    # in main's branch protection. The job now also runs ruff + mypy (below).
     name: python (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -71,43 +73,34 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Cache uv archives
-        uses: actions/cache@v4
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/uv
-          key: uv-${{ runner.os }}-py311-ci-v1
+          enable-cache: true
+          cache-dependency-glob: uv.lock
 
-      # Each test file declares its own dependency set in its module docstring;
-      # the union of those is installed here. pilot_test.py is intentionally
-      # excluded — it is a CLI script (not a pytest module) and needs a live DB.
+      # --frozen asserts uv.lock is in sync with pyproject.toml (fails CI if a
+      # dependency change forgot to re-lock); deps come from the committed lock,
+      # so the env is reproducible across runs and machines.
+      - name: Install dependencies
+        run: uv sync --frozen --python 3.11
+
+      - name: Lint (ruff)
+        run: uv run ruff check scripts tests
+
+      - name: Type-check (mypy --strict)
+        run: uv run mypy
+
+      # scripts/pilot_cli.py is intentionally not collected — it is a live-DB
+      # operator CLI (not a pytest module). It lives under scripts/ so a naive
+      # `pytest tests` no longer tries to import it.
       - name: Run unit tests
         run: |
-          uv run --python 3.11 \
-                 --with pytest \
-                 --with pytest-asyncio \
-                 --with respx \
-                 --with httpx \
-                 --with beautifulsoup4 \
-                 --with numpy \
-                 --with pydantic \
-                 --with tenacity \
-                 --with responses \
-                 --with 'psycopg[binary]' \
-                 --with pyzotero \
-                 pytest -c tests/pytest.ini -v \
-                 tests/find_paper_suggest_test.py \
-                 tests/zotero_push_test.py \
-                 tests/build_arxiv_taxonomy_test.py
+          uv run pytest -c tests/pytest.ini -v \
+            tests/find_paper_suggest_test.py \
+            tests/zotero_push_test.py \
+            tests/build_arxiv_taxonomy_test.py \
+            tests/render_email_previews_test.py
 
   edge-functions:
     name: edge-functions
