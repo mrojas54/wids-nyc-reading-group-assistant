@@ -159,7 +159,7 @@ push, arXiv taxonomy, email preview rendering) are managed with
 uv sync                  # install the locked dependency set (creates .venv/)
 uv run pytest tests      # run the Python test suite
 uv run ruff check scripts tests
-uv run mypy              # type-check (strict) the scripts/ package
+uv run ty check          # type-check the scripts/ package
 ```
 
 `uv sync --frozen` asserts the lockfile is in sync with `pyproject.toml` and is what
@@ -178,5 +178,5 @@ scripts/             Operator-side Python helpers (uv-managed; see "Python tooli
 docs/                Guides, specs, and plans
 tests/               SQL smoke tests (RLS) + Python unit tests (pytest)
 web/                 Next.js member portal app
-pyproject.toml       Python deps + ruff/mypy config (single source of truth)
+pyproject.toml       Python deps + ruff/ty config (single source of truth)
 ```

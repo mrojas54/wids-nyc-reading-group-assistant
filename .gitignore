@@ -21,7 +21,7 @@ node_modules/
 
 # Python tooling (uv virtualenv + tool caches; pyproject.toml & uv.lock ARE tracked)
 .venv/
-.mypy_cache/
+.ty_cache/
 .pytest_cache/
 .ruff_cache/
 dist/
