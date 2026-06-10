@@ -749,7 +749,10 @@ def record_failure(
         f"VALUES ({', '.join(placeholders)})"
     )
     with conn.cursor() as cur:
-        cur.execute(sql, tuple(params))
+        # sql is composed solely from hard-coded column/placeholder literals
+        # (values are parameterized via `params`), so it is injection-safe even
+        # though it is not a LiteralString to the type checker.
+        cur.execute(sql, tuple(params))  # ty: ignore[invalid-argument-type]
     conn.commit()
 
 
