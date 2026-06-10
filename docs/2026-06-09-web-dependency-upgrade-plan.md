@@ -46,9 +46,29 @@ each before moving on.
    peers optional). Standard `react()` usage in `vitest.config.ts` needed no
    code change. All four gates green: `typecheck`, `lint`, `test` (243
    passed/1 skipped), `build` (unchanged — Webpack path).
-3. **ESLint 9 → 10.** Blocked until `eslint-config-next` supports ESLint 10 —
-   check the Next release notes / the config's `peerDependencies` before
-   attempting. May require bumping `next` / `eslint-config-next` in lockstep.
+3. **ESLint 9 → 10.** ⛔ **Blocked (verified 2026-06-09)** — held on ESLint
+   `9.39.4`. Attempted `eslint@^10` (10.4.1) empirically and reverted.
+   Findings:
+   - The install does **not** hard-fail — npm emits `ERESOLVE overriding
+     peer dependency` (3×) and proceeds. Peer warnings alone are not a block.
+   - But `eslint .` **crashes at runtime**:
+     `TypeError: ... contextOrFilename.getFilename is not a function` from
+     `eslint-plugin-react@7.37.5` (`react/display-name` rule). ESLint 10
+     removed the deprecated `context.getFilename()` method; the plugin still
+     calls it.
+   - The capped plugins — `eslint-plugin-react@7.37.5` (`eslint` peer
+     `…|| ^9.7`), `eslint-plugin-import@2.32.0` (`…|| ^9`),
+     `eslint-plugin-jsx-a11y@6.10.2` (`…|| ^9`) — are bundled by
+     `eslint-config-next`. `typescript-eslint@8.59.4` and
+     `eslint-plugin-react-hooks@7.1.1` already allow `^10`.
+   - **Bumping Next would NOT unblock this:** the latest
+     `eslint-config-next@16.2.9` still pins the same ESLint-9-capped plugin
+     versions. The block is upstream in the plugin ecosystem (chiefly
+     `eslint-plugin-react`/`eslint-plugin-import` shipping ESLint-10 support).
+   - **Recheck trigger:** when `eslint-config-next` (tracking the app's Next
+     version) bundles `eslint-plugin-react`/`-import`/`-jsx-a11y` releases
+     that declare an `eslint ^10` peer. Until then, stay on ESLint 9
+     (currently the `maintenance` dist-tag).
 4. **Tailwind 3 → 4.** Treat as a real project, not a version bump:
    - Run the official `@tailwindcss/upgrade` codemod on a branch.
    - Migrate `tailwind.config.js` content to CSS-first `@theme`.
