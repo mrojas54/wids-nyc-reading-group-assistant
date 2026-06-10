@@ -45,16 +45,16 @@ export default async function NewPaperPage({
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-paper-50)] text-[var(--color-paper-800)]">
+    <div className="min-h-screen bg-paper-50 text-paper-800">
       <header
-        className="border-b border-[var(--color-paper-200)] bg-white/60"
+        className="border-b border-paper-200 bg-white/60"
         style={{ backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
       >
         <div className="mx-auto max-w-3xl px-4 py-3 flex items-center justify-between">
           <Brandmark />
           <Link
             href="/dashboard"
-            className="text-sm hover:underline text-[var(--color-sage-700)]"
+            className="text-sm hover:underline text-sage-700"
           >
             Back
           </Link>
@@ -65,7 +65,7 @@ export default async function NewPaperPage({
 
         {!paperIdValid ? (
           <p
-            className="rounded-[var(--radius-lg)] border p-4"
+            className="rounded-lg border p-4"
             style={{
               background: "var(--bg-surface-sunken)",
               borderColor: "var(--border-1)",
@@ -77,7 +77,7 @@ export default async function NewPaperPage({
           </p>
         ) : !canSynthesize ? (
           <p
-            className="rounded-[var(--radius-lg)] border p-4"
+            className="rounded-lg border p-4"
             style={{
               background: "var(--bg-surface-sunken)",
               borderColor: "var(--border-1)",
@@ -90,7 +90,7 @@ export default async function NewPaperPage({
           <>
             {paperTitle && (
               <section
-                className="rounded-[var(--radius-lg)] border p-4"
+                className="rounded-lg border p-4"
                 style={{
                   background: "var(--color-paper-50, #fafaf7)",
                   borderColor: "var(--color-paper-200, #e5e3da)",

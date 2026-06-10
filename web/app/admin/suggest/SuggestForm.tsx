@@ -159,7 +159,7 @@ export function SuggestForm() {
             value={candidatesText}
             onChange={e => setCandidatesText(e.target.value)}
             rows={6}
-            className="mt-1 block w-full rounded border px-2 py-1 font-mono text-sm"
+            className="mt-1 block w-full rounded-sm border px-2 py-1 font-mono text-sm"
             placeholder="arXiv:2501.12345"
           />
         </div>
@@ -203,7 +203,7 @@ export function SuggestForm() {
         <button
           type="submit"
           disabled={status === "pending"}
-          className="rounded bg-emerald-700 px-4 py-2 text-white disabled:opacity-50"
+          className="rounded-sm bg-emerald-700 px-4 py-2 text-white disabled:opacity-50"
         >
           {status === "pending" ? "Working…" : "Submit"}
         </button>
@@ -223,7 +223,7 @@ export function SuggestForm() {
           type="button"
           onClick={onBackfill}
           disabled={backfillStatus === "running"}
-          className="mt-3 rounded bg-slate-700 px-3 py-1.5 text-white text-sm disabled:opacity-50"
+          className="mt-3 rounded-sm bg-slate-700 px-3 py-1.5 text-white text-sm disabled:opacity-50"
         >
           {backfillStatus === "running" ? "Embedding…" : "Warm embedding cache"}
         </button>
