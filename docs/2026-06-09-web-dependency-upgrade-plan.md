@@ -38,10 +38,14 @@ each before moving on.
    (no Next/eslint-config-next bump needed). All four gates green:
    `typecheck`, `lint`, `test` (243 passed, 1 skipped), `build`. No source
    changes required — version bump only.
-2. **Vite 6 → 8 + Vitest (paired).** Verify the peer range, bump together,
-   confirm `vitest run` passes. Cannot break the production build by
-   construction (Next uses Webpack here), so this is low-stakes despite the
-   two-major jump.
+2. **Vite 6 → 8.** ✅ **Done 2026-06-09** — `vite` `6.4.2` → `8.0.16`
+   (`^6` → `^8`). The real coupled bump was **not** Vitest: `vitest@4.1.8`
+   already declares `vite: ^6 || ^7 || ^8`, so it spans Vite 8 unchanged.
+   The package that had to move with Vite was `@vitejs/plugin-react`
+   `4.7.0` → `6.0.2` (`^4` → `^6`; v6's required `vite` peer is `^8`, babel
+   peers optional). Standard `react()` usage in `vitest.config.ts` needed no
+   code change. All four gates green: `typecheck`, `lint`, `test` (243
+   passed/1 skipped), `build` (unchanged — Webpack path).
 3. **ESLint 9 → 10.** Blocked until `eslint-config-next` supports ESLint 10 —
    check the Next release notes / the config's `peerDependencies` before
    attempting. May require bumping `next` / `eslint-config-next` in lockstep.
