@@ -64,7 +64,7 @@ jobs:
 
   python:
     # Display name kept as "python (pytest)" to match the required status check
-    # in main's branch protection. The job now also runs ruff + mypy (below).
+    # in main's branch protection. The job now also runs ruff + ty (below).
     name: python (pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -88,8 +88,8 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check scripts tests
 
-      - name: Type-check (mypy --strict)
-        run: uv run mypy
+      - name: Type-check (ty)
+        run: uv run ty check
 
       # scripts/pilot_cli.py is intentionally not collected — it is a live-DB
       # operator CLI (not a pytest module). It lives under scripts/ so a naive
