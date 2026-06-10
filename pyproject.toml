@@ -59,20 +59,23 @@ target-version = "py311"
 # would otherwise mask genuine import-ordering bugs in non-test code.
 "tests/*" = ["E402"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-files = ["scripts"]
-# The torch/transformers-dependent SPECTER2 scripts are integration-only
-# (their heavy deps live in the optional `ml` group and are not installed in
-# CI), so type-checking them here would only surface import-not-found cascades.
-exclude = '''(?x)(
-    scripts/export_specter2_onnx\.py$
-  | scripts/embed_specter2_fp32\.py$
-  | scripts/verify_specter2_local_vs_s2\.py$
-)'''
+[tool.ty.environment]
+python-version = "3.11"
 
-[[tool.mypy.overrides]]
-# Third-party libraries that do not ship type information.
-module = ["pyzotero.*"]
-ignore_missing_imports = true
+[tool.ty.src]
+# Match the old mypy `files = ["scripts"]` scope. The three heavy SPECTER2
+# scripts stay excluded — their torch/transformers/onnx deps live in the
+# optional `ml` group and are never installed in CI, so checking them only
+# surfaces unresolved-import cascades.
+include = ["scripts"]
+exclude = [
+    "scripts/export_specter2_onnx.py",
+    "scripts/embed_specter2_fp32.py",
+    "scripts/verify_specter2_local_vs_s2.py",
+]
+
+[tool.ty.analysis]
+# pyzotero ships no type information (was `ignore_missing_imports` under mypy).
+# Global `[tool.ty.analysis]` table — the `[[tool.ty.overrides]]` array form is
+# only needed for path-scoped rules, which we don't need here.
+allowed-unresolved-imports = ["pyzotero.**"]
