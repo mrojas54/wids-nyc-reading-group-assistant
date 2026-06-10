@@ -38,11 +38,10 @@ ml = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "respx>=0.21",        # find_paper_suggest_test (httpx mocking)
-    "responses>=0.25",    # zotero_push_test (requests mocking)
+    "respx>=0.21", # find_paper_suggest_test (httpx mocking)
+    "responses>=0.25", # zotero_push_test (requests mocking)
     "ruff>=0.6",
-    "mypy>=1.10",
-    "types-requests",     # stubs for scripts/zotero_push.py
+    "ty>=0.0.46",
 ]
 
 [tool.uv]
