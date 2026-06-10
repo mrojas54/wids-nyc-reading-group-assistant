@@ -66,8 +66,10 @@ exclude = [
     "scripts/verify_specter2_local_vs_s2.py",
 ]
 
-[tool.ty.overrides.analysis]
+[tool.ty.analysis]
 # pyzotero ships no type information (was `ignore_missing_imports` under mypy).
+# Global `[tool.ty.analysis]` table — the `[[tool.ty.overrides]]` array form is
+# only needed for path-scoped rules, which we don't need here.
 allowed-unresolved-imports = ["pyzotero.**"]
 ```
 
