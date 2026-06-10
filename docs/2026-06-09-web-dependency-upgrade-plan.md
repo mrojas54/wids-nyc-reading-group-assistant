@@ -1,0 +1,71 @@
+# Web Dependency Upgrade Plan
+
+**Created:** 2026-06-09
+**Scope:** `web/` (Next.js member portal)
+**Status:** Tracked / not yet started — no dependency changes made.
+
+## Summary
+
+Web dependencies are clean (zero known vulnerabilities) but aging. Several
+dev-tooling packages are a full major version behind. This is upgrade debt,
+not a security issue — nothing here is urgent, but the gap widens with time
+and Tailwind in particular gets harder to migrate the longer it waits.
+
+Snapshot taken from [`web/package.json`](../web/package.json) on 2026-06-09.
+
+## What's behind
+
+| Package | Current | Latest major | Risk | Notes |
+|---|---|---|---|---|
+| `typescript` | `^5` | 6.x | Low–Medium | Mostly stricter checks + removal of deprecated flags. Surfaces as new compile errors, not runtime behavior. |
+| `vite` + `vitest` | `vite ^6.0.0`, `vitest ^4.1.8` | vite 8.x | Medium | **Test-only** — the app builds with `next build --webpack`, so Vite never touches the production bundle. Must bump as a pair (Vitest declares the Vite peer range). |
+| `eslint` | `^9` | 10.x | Medium | Gated by `eslint-config-next` (pinned `16.2.6`). The lever is the ESLint major that the Next config supports, not ESLint's latest tag. |
+| `tailwindcss` | `^3.4.1` | 4.x | **High** | The only genuine migration: new Oxide engine, CSS-first config (`@theme`), `tailwind.config.js` replaced by CSS `@import`. |
+
+For reference, the app-facing stack is already current: `next` 16.2.6,
+`react`/`react-dom` 19, `zod` 4, `@supabase/*` current. The debt is
+concentrated in build/test/lint tooling.
+
+## Recommended sequencing (safest first)
+
+Each step is an independent branch + PR. Stop and re-run the gates
+(`npm run typecheck`, `npm run lint`, `npm run test`, `npm run build`) after
+each before moving on.
+
+1. **TypeScript 5 → 6.** ✅ **Done 2026-06-09** — `5.9.3` → `6.0.3` (spec
+   `^5` → `^6`). Verified `typescript-estree@8.59.4` peer ceiling is
+   `<6.1.0`, so the bundled `typescript-eslint` officially supports 6.0.x
+   (no Next/eslint-config-next bump needed). All four gates green:
+   `typecheck`, `lint`, `test` (243 passed, 1 skipped), `build`. No source
+   changes required — version bump only.
+2. **Vite 6 → 8 + Vitest (paired).** Verify the peer range, bump together,
+   confirm `vitest run` passes. Cannot break the production build by
+   construction (Next uses Webpack here), so this is low-stakes despite the
+   two-major jump.
+3. **ESLint 9 → 10.** Blocked until `eslint-config-next` supports ESLint 10 —
+   check the Next release notes / the config's `peerDependencies` before
+   attempting. May require bumping `next` / `eslint-config-next` in lockstep.
+4. **Tailwind 3 → 4.** Treat as a real project, not a version bump:
+   - Run the official `@tailwindcss/upgrade` codemod on a branch.
+   - Migrate `tailwind.config.js` content to CSS-first `@theme`.
+   - Visually verify the portal renders (preview server + screenshot the key
+     routes) — utility-class semantics and the default color palette changed
+     between 3 and 4.
+
+## Gotchas captured during triage
+
+- **Vite is not in the app's critical path.** `web` scripts build and serve
+  with Webpack (`next dev --webpack` / `next build --webpack`). A Vite major
+  bump can only affect the test runner.
+- **ESLint and Tailwind are both gated by other packages** — ESLint by
+  `eslint-config-next`, Tailwind by its own config-model change. Don't bump
+  them in isolation expecting a clean result.
+- The `overrides` block (`protobufjs`, `postcss`) exists for transitive
+  resolution; re-check it survives each bump.
+
+## Done criteria
+
+- Each package on its current major, or a documented reason it's held back
+  (e.g. "ESLint 10 blocked on eslint-config-next").
+- All four gates green: `typecheck`, `lint`, `test`, `build`.
+- Tailwind: portal visually verified post-migration.
