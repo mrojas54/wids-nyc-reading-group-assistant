@@ -208,7 +208,7 @@ export function NewPaperForm({ paperId }: { paperId: number }) {
       {error && (
         <p
           role="alert"
-          className="rounded-[var(--radius-md)] border p-3 text-sm"
+          className="rounded-md border p-3 text-sm"
           style={{
             background: "var(--bg-surface-sunken)",
             borderColor: "var(--border-1)",

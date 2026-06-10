@@ -8,7 +8,7 @@ export function CategoryBrowser() {
   const groups = useMemo(() => buildCategoryOptions(showAll), [showAll]);
 
   return (
-    <section className="mb-6 rounded border p-3">
+    <section className="mb-6 rounded-sm border p-3">
       <h2 className="text-sm font-medium">Browse arXiv by category</h2>
       <p className="mt-1 text-xs text-gray-500">
         Pick a category to open its recent-papers listing on arXiv, then copy candidate
@@ -19,7 +19,7 @@ export function CategoryBrowser() {
           aria-label="arXiv category"
           value={code}
           onChange={e => setCode(e.target.value)}
-          className="rounded border px-2 py-1 text-sm"
+          className="rounded-sm border px-2 py-1 text-sm"
         >
           <option value="">Select a category…</option>
           {groups.map(g => (

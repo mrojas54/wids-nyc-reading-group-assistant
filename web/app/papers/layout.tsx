@@ -5,9 +5,9 @@ import LensDropdown from "@/components/paperpal/LensDropdown";
 
 export default function PapersLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--color-paper-50)] text-[var(--color-paper-800)]">
+    <div className="min-h-screen bg-paper-50 text-paper-800">
       <header
-        className="border-b border-[var(--color-paper-200)] bg-white/60"
+        className="border-b border-paper-200 bg-white/60"
         style={{ backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
       >
         <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-4">
@@ -15,7 +15,7 @@ export default function PapersLayout({ children }: { children: ReactNode }) {
             <Brandmark />
             <Link
               href="/papers"
-              className="text-sm hover:underline text-[var(--color-sage-700)]"
+              className="text-sm hover:underline text-sage-700"
             >
               Inbox
             </Link>
@@ -24,7 +24,7 @@ export default function PapersLayout({ children }: { children: ReactNode }) {
             <LensDropdown />
             <Link
               href="/dashboard"
-              className="text-sm hover:underline text-[var(--color-sage-700)]"
+              className="text-sm hover:underline text-sage-700"
             >
               Dashboard
             </Link>

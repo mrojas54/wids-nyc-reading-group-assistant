@@ -102,7 +102,7 @@ export function PaperCompanion({
             {content.vocabulary!.map((v) => (
               <div key={v.term} className="flex flex-col sm:flex-row gap-1 sm:gap-3">
                 <dt
-                  className="font-semibold sm:min-w-[12rem]"
+                  className="font-semibold sm:min-w-48"
                   style={{ color: "var(--color-sage-700)" }}
                 >
                   {v.term}
