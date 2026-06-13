@@ -163,10 +163,10 @@
                       The renderer composes it per the rule in
                       scheduled_tasks/availability-chase.md Step 5b:
 
-                        IF papers.arxiv_id IS NOT NULL:
-                          citation = "arXiv " + papers.arxiv_id
+                        IF papers.s2_paper_id starts with "ARXIV:":
+                          citation = "arXiv " + substring after "ARXIV:"
                         ELSE IF papers.venue IS NOT NULL:
-                          citation = "in <em>" + papers.venue + "</em> (" + papers.year + ")"
+                          citation = "in <em>" + escape(papers.venue) + "</em> (" + papers.year + ")"
                         ELSE:
                           citation = "(" + papers.year + ")"
 

@@ -68,7 +68,7 @@ any are unresolved:
 | `recipient.firstName` | `members.name` (first token) |
 | `links.calendar` | `meetings.calendar_ics_url` or portal event URL |
 | `paper.title` | `papers.title` |
-| `paper.authorsShort` | `papers.authors_short` |
+| `paper.authorsShort` | derived from `papers.authors[]` (see availability-chase.md Step 5b) |
 | `paper.companionUrl` | `<portal>/papers/<slug>/companion` (Paper Pal) |
 | `links.rsvpManage` | `<portal>/me/rsvps` |
 | `links.portalBase` | `https://planner.widsnyc.org` (or env override) |
