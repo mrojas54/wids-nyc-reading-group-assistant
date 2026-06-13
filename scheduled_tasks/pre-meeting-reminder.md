@@ -73,16 +73,23 @@ any are unresolved:
 | `links.rsvpManage` | `<portal>/me/rsvps` |
 | `links.portalBase` | `https://planner.widsnyc.org` (or env override) |
 
-Rotated tokens (`haiku.line1/2/3`, `quote.text`, `quote.by`, `quote.role`)
-follow the rotation pool in this template's README. If rotation isn't
-wired yet, ship `haiku[0]` and the Mirzakhani quote — both are documented
-as the defaults in the design handoff.
+Rotated tokens: `haiku.line1/2/3` still follow the haiku pool in this
+template's README. `quote.text` / `quote.by` / `quote.role` are resolved from
+the women-in-STEM pool via `scripts/quotes.py` — set `date_key` = whole days
+since 1970-01-01 UTC for the send date, then
+`quote_tokens(select_quote(load_bundle(), date_key))`. Optional with a built-in
+fallback (seed Grace Hopper quote).
 
 Subject: `You're in — thanks for the RSVP`
 
 Send via Gmail MCP.
 
 ## Step 4b — Send plain reminder (tentative + no_response bucket, and all admin meetings)
+
+Resolve a rotating quote the same way as Step 4a (`scripts/quotes.py`, `date_key`
+= whole days since 1970-01-01 UTC for the send date) and append it as the two
+plain-text lines shown at the end of each body. If the pool is empty the
+built-in fallback is used, so the lines always render.
 
 For admin meeting:
 ```
@@ -94,6 +101,8 @@ Just a heads-up that the admin meeting is on <scheduled_at>. Meet link is in
 the calendar invite. We'll pick the next leader and confirm the next paper.
 
 If you can't make it, decline the calendar invite so we know.
+
+— "<quote.text>" — <quote.by>, <quote.role>
 ```
 
 For reading_group meeting:
@@ -106,6 +115,8 @@ Reminder: we're meeting <scheduled_at> at <location> to discuss
 "<paper_title>" (led by <leader_name>).
 
 If you haven't received the discussion guide yet, ask <leader_name>.
+
+— "<quote.text>" — <quote.by>, <quote.role>
 ```
 
 Send via Gmail MCP.
