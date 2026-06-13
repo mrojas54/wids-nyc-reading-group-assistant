@@ -19,5 +19,6 @@ describe("QuoteCard", () => {
     expect(text).toContain("“"); // left double quote
     expect(text).toContain("”"); // right double quote
     expect(text.length).toBeGreaterThan(20);
+    expect(text).toContain("—"); // attribution line renders
   });
 });

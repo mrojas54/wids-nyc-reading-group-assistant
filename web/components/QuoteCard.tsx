@@ -10,14 +10,23 @@ export function QuoteCard() {
   return (
     <section
       className="card"
-      aria-label="Quote of the day"
-      style={{ display: "flex", flexDirection: "column", gap: 6 }}
+      aria-labelledby="quote-card-eyebrow"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        padding: 24,
+        borderRadius: "var(--radius-xl, 16px)",
+        background: "var(--color-paper-50, #fafaf7)",
+        border: "1px solid var(--color-paper-200, #e5e3da)",
+      }}
     >
       <div
+        id="quote-card-eyebrow"
         style={{
           fontSize: 11,
           textTransform: "uppercase",
-          letterSpacing: "0.12em",
+          letterSpacing: "0.10em",
           color: "var(--color-paper-600)",
         }}
       >
