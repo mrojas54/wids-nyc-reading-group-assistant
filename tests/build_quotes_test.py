@@ -56,13 +56,13 @@ def test_assemble_sorts_authors_and_quotes(tmp_path):
     fb = tmp_path / "bohr"
     _author(fb, "bohr")
     _quotes(fb, "20260101_quotes.json", [
-        {"id": "z", "text": "t", "verified": True, "sourceUrl": "https://x"},
-        {"id": "a", "text": "t", "verified": True, "sourceUrl": "https://x"},
+        {"id": "z", "text": "t", "verified": True, "sourceUrl": "https://x", "source": "s"},
+        {"id": "a", "text": "t", "verified": True, "sourceUrl": "https://x", "source": "s"},
     ])
     fa = tmp_path / "ada"
     _author(fa, "ada")
     _quotes(fa, "20260101_quotes.json", [
-        {"id": "m", "text": "t", "verified": True, "sourceUrl": "https://x"},
+        {"id": "m", "text": "t", "verified": True, "sourceUrl": "https://x", "source": "s"},
     ])
     bundle = assemble_bundle(tmp_path)
     assert [e["author"]["id"] for e in bundle["authors"]] == ["ada", "bohr"]
@@ -118,10 +118,21 @@ def test_assemble_rejects_duplicate_quote_id(tmp_path):
     f = tmp_path / "ada"
     _author(f, "ada")
     _quotes(f, "20260101_quotes.json", [
-        {"id": "dup", "text": "a", "verified": True, "sourceUrl": "https://x"},
-        {"id": "dup", "text": "b", "verified": True, "sourceUrl": "https://x"},
+        {"id": "dup", "text": "a", "verified": True, "sourceUrl": "https://x", "source": "s"},
+        {"id": "dup", "text": "b", "verified": True, "sourceUrl": "https://x", "source": "s"},
     ])
     with pytest.raises(QuoteDataError, match="duplicate"):
+        assemble_bundle(tmp_path)
+
+
+def test_assemble_rejects_verified_quote_without_source_note(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    _author(f, "ada")
+    _quotes(f, "20260101_quotes.json", [
+        {"id": "a", "text": "x", "verified": True, "sourceUrl": "https://x"},
+    ])
+    with pytest.raises(QuoteDataError, match="source' note"):
         assemble_bundle(tmp_path)
 
 
@@ -131,8 +142,10 @@ def test_assemble_rejects_duplicate_quote_id(tmp_path):
 def test_committed_bundle_is_in_sync():
     from scripts.build_quotes import assemble_bundle, QUOTES_DIR, BUNDLE_PATH
     fresh = assemble_bundle(QUOTES_DIR)
-    committed = json.loads(BUNDLE_PATH.read_text(encoding="utf-8"))
-    assert fresh == committed, "Run `uv run python scripts/build_quotes.py` and commit."
+    committed_text = BUNDLE_PATH.read_text(encoding="utf-8")
+    assert json.loads(committed_text) == fresh, "Run `uv run python scripts/build_quotes.py` and commit."
+    # Byte-level: also guards the formatting contract (indent=2, ensure_ascii=False, trailing newline).
+    assert committed_text == json.dumps(fresh, indent=2, ensure_ascii=False) + "\n"
 
 
 def test_real_data_verified_quotes_have_sources():
@@ -143,3 +156,4 @@ def test_real_data_verified_quotes_have_sources():
         for q in entry["quotes"]:
             if q["verified"]:
                 assert q.get("sourceUrl"), f'{q["id"]}: verified without sourceUrl'
+                assert q.get("source"), f'{q["id"]}: verified without source note'

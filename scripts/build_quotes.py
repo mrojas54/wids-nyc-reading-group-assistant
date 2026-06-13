@@ -85,6 +85,10 @@ def load_quotes(folder: Path) -> list[dict[str, Any]]:
             raise QuoteDataError(
                 f"{folder.name}/{qid}: verified quotes require a 'sourceUrl'"
             )
+        if q["verified"] and not q.get("source"):
+            raise QuoteDataError(
+                f"{folder.name}/{qid}: verified quotes require a 'source' note"
+            )
         if qid in seen:
             raise QuoteDataError(f"{folder.name}: duplicate quote id {qid!r}")
         seen.add(qid)
