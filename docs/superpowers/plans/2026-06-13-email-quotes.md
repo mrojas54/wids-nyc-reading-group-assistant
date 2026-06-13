@@ -90,11 +90,16 @@ def test_select_is_deterministic():
     assert select_quote(b, 42).quote["id"] == select_quote(b, 42).quote["id"]
 
 
-def test_select_no_back_to_back_repeat():
+def test_select_scatters_and_is_salted():
     from scripts.quotes import select_quote
     b = _bundle("q1", "q2", "q3", "q4", "q5")
-    for k in range(1, 50):
-        assert select_quote(b, k).quote["id"] != select_quote(b, k - 1).quote["id"]
+    chosen = {select_quote(b, k).quote["id"] for k in range(200)}
+    assert len(chosen) >= 2  # deterministic FNV-1a scatter, not stuck on one quote
+    # The salt shifts the selection for at least one key (proves it is wired).
+    assert any(
+        select_quote(b, k).quote["id"] != select_quote(b, k, "x").quote["id"]
+        for k in range(20)
+    )
 
 
 def test_select_only_returns_verified():
@@ -215,16 +220,13 @@ def eligible_pairs(bundle: dict[str, Any]) -> list[Selection]:
 
 
 def select_quote(bundle: dict[str, Any], date_key: int, salt: str = "") -> Selection:
-    """Pick a quote for `date_key`, scattered by FNV-1a, with no back-to-back
-    repeat. Returns FALLBACK when no verified quotes exist."""
+    """Pick a quote for `date_key`, scattered deterministically by FNV-1a.
+    Returns FALLBACK when no verified quotes exist. A pure modulo with no
+    cross-day state — keeps the Python/TS pair trivially identical."""
     pairs = eligible_pairs(bundle)
     if not pairs:
         return FALLBACK
-    n = len(pairs)
-    idx = fnv1a(f"{date_key}{salt}") % n
-    if n > 1 and idx == fnv1a(f"{date_key - 1}{salt}") % n:
-        idx = (idx + 1) % n
-    return pairs[idx]
+    return pairs[fnv1a(f"{date_key}{salt}") % len(pairs)]
 
 
 def quote_tokens(sel: Selection) -> dict[str, str]:
@@ -1111,12 +1113,10 @@ describe("selectQuote", () => {
     expect(selectQuote(42, "", bundle).quote.id).toBe(selectQuote(42, "", bundle).quote.id);
   });
 
-  it("never repeats back-to-back", () => {
-    for (let k = 1; k < 50; k++) {
-      expect(selectQuote(k, "", bundle).quote.id).not.toBe(
-        selectQuote(k - 1, "", bundle).quote.id,
-      );
-    }
+  it("scatters deterministically across the pool", () => {
+    const chosen = new Set<string>();
+    for (let k = 0; k < 200; k++) chosen.add(selectQuote(k, "", bundle).quote.id);
+    expect(chosen.size).toBeGreaterThanOrEqual(2);
   });
 
   it("only returns verified quotes", () => {
@@ -1226,10 +1226,7 @@ export function eligiblePairs(bundle: QuoteBundle = BUNDLE): Selection[] {
 export function selectQuote(dateKey: number, salt = "", bundle: QuoteBundle = BUNDLE): Selection {
   const pairs = eligiblePairs(bundle);
   if (pairs.length === 0) return FALLBACK;
-  const n = pairs.length;
-  let idx = fnv1a(`${dateKey}${salt}`) % n;
-  if (n > 1 && idx === fnv1a(`${dateKey - 1}${salt}`) % n) idx = (idx + 1) % n;
-  return pairs[idx];
+  return pairs[fnv1a(`${dateKey}${salt}`) % pairs.length];
 }
 
 export function dayKey(now: Date = new Date()): number {

@@ -157,18 +157,16 @@ selectQuote(bundle, dateKey, salt=""):
                  if quote.verified ]
     sort eligible by quote.id            # stable, deterministic order
     if not eligible: return FALLBACK     # never throws
-    n = len(eligible)
-    idx = fnv1a(str(dateKey) + salt) % n
-    if n > 1 and idx == fnv1a(str(dateKey - 1) + salt) % n:
-        idx = (idx + 1) % n              # no back-to-back repeat
-    return eligible[idx]
+    return eligible[fnv1a(str(dateKey) + salt) % len(eligible)]
 ```
 
 - **`fnv1a`** is a tiny, documented string hash implemented identically in both
   languages and pinned by tests. It scatters selections non-monotonically across
   the pool — the "temperature-like" variety requested — while keeping selection
   **fully reproducible** (same `dateKey` → same quote), which previews and tests
-  depend on.
+  depend on. Selection is a single pure modulo — no cross-day state — so an
+  occasional adjacent-day repeat (~1/n, shrinking as the pool grows) is accepted
+  in exchange for a provably-correct, trivially-portable Python/TS pair.
 - **`salt`** lets the operator nudge variety without code changes.
 - **`dateKey` granularity:**
   - Emails: days-since-epoch of the **send date** → a whole batch shares one
