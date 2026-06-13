@@ -16,6 +16,7 @@ Tests:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ BUNDLE_PATH = REPO_ROOT / "web" / "lib" / "quotes.generated.json"
 BUNDLE_VERSION = 1
 
 _AUTHOR_REQUIRED = ("id", "name", "role")
+_DATED_QUOTES_RE = re.compile(r"\d{8}_quotes\.json")
 
 
 class QuoteDataError(ValueError):
@@ -33,12 +35,15 @@ class QuoteDataError(ValueError):
 
 
 def newest_quotes_file(folder: Path) -> Path:
-    """Return the lexicographically-greatest *_quotes.json in `folder`.
+    """Return the newest YYYYMMDD_quotes.json in `folder`.
 
-    Filenames are YYYYMMDD_quotes.json, so max-by-name == newest date. The
-    dateless quotes.json symlink is excluded by the glob pattern.
+    Only 8-digit-date-prefixed names count, so a stray `draft_quotes.json` or the
+    dateless `quotes.json` symlink can never become "current". Dates sort
+    lexicographically, so max-by-name == newest.
     """
-    candidates = sorted(folder.glob("*_quotes.json"))
+    candidates = sorted(
+        p for p in folder.glob("*_quotes.json") if _DATED_QUOTES_RE.fullmatch(p.name)
+    )
     if not candidates:
         raise QuoteDataError(f"{folder.name}: no YYYYMMDD_quotes.json found")
     return candidates[-1]
@@ -65,6 +70,10 @@ def load_quotes(folder: Path) -> list[dict[str, Any]]:
         raise QuoteDataError(f"{folder.name}: quotes file must be a JSON array")
     seen: set[str] = set()
     for q in quotes:
+        if not isinstance(q, dict):
+            raise QuoteDataError(
+                f"{folder.name}: each quote must be a JSON object, got {type(q).__name__}"
+            )
         qid = q.get("id")
         if not qid:
             raise QuoteDataError(f"{folder.name}: a quote is missing 'id'")
@@ -119,7 +128,11 @@ def main() -> int:
         return 1
     write_bundle(bundle)
     for folder in sorted(p for p in QUOTES_DIR.iterdir() if p.is_dir()):
-        refresh_symlink(folder, newest_quotes_file(folder))
+        try:
+            newest = newest_quotes_file(folder)
+        except QuoteDataError:
+            continue
+        refresh_symlink(folder, newest)
     n_quotes = sum(len(e["quotes"]) for e in bundle["authors"])
     print(f"Wrote {len(bundle['authors'])} authors / {n_quotes} quotes to {BUNDLE_PATH}")
     return 0

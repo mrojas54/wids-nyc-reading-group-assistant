@@ -38,7 +38,7 @@ def test_assemble_rejects_slug_id_mismatch(tmp_path):
         json.dumps({"id": "nope", "name": "A", "role": "R"}), encoding="utf-8"
     )
     _quotes(f, "20260101_quotes.json", [{"id": "a", "text": "x", "verified": False}])
-    with pytest.raises(QuoteDataError):
+    with pytest.raises(QuoteDataError, match="must equal"):
         assemble_bundle(tmp_path)
 
 
@@ -47,7 +47,7 @@ def test_assemble_rejects_verified_quote_without_source(tmp_path):
     f = tmp_path / "ada"
     _author(f, "ada")
     _quotes(f, "20260101_quotes.json", [{"id": "a", "text": "x", "verified": True}])
-    with pytest.raises(QuoteDataError):
+    with pytest.raises(QuoteDataError, match="sourceUrl"):
         assemble_bundle(tmp_path)
 
 
@@ -67,3 +67,59 @@ def test_assemble_sorts_authors_and_quotes(tmp_path):
     bundle = assemble_bundle(tmp_path)
     assert [e["author"]["id"] for e in bundle["authors"]] == ["ada", "bohr"]
     assert [q["id"] for q in bundle["authors"][1]["quotes"]] == ["a", "z"]
+
+
+def test_newest_quotes_file_raises_on_empty_folder(tmp_path):
+    from scripts.build_quotes import QuoteDataError, newest_quotes_file
+    d = tmp_path / "grace"
+    d.mkdir()
+    with pytest.raises(QuoteDataError, match="no YYYYMMDD"):
+        newest_quotes_file(d)
+
+
+def test_newest_quotes_file_ignores_non_dated_names(tmp_path):
+    from scripts.build_quotes import newest_quotes_file
+    d = tmp_path / "grace"
+    d.mkdir()
+    (d / "draft_quotes.json").write_text("[]", encoding="utf-8")
+    (d / "20260101_quotes.json").write_text("[]", encoding="utf-8")
+    assert newest_quotes_file(d).name == "20260101_quotes.json"
+
+
+def test_assemble_rejects_missing_author_json(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    d = tmp_path / "ada"
+    d.mkdir()
+    (d / "20260101_quotes.json").write_text("[]", encoding="utf-8")
+    with pytest.raises(QuoteDataError, match="author.json"):
+        assemble_bundle(tmp_path)
+
+
+def test_assemble_rejects_non_list_quotes(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    _author(f, "ada")
+    (f / "20260101_quotes.json").write_text(json.dumps({"not": "a list"}), encoding="utf-8")
+    with pytest.raises(QuoteDataError, match="JSON array"):
+        assemble_bundle(tmp_path)
+
+
+def test_assemble_rejects_non_dict_quote(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    _author(f, "ada")
+    (f / "20260101_quotes.json").write_text(json.dumps(["not a dict"]), encoding="utf-8")
+    with pytest.raises(QuoteDataError, match="JSON object"):
+        assemble_bundle(tmp_path)
+
+
+def test_assemble_rejects_duplicate_quote_id(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    _author(f, "ada")
+    _quotes(f, "20260101_quotes.json", [
+        {"id": "dup", "text": "a", "verified": True, "sourceUrl": "https://x"},
+        {"id": "dup", "text": "b", "verified": True, "sourceUrl": "https://x"},
+    ])
+    with pytest.raises(QuoteDataError, match="duplicate"):
+        assemble_bundle(tmp_path)
