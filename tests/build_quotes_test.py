@@ -123,3 +123,23 @@ def test_assemble_rejects_duplicate_quote_id(tmp_path):
     ])
     with pytest.raises(QuoteDataError, match="duplicate"):
         assemble_bundle(tmp_path)
+
+
+# --- real-data guards (require data/quotes/ + the committed bundle) ---
+
+
+def test_committed_bundle_is_in_sync():
+    from scripts.build_quotes import assemble_bundle, QUOTES_DIR, BUNDLE_PATH
+    fresh = assemble_bundle(QUOTES_DIR)
+    committed = json.loads(BUNDLE_PATH.read_text(encoding="utf-8"))
+    assert fresh == committed, "Run `uv run python scripts/build_quotes.py` and commit."
+
+
+def test_real_data_verified_quotes_have_sources():
+    from scripts.build_quotes import assemble_bundle, QUOTES_DIR
+    bundle = assemble_bundle(QUOTES_DIR)
+    assert bundle["authors"], "expected at least one seeded author"
+    for entry in bundle["authors"]:
+        for q in entry["quotes"]:
+            if q["verified"]:
+                assert q.get("sourceUrl"), f'{q["id"]}: verified without sourceUrl'

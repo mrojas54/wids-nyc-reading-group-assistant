@@ -1,0 +1,10 @@
+{
+  "id": "hedy-lamarr",
+  "name": "Hedy Lamarr",
+  "role": "Actress · inventor",
+  "birthdate": "1914-11-09",
+  "deathdate": "2000-01-19",
+  "fields": ["telecommunications", "invention"],
+  "notable_contributions": "Co-invented a frequency-hopping spread-spectrum system, a foundation for modern wireless communication.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Hedy_Lamarr"
+}

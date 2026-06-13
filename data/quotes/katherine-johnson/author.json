@@ -1,0 +1,10 @@
+{
+  "id": "katherine-johnson",
+  "name": "Katherine Johnson",
+  "role": "NASA research mathematician",
+  "birthdate": "1918-08-26",
+  "deathdate": "2020-02-24",
+  "fields": ["mathematics", "aerospace"],
+  "notable_contributions": "Calculated trajectories for NASA's first crewed spaceflights, including John Glenn's orbital mission.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Katherine_Johnson"
+}

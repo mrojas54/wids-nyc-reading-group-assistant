@@ -1,0 +1,18 @@
+[
+  {
+    "id": "hopper-always-done",
+    "text": "The most dangerous phrase in the language is, 'we've always done it this way.'",
+    "year": null,
+    "source": "Widely documented in her public lectures and interviews",
+    "sourceUrl": "https://en.wikiquote.org/wiki/Grace_Hopper",
+    "verified": true
+  },
+  {
+    "id": "hopper-ask-forgiveness",
+    "text": "It's easier to ask forgiveness than it is to get permission.",
+    "year": 1986,
+    "source": "Interview; widely cited in profiles of Hopper",
+    "sourceUrl": "https://en.wikiquote.org/wiki/Grace_Hopper",
+    "verified": true
+  }
+]

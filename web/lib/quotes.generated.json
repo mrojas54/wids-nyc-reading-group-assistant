@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "authors": [
+    {
+      "author": {
+        "id": "ada-lovelace",
+        "name": "Ada Lovelace",
+        "role": "Mathematician · first computer programmer",
+        "birthdate": "1815-12-10",
+        "deathdate": "1852-11-27",
+        "fields": [
+          "mathematics",
+          "computing"
+        ],
+        "notable_contributions": "Wrote the first published algorithm intended for a machine — Babbage's Analytical Engine.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Ada_Lovelace"
+      },
+      "quotes": [
+        {
+          "id": "lovelace-more-than-mortal",
+          "text": "That brain of mine is something more than merely mortal; as time will show.",
+          "year": 1843,
+          "source": "Letter to Charles Babbage",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Ada_Lovelace",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "grace-hopper",
+        "name": "Grace Hopper",
+        "role": "Computer scientist · US Navy rear admiral",
+        "birthdate": "1906-12-09",
+        "deathdate": "1992-01-01",
+        "fields": [
+          "computer science",
+          "compilers"
+        ],
+        "notable_contributions": "Built the first compiler (A-0), drove the creation of COBOL, and popularized the term \"debugging\".",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Grace_Hopper"
+      },
+      "quotes": [
+        {
+          "id": "hopper-always-done",
+          "text": "The most dangerous phrase in the language is, 'we've always done it this way.'",
+          "year": null,
+          "source": "Widely documented in her public lectures and interviews",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Grace_Hopper",
+          "verified": true
+        },
+        {
+          "id": "hopper-ask-forgiveness",
+          "text": "It's easier to ask forgiveness than it is to get permission.",
+          "year": 1986,
+          "source": "Interview; widely cited in profiles of Hopper",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Grace_Hopper",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "hedy-lamarr",
+        "name": "Hedy Lamarr",
+        "role": "Actress · inventor",
+        "birthdate": "1914-11-09",
+        "deathdate": "2000-01-19",
+        "fields": [
+          "telecommunications",
+          "invention"
+        ],
+        "notable_contributions": "Co-invented a frequency-hopping spread-spectrum system, a foundation for modern wireless communication.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Hedy_Lamarr"
+      },
+      "quotes": [
+        {
+          "id": "lamarr-brains-interesting",
+          "text": "The brains of people are more interesting than the looks, I think.",
+          "year": null,
+          "source": "Attributed in biographies and interviews",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Hedy_Lamarr",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "katherine-johnson",
+        "name": "Katherine Johnson",
+        "role": "NASA research mathematician",
+        "birthdate": "1918-08-26",
+        "deathdate": "2020-02-24",
+        "fields": [
+          "mathematics",
+          "aerospace"
+        ],
+        "notable_contributions": "Calculated trajectories for NASA's first crewed spaceflights, including John Glenn's orbital mission.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Katherine_Johnson"
+      },
+      "quotes": [
+        {
+          "id": "johnson-like-what-you-do",
+          "text": "Like what you do, and then you will do your best.",
+          "year": null,
+          "source": "NASA interview",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Katherine_Johnson",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "maryam-mirzakhani",
+        "name": "Maryam Mirzakhani",
+        "role": "Mathematician · Fields Medalist, 2014",
+        "birthdate": "1977-05-12",
+        "deathdate": "2017-07-14",
+        "fields": [
+          "mathematics"
+        ],
+        "notable_contributions": "First woman to win the Fields Medal, for work on the dynamics and geometry of Riemann surfaces.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Maryam_Mirzakhani"
+      },
+      "quotes": [
+        {
+          "id": "mirzakhani-beauty-patient",
+          "text": "The beauty of mathematics only shows itself to more patient followers.",
+          "year": 2008,
+          "source": "Interview, Clay Mathematics Institute",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Maryam_Mirzakhani",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "radia-perlman",
+        "name": "Radia Perlman",
+        "role": "Network engineer · \"Mother of the Internet\"",
+        "birthdate": "1951-12-18",
+        "fields": [
+          "computer networking"
+        ],
+        "notable_contributions": "Invented the Spanning Tree Protocol, foundational to modern Ethernet networks.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Radia_Perlman"
+      },
+      "quotes": [
+        {
+          "id": "perlman-many-female-engineers",
+          "text": "The world should have so many female engineers that it wouldn't be at all noteworthy.",
+          "year": null,
+          "source": "Interview",
+          "sourceUrl": "https://en.wikiquote.org/wiki/Radia_Perlman",
+          "verified": true
+        }
+      ]
+    }
+  ]
+}
