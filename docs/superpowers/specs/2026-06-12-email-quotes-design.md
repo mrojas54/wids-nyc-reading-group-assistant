@@ -90,9 +90,10 @@ One folder per person; the folder name is the author slug and must equal
 ]
 ```
 
-- **Required per quote:** `id`, `text`, `verified`. `sourceUrl` is required when
-  `verified` is `true`.
-- **Optional:** `year`, `source` (free-text provenance note).
+- **Required per quote:** `id`, `text`, `verified`. When `verified` is `true`,
+  **both** `sourceUrl` and a non-empty `source` (free-text provenance note) are
+  required — the build fails CI otherwise.
+- **Optional:** `year`.
 
 `quotes.json` — a symlink pointing at the newest `YYYYMMDD_quotes.json`. It is a
 **convenience for humans browsing the folder only**; the build does not depend on
