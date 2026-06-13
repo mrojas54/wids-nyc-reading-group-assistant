@@ -34,11 +34,16 @@ def test_select_is_deterministic():
     assert select_quote(b, 42).quote["id"] == select_quote(b, 42).quote["id"]
 
 
-def test_select_no_back_to_back_repeat():
+def test_select_scatters_and_is_salted():
     from scripts.quotes import select_quote
     b = _bundle("q1", "q2", "q3", "q4", "q5")
-    for k in range(1, 50):
-        assert select_quote(b, k).quote["id"] != select_quote(b, k - 1).quote["id"]
+    chosen = {select_quote(b, k).quote["id"] for k in range(200)}
+    assert len(chosen) >= 2  # deterministic FNV-1a scatter, not stuck on one quote
+    # The salt shifts the selection for at least one key (proves it is wired).
+    assert any(
+        select_quote(b, k).quote["id"] != select_quote(b, k, "x").quote["id"]
+        for k in range(20)
+    )
 
 
 def test_select_only_returns_verified():

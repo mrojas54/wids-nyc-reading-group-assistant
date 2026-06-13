@@ -72,29 +72,14 @@ def eligible_pairs(bundle: dict[str, Any]) -> list[Selection]:
     return pairs
 
 
-def _pick_idx(date_key: int, n: int, salt: str, prev_idx: int | None) -> int:
-    """Return the final index for *date_key*, bumping by 1 if it would repeat
-    *prev_idx*. Does not recurse — caller supplies the already-resolved
-    previous-day index."""
-    idx = fnv1a(f"{date_key}{salt}") % n
-    if n > 1 and prev_idx is not None and idx == prev_idx:
-        idx = (idx + 1) % n
-    return idx
-
-
 def select_quote(bundle: dict[str, Any], date_key: int, salt: str = "") -> Selection:
-    """Pick a quote for `date_key`, scattered by FNV-1a, with no back-to-back
-    repeat. Returns FALLBACK when no verified quotes exist."""
+    """Pick a quote for `date_key`, scattered deterministically by FNV-1a.
+    Returns FALLBACK when no verified quotes exist. A pure modulo with no
+    cross-day state — keeps the Python/TS pair trivially identical."""
     pairs = eligible_pairs(bundle)
     if not pairs:
         return FALLBACK
-    n = len(pairs)
-    # Resolve yesterday's *final* index (one extra look-back is enough because
-    # _pick_idx never bumps more than once — a bump cannot itself repeat the
-    # day before that day's bump, given that _pick_idx is self-consistent).
-    prev_prev_idx = fnv1a(f"{date_key - 2}{salt}") % n
-    prev_idx = _pick_idx(date_key - 1, n, salt, prev_prev_idx)
-    return pairs[_pick_idx(date_key, n, salt, prev_idx)]
+    return pairs[fnv1a(f"{date_key}{salt}") % len(pairs)]
 
 
 def quote_tokens(sel: Selection) -> dict[str, str]:
