@@ -38,6 +38,10 @@ PS — your Paper Pal goes live Wednesday morning. I'll send a separate
 note when it's ready. Preview link if you're curious:
 {{ links.companionPreview }}
 
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
 ---
 WiDS NYC AI Reading Group
 Member portal: {{ links.portalBase }}/dashboard

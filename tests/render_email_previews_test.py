@@ -105,3 +105,11 @@ def test_preview_main_resolves_rsvp_quote_from_pool(capsys):
     for key in ("availability_thanks", "availability_reminder"):
         assert "{{ quote.text }}" not in payload[key]["html"]
         assert "{{ quote.text }}" not in payload[key]["text"]
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_availability_reminder_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
