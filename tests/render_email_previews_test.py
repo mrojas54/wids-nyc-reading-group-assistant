@@ -71,3 +71,28 @@ def test_render_ignores_non_matching_braces(malformed):
     rendered, unresolved = render(malformed, {})
     assert rendered == malformed
     assert unresolved == []
+
+
+import pathlib
+
+_TEMPLATES = (
+    pathlib.Path(__file__).resolve().parent.parent / "assets" / "emails" / "template"
+)
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_rsvp_confirmation_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"rsvp-confirmation.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+def test_preview_main_renders_three_emails_with_no_unresolved_quote(capsys):
+    import json as _json
+    from scripts.render_email_previews import main
+    assert main() == 0
+    payload = _json.loads(capsys.readouterr().out)
+    for key in ("rsvp_confirmation", "availability_thanks", "availability_reminder"):
+        assert "{{ quote.text }}" not in payload[key]["html"]
+        assert "{{ quote.text }}" not in payload[key]["text"]

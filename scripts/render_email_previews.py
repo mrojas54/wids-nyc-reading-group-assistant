@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the two new email templates with realistic sample data.
+"""Render email templates with realistic sample data.
 
 Writes `*_rendered.html` and `*_rendered.txt` next to each source template,
 then prints the rendered HTML + text bodies to stdout as a JSON document
@@ -7,6 +7,9 @@ that the Gmail-MCP draft-creation step can consume.
 
 Mustache-style tokens only ({{ name.path }}). No partials, no conditionals
 — the templates resolve all branching server-side before substitution.
+
+Run via:
+    uv run python -m scripts.render_email_previews
 """
 from __future__ import annotations
 
@@ -15,8 +18,13 @@ import re
 import sys
 from pathlib import Path
 
+from scripts.quotes import load_bundle, quote_tokens, select_quote
+
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATES = ROOT / "assets" / "emails" / "template"
+
+# Fixed so previews are byte-reproducible regardless of the calendar date.
+PREVIEW_DATE_KEY = 20617
 
 RSVP_TOKENS = {
     "recipient.firstName": "Maya",
@@ -29,9 +37,6 @@ RSVP_TOKENS = {
     "haiku.line1": "Geese chart their return",
     "haiku.line2": "the same invisible line —",
     "haiku.line3": "you, too. Welcome in.",
-    "quote.text": "The beauty of mathematics only shows itself to more patient followers.",
-    "quote.by": "Maryam Mirzakhani",
-    "quote.role": "Fields Medalist, 2014",
     "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
 }
@@ -55,6 +60,27 @@ AVAIL_TOKENS = {
     "paper.duration": "~90 min",
     "paper.companionDropDay": "Wed",
     "paper.metaLine": "Brooklyn, TBD · ~90 min · Paper Pal drops Wed",
+    "links.availability": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
+    "links.companionPreview": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
+    "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+    "operator.displayName": "Michelle Rojas",
+}
+
+REMINDER_TOKENS = {
+    "recipient.firstName": "Maya",
+    "paper.title": "Hybrid LSTM–Transformer Architecture with Multi-Scale Feature Fusion for High-Accuracy Gold Futures Price Forecasting",
+    "paper.authorsShort": "Zhao, Guo & Wang",
+    "paper.citation": "in <em>Mathematics</em> (2025)",
+    "paper.citationText": "in Mathematics (2025)",
+    "paper.url": "https://doi.org/10.3390/math13101551",
+    "paper.location": "Brooklyn, TBD",
+    "paper.duration": "~90 min",
+    "paper.companionDropDay": "Wed",
+    "paper.metaLine": "Brooklyn, TBD · ~90 min · Paper Pal drops Wed",
+    "stats.submittedCount": "5",
+    "stats.submittedCountWord": "Five",
+    "stats.totalMembers": "12",
+    "deadline.soft": "Sunday evening",
     "links.availability": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
     "links.companionPreview": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
@@ -98,12 +124,15 @@ def render_pair(stem: str, tokens: dict[str, str]) -> dict[str, str]:
 
 
 def main() -> int:
-    rsvp = render_pair("rsvp-confirmation", RSVP_TOKENS)
-    avail = render_pair("availability-thanks", AVAIL_TOKENS)
+    q = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))
+    rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
+    thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
+    reminder = render_pair("availability-reminder", {**REMINDER_TOKENS, **q})
     json.dump(
         {
             "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},
-            "availability_thanks": {"html": avail["html"], "text": avail["txt"]},
+            "availability_thanks": {"html": thanks["html"], "text": thanks["txt"]},
+            "availability_reminder": {"html": reminder["html"], "text": reminder["txt"]},
         },
         sys.stdout,
     )
