@@ -291,13 +291,18 @@ For each submitter row:
    `stats.*`, `deadline.soft`.
 
 3. Idempotency check — skip this recipient if a prior thank-you for this
-   `meeting × member` is already logged:
+   `meeting × member` is already logged. Keys on the exact `idempotency_key`
+   written in step 5 (no brittle `summary LIKE` scan). The
+   `command_log_idempotency_key_unique` index is the race backstop: if two runs
+   overlap, the second step-5 INSERT trips a unique violation (SQLSTATE 23505) —
+   treat that as "already sent" and move on. The `:thanks:` segment keeps this
+   key disjoint from the reminder key (`availability-chase:meeting=…:member=…`)
+   so a member who flips buckets between runs is tracked once per bucket, never
+   deduped across both.
 
    ```sql
    SELECT 1 FROM command_log
-   WHERE name = 'availability-chase'
-     AND status = 'success'
-     AND summary LIKE '%thanks meeting=<meeting_id> member=<member_id>%'
+   WHERE idempotency_key = 'availability-chase:thanks:meeting=<meeting_id>:member=<member_id>'
    LIMIT 1;
    ```
 
@@ -310,7 +315,10 @@ For each submitter row:
 5. Log:
 
    ```sql
-   INSERT INTO command_log (source, name, status, summary)
+   INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent thanks meeting=<meeting_id> member=<member_id> to=<email>');
+           'Sent thanks meeting=<meeting_id> member=<member_id> to=<email>',
+           'availability-chase:thanks:meeting=<meeting_id>:member=<member_id>',
+           jsonb_build_object('kind', 'member_thanks', 'meeting_id', <meeting_id>,
+                              'member_id', <member_id>, 'email', '<email>'));
    ```
