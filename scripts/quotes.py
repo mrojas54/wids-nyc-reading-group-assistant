@@ -34,7 +34,7 @@ def fnv1a(s: str) -> int:
 
 @dataclass(frozen=True)
 class Selection:
-    """A chosen (author, quote) pair — both are the raw bundle dicts."""
+    """A chosen pair — author is entry['author'], quote is one element of entry['quotes']."""
 
     author: dict[str, Any]
     quote: dict[str, Any]

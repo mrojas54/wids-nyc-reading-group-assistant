@@ -28,22 +28,21 @@ def _bundle(*ids):
     }
 
 
-def test_select_is_deterministic():
-    from scripts.quotes import select_quote
+def test_select_matches_fnv1a_index():
+    from scripts.quotes import fnv1a, select_quote
     b = _bundle("q1", "q2", "q3", "q4", "q5")
-    assert select_quote(b, 42).quote["id"] == select_quote(b, 42).quote["id"]
+    ids = ["q1", "q2", "q3", "q4", "q5"]  # eligible_pairs sorts by quote id
+    # Recompute the pick from the (separately-pinned) hash — verifies the
+    # selection formula + salt concatenation, not call-twice equality.
+    assert select_quote(b, 42).quote["id"] == ids[fnv1a("42") % 5]
+    assert select_quote(b, 42, "x").quote["id"] == ids[fnv1a("42x") % 5]
 
 
-def test_select_scatters_and_is_salted():
+def test_select_scatters_across_pool():
     from scripts.quotes import select_quote
     b = _bundle("q1", "q2", "q3", "q4", "q5")
     chosen = {select_quote(b, k).quote["id"] for k in range(200)}
-    assert len(chosen) >= 2  # deterministic FNV-1a scatter, not stuck on one quote
-    # The salt shifts the selection for at least one key (proves it is wired).
-    assert any(
-        select_quote(b, k).quote["id"] != select_quote(b, k, "x").quote["id"]
-        for k in range(20)
-    )
+    assert chosen == {"q1", "q2", "q3", "q4", "q5"}  # FNV-1a covers the whole pool
 
 
 def test_select_only_returns_verified():
@@ -64,6 +63,21 @@ def test_select_only_returns_verified():
 def test_select_empty_pool_returns_fallback():
     from scripts.quotes import select_quote, FALLBACK
     assert select_quote({"version": 1, "authors": []}, 5) == FALLBACK
+
+
+def test_eligible_pairs_includes_every_quote_per_author():
+    from scripts.quotes import eligible_pairs
+    bundle = {
+        "version": 1,
+        "authors": [
+            {"author": {"id": "a1", "name": "A1", "role": "R"},
+             "quotes": [
+                 {"id": "q1", "text": "t1", "verified": True, "sourceUrl": "https://x"},
+                 {"id": "q2", "text": "t2", "verified": True, "sourceUrl": "https://x"},
+             ]},
+        ],
+    }
+    assert sorted(s.quote["id"] for s in eligible_pairs(bundle)) == ["q1", "q2"]
 
 
 def test_quote_tokens_maps_author_and_quote():
