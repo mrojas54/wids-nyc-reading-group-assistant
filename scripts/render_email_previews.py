@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Render email templates with realistic sample data.
 
 Writes `*_rendered.html` and `*_rendered.txt` next to each source template,

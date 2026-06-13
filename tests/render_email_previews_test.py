@@ -73,6 +73,7 @@ def test_render_ignores_non_matching_braces(malformed):
     assert unresolved == []
 
 
+# Interleaved import (tests/* suppress E402 — see pyproject.toml).
 import pathlib
 
 _TEMPLATES = (
@@ -88,11 +89,19 @@ def test_rsvp_confirmation_carries_quote_tokens(ext):
     assert "{{ quote.role }}" in text
 
 
-def test_preview_main_renders_three_emails_with_no_unresolved_quote(capsys):
+def test_preview_main_resolves_rsvp_quote_from_pool(capsys):
     import json as _json
-    from scripts.render_email_previews import main
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import PREVIEW_DATE_KEY, main
     assert main() == 0
     payload = _json.loads(capsys.readouterr().out)
-    for key in ("rsvp_confirmation", "availability_thanks", "availability_reminder"):
+    expected = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))["quote.text"]
+    # rsvp-confirmation has the quote block today: token resolved AND value present.
+    for fmt in ("html", "text"):
+        assert "{{ quote.text }}" not in payload["rsvp_confirmation"][fmt]
+        assert expected in payload["rsvp_confirmation"][fmt]
+    # availability-thanks / -reminder gain their quote blocks in later tasks;
+    # for now just assert no raw quote token leaks into the rendered output.
+    for key in ("availability_thanks", "availability_reminder"):
         assert "{{ quote.text }}" not in payload[key]["html"]
         assert "{{ quote.text }}" not in payload[key]["text"]
