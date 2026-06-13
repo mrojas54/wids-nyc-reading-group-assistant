@@ -32,7 +32,7 @@ export interface Selection {
   quote: Quote;
 }
 
-const BUNDLE = bundleData as unknown as QuoteBundle;
+const BUNDLE = bundleData as QuoteBundle;
 
 const FALLBACK: Selection = {
   author: {

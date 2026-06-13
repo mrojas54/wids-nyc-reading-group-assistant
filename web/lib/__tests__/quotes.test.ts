@@ -18,14 +18,16 @@ describe("fnv1a", () => {
 });
 
 describe("selectQuote", () => {
-  it("is deterministic for a given date key", () => {
-    expect(selectQuote(42, "", bundle).quote.id).toBe(selectQuote(42, "", bundle).quote.id);
+  it("matches the fnv1a index (formula + salt)", () => {
+    const ids = ["q1", "q2", "q3", "q4", "q5"]; // eligiblePairs sorts by quote id
+    expect(selectQuote(42, "", bundle).quote.id).toBe(ids[fnv1a("42") % 5]);
+    expect(selectQuote(42, "x", bundle).quote.id).toBe(ids[fnv1a("42x") % 5]);
   });
 
-  it("scatters deterministically across the pool", () => {
+  it("scatters across the whole pool", () => {
     const chosen = new Set<string>();
     for (let k = 0; k < 200; k++) chosen.add(selectQuote(k, "", bundle).quote.id);
-    expect(chosen.size).toBeGreaterThanOrEqual(2);
+    expect(chosen.size).toBe(5);
   });
 
   it("only returns verified quotes", () => {
