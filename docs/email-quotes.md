@@ -25,8 +25,10 @@ under `data/quotes/<author-slug>/` (one folder per person: `author.json` plus
 dated `YYYYMMDD_quotes.json` snapshots, with a `quotes.json` symlink for
 humans). `scripts/build_quotes.py` validates sourcing and emits the committed
 bundle `web/lib/quotes.generated.json`; `scripts/quotes.py` (emails) and
-`web/lib/quotes.ts` (dashboard) select from it. Only quotes marked
-`verified: true` with a `sourceUrl` are eligible — the build fails CI otherwise.
+`web/lib/quotes.ts` (dashboard) select from it. Selection considers only quotes
+marked `verified: true`; the build (`scripts/build_quotes.py`) additionally
+requires every verified quote to carry a `sourceUrl` and a `source` note,
+failing CI otherwise.
 
 The rest of this document is the **magic-link** email's manual rotation, which
 is Supabase-static and intentionally separate from the pool above.
