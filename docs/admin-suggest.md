@@ -266,12 +266,14 @@ Refresh when arXiv changes its category list, a leader reports a missing categor
 code, or the dropdown/search validation drifts from arXiv.
 
 ```bash
+# 0. Install the locked Python helper environment from repo root.
+uv sync --frozen
+
 # 1. Validate the parser against the committed fixture.
-uv run --with pytest --with httpx --with beautifulsoup4 \
-  pytest tests/build_arxiv_taxonomy_test.py -v
+uv run pytest -c tests/pytest.ini -v tests/build_arxiv_taxonomy_test.py
 
 # 2. Fetch https://arxiv.org/category_taxonomy and regenerate both artifacts.
-uv run --with httpx --with beautifulsoup4 scripts/build_arxiv_taxonomy.py
+uv run scripts/build_arxiv_taxonomy.py
 
 # 3. Verify the web artifact still matches the canonical JSON and the dropdown
 #    helper keeps the relevant-only/show-all behavior.

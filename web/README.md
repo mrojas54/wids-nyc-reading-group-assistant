@@ -19,6 +19,8 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## UI conventions
 
 - **Single CSS file:** all tokens and component classes live in [`app/globals.css`](app/globals.css). Sage-led palette (`--color-sage-*` for brand surfaces), warm paper neutrals (`--color-paper-*`), magenta accent (`--color-magenta-*`) used sparingly for the selected-state day-toggle, history badges, and the Companion eyebrow.
+- **Tailwind v4 is CSS-first.** There is no `tailwind.config.*`; PostCSS loads Tailwind through [`@tailwindcss/postcss`](postcss.config.mjs), and `globals.css` starts with `@import 'tailwindcss'`. Keep custom theme tokens in the `@theme inline` block so generated utilities resolve to the runtime CSS variables defined later in `:root`.
+- **Border-color compatibility is intentional.** Tailwind v4 changed the default border color to `currentcolor`; the base-layer shim in `globals.css` preserves the v3 visual default. Remove it only after adding explicit border color utilities anywhere that depended on the old default.
 - **Mobile-first.** The `.shell` is `max-width: 480px` and pages stack in one column. No two-column desktop layouts.
 - **No icon library.** Inline 1.5-px-stroke SVG paths live in [`components/ui/Icon.tsx`](components/ui/Icon.tsx) (`arrowRight`, `check`, `calendar`, `clock`, `mapPin`, `external`, `chevronDown`, `chevronRight`, `mail`).
 - **Design system source of truth:** the upstream Claude Design export (`wids-nyc-design-system`, `ui_kits/member-portal/v2/`). Key v2 classes added in the May 2026 redesign: `card-hero`, `hero-nudge`, `companion-card`, `section-h-soft`, `stats-v2`, `empty-state`, `skel`, `cal-stack` / `cal-month` / `cal-grid` / `day` / `cal-summary`.
@@ -26,8 +28,22 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
-2. `npm install`
-3. `npm run dev` — opens http://localhost:3000
+2. Use Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
+3. `npm ci`
+4. `npm run dev` — opens http://localhost:3000
+
+## Contributing checks
+
+CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits high-severity dependency issues, then runs the local gates below. Run the same commands before web changes:
+
+```sh
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only, so Vite upgrades affect tests rather than the production bundle.
 
 ## Deployment
 
