@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fnv1a, selectQuote, getQuoteOfDay, type QuoteBundle } from "../quotes";
+import { fnv1a, selectQuote, getQuoteOfDay, dayKey, type QuoteBundle } from "../quotes";
 
 const bundle: QuoteBundle = {
   version: 1,
@@ -51,5 +51,19 @@ describe("getQuoteOfDay", () => {
     const sel = getQuoteOfDay(new Date("2026-06-13T12:00:00Z"));
     expect(sel.quote.text.length).toBeGreaterThan(0);
     expect(sel.author.name.length).toBeGreaterThan(0);
+  });
+
+  it("is stable within a UTC day and advances at the day boundary", () => {
+    const a = new Date("2026-06-13T00:00:00Z");
+    const b = new Date("2026-06-13T23:59:59.999Z");
+    const c = new Date("2026-06-14T00:00:00Z");
+    expect(getQuoteOfDay(a).quote.id).toBe(getQuoteOfDay(b).quote.id);
+    expect(dayKey(c)).toBe(dayKey(a) + 1);
+  });
+
+  it("fallback identity matches the Python side", () => {
+    const f = selectQuote(0, "", { version: 1, authors: [] });
+    expect(f.author.id).toBe("grace-hopper");
+    expect(f.quote.id).toBe("hopper-always-done");
   });
 });

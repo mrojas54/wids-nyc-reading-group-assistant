@@ -89,8 +89,6 @@ def test_rsvp_confirmation_carries_quote_tokens(ext):
     assert "{{ quote.role }}" in text
 
 
-
-
 @pytest.mark.parametrize("ext", ["html", "txt"])
 def test_availability_reminder_carries_quote_tokens(ext):
     text = (_TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
@@ -119,3 +117,12 @@ def test_preview_main_resolves_quotes_from_pool(capsys):
         for fmt in ("html", "text"):
             assert "{{ quote.text }}" not in payload[key][fmt]
             assert expected in payload[key][fmt]
+
+
+def test_preview_main_fails_on_unresolved_token(monkeypatch, capsys):
+    import scripts.render_email_previews as rep
+    broken = dict(rep.REMINDER_TOKENS)
+    broken.pop("paper.title")
+    monkeypatch.setattr(rep, "REMINDER_TOKENS", broken)
+    assert rep.main() == 1
+    assert "unresolved" in capsys.readouterr().err.lower()

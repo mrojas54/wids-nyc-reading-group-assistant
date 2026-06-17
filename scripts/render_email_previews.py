@@ -103,30 +103,29 @@ def render(template_text: str, tokens: dict[str, str]) -> tuple[str, list[str]]:
     return MUSTACHE.sub(sub, template_text), unresolved
 
 
-def render_pair(stem: str, tokens: dict[str, str]) -> dict[str, str]:
-    """Render the .html + .txt pair for `stem` (e.g. 'rsvp-confirmation')."""
+def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+    """Render the .html + .txt pair for `stem`. Returns (rendered_by_ext, unresolved)."""
     out: dict[str, str] = {}
+    unresolved_all: list[str] = []
     for ext in ("html", "txt"):
         src = TEMPLATES / f"{stem}.{ext}"
-        text = src.read_text(encoding="utf-8")
-        rendered, unresolved = render(text, tokens)
-        if unresolved:
-            print(
-                f"warning: unresolved tokens in {src.name}: {sorted(set(unresolved))}",
-                file=sys.stderr,
-            )
+        rendered, unresolved = render(src.read_text(encoding="utf-8"), tokens)
+        unresolved_all.extend(unresolved)
         dst = TEMPLATES / f"{stem}_rendered.{ext}"
         dst.write_text(rendered, encoding="utf-8")
         out[ext] = rendered
-        print(f"wrote {dst.relative_to(ROOT)}", file=sys.stderr)
-    return out
+    return out, unresolved_all
 
 
 def main() -> int:
     q = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))
-    rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
-    thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
-    reminder = render_pair("availability-reminder", {**REMINDER_TOKENS, **q})
+    rsvp, u_rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
+    thanks, u_thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
+    reminder, u_reminder = render_pair("availability-reminder", {**REMINDER_TOKENS, **q})
+    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder))
+    if unresolved:
+        print(f"ERROR: unresolved tokens in rendered output: {unresolved}", file=sys.stderr)
+        return 1
     json.dump(
         {
             "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},

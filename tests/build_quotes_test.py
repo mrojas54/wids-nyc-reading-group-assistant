@@ -157,3 +157,48 @@ def test_real_data_verified_quotes_have_sources():
             if q["verified"]:
                 assert q.get("sourceUrl"), f'{q["id"]}: verified without sourceUrl'
                 assert q.get("source"), f'{q["id"]}: verified without source note'
+
+
+def test_assemble_rejects_malformed_author_json(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    f.mkdir()
+    (f / "author.json").write_text("{not valid json", encoding="utf-8")
+    _quotes(f, "20260101_quotes.json", [])
+    with pytest.raises(QuoteDataError, match="not valid JSON"):
+        assemble_bundle(tmp_path)
+
+
+def test_assemble_rejects_malformed_quotes_json(tmp_path):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    f = tmp_path / "ada"
+    _author(f, "ada")
+    (f / "20260101_quotes.json").write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(QuoteDataError, match="not valid JSON"):
+        assemble_bundle(tmp_path)
+
+
+@pytest.mark.parametrize("field", ["name", "role"])
+def test_assemble_rejects_author_missing_required_field(tmp_path, field):
+    from scripts.build_quotes import QuoteDataError, assemble_bundle
+    author = {"id": "ada", "name": "Ada", "role": "Mathematician"}
+    author[field] = ""
+    f = tmp_path / "ada"
+    f.mkdir()
+    (f / "author.json").write_text(json.dumps(author), encoding="utf-8")
+    _quotes(f, "20260101_quotes.json", [])
+    with pytest.raises(QuoteDataError, match=field):
+        assemble_bundle(tmp_path)
+
+
+def test_refresh_symlink_warns_on_oserror(tmp_path, capsys, monkeypatch):
+    from scripts.build_quotes import refresh_symlink
+    target = tmp_path / "20260101_quotes.json"
+    target.write_text("[]", encoding="utf-8")
+
+    def boom(*_a, **_k):
+        raise OSError("no symlinks here")
+
+    monkeypatch.setattr(Path, "symlink_to", boom)
+    refresh_symlink(tmp_path, target)  # must not raise
+    assert "WARNING" in capsys.readouterr().err

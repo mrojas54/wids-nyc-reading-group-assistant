@@ -91,3 +91,17 @@ def test_quote_tokens_maps_author_and_quote():
         "quote.by": "Ada Lovelace",
         "quote.role": "Mathematician",
     }
+
+
+def test_load_bundle_missing_file_raises_actionable_error(tmp_path):
+    import pytest
+    from scripts.quotes import load_bundle
+    with pytest.raises(RuntimeError, match="build_quotes"):
+        load_bundle(tmp_path / "nope.json")
+
+
+def test_fallback_is_grace_hopper():
+    from scripts.quotes import FALLBACK
+    assert FALLBACK.author["id"] == "grace-hopper"
+    assert FALLBACK.quote["id"] == "hopper-always-done"
+    assert FALLBACK.quote["text"].startswith("The most dangerous phrase")

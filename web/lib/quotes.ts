@@ -32,6 +32,9 @@ export interface Selection {
   quote: Quote;
 }
 
+// Drift is guarded: scripts/build_quotes.py validates the source data and emits
+// this file, and tests/build_quotes_test.py::test_committed_bundle_is_in_sync
+// asserts it stays in sync — so this structural cast is safe at the boundary.
 const BUNDLE = bundleData as QuoteBundle;
 
 const FALLBACK: Selection = {
@@ -47,6 +50,8 @@ const FALLBACK: Selection = {
   },
 };
 
+// 32-bit FNV-1a. Inputs are ASCII (digit date keys + salt), so this agrees
+// byte-for-byte with the UTF-8-byte Python implementation in scripts/quotes.py.
 export function fnv1a(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
@@ -73,6 +78,8 @@ export function selectQuote(dateKey: number, salt = "", bundle: QuoteBundle = BU
   return pairs[fnv1a(`${dateKey}${salt}`) % pairs.length];
 }
 
+// Whole days since the Unix epoch in UTC — the quote rotates at UTC midnight,
+// not the viewer's local midnight.
 export function dayKey(now: Date = new Date()): number {
   return Math.floor(now.getTime() / 86_400_000);
 }

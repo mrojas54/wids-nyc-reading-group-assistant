@@ -1,7 +1,7 @@
 import { getQuoteOfDay } from "@/lib/quotes";
 
 /**
- * Quote of the day — a rotating quote from a legacy woman in STEM.
+ * Quote of the day — a rotating quote from a pioneering woman in STEM history.
  * Server component: the selection is deterministic per calendar day and reads
  * the committed bundle (web/lib/quotes.generated.json) via @/lib/quotes.
  */

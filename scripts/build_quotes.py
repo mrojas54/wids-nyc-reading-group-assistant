@@ -53,7 +53,10 @@ def load_author(folder: Path) -> dict[str, Any]:
     author_path = folder / "author.json"
     if not author_path.exists():
         raise QuoteDataError(f"{folder.name}: missing author.json")
-    author: dict[str, Any] = json.loads(author_path.read_text(encoding="utf-8"))
+    try:
+        author: dict[str, Any] = json.loads(author_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise QuoteDataError(f"{folder.name}: author.json is not valid JSON: {exc}") from exc
     for field in _AUTHOR_REQUIRED:
         if not author.get(field):
             raise QuoteDataError(f"{folder.name}: author.{field} is required")
@@ -65,7 +68,11 @@ def load_author(folder: Path) -> dict[str, Any]:
 
 
 def load_quotes(folder: Path) -> list[dict[str, Any]]:
-    quotes: Any = json.loads(newest_quotes_file(folder).read_text(encoding="utf-8"))
+    newest = newest_quotes_file(folder)
+    try:
+        quotes: Any = json.loads(newest.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise QuoteDataError(f"{folder.name}: {newest.name} is not valid JSON: {exc}") from exc
     if not isinstance(quotes, list):
         raise QuoteDataError(f"{folder.name}: quotes file must be a JSON array")
     seen: set[str] = set()
@@ -134,7 +141,8 @@ def main() -> int:
     for folder in sorted(p for p in QUOTES_DIR.iterdir() if p.is_dir()):
         try:
             newest = newest_quotes_file(folder)
-        except QuoteDataError:
+        except QuoteDataError as exc:
+            print(f"WARNING: skipping symlink refresh — {exc}", file=sys.stderr)
             continue
         refresh_symlink(folder, newest)
     n_quotes = sum(len(e["quotes"]) for e in bundle["authors"])
