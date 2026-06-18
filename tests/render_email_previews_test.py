@@ -113,7 +113,12 @@ def test_preview_main_resolves_quotes_from_pool(capsys):
     payload = _json.loads(capsys.readouterr().out)
     expected = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))["quote.text"]
     # All three emails now carry the quote block: token resolved AND value present.
-    for key in ("rsvp_confirmation", "availability_thanks", "availability_reminder"):
+    for key in (
+        "rsvp_confirmation",
+        "availability_thanks",
+        "availability_reminder",
+        "pre_meeting_reminder",
+    ):
         for fmt in ("html", "text"):
             assert "{{ quote.text }}" not in payload[key][fmt]
             assert expected in payload[key][fmt]
@@ -126,3 +131,33 @@ def test_preview_main_fails_on_unresolved_token(monkeypatch, capsys):
     monkeypatch.setattr(rep, "REMINDER_TOKENS", broken)
     assert rep.main() == 1
     assert "unresolved" in capsys.readouterr().err.lower()
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_pre_meeting_reminder_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"pre-meeting-reminder.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+def test_pre_meeting_reminder_carries_question_tokens():
+    html = (_TEMPLATES / "pre-meeting-reminder.html").read_text(encoding="utf-8")
+    txt = (_TEMPLATES / "pre-meeting-reminder.txt").read_text(encoding="utf-8")
+    assert "{{ questions.lede }}" in html
+    assert "{{ questions.html }}" in html
+    assert "{{ questions.lede }}" in txt
+    assert "{{ questions.text }}" in txt
+
+
+def test_preview_main_resolves_question_tokens(capsys):
+    import json as _json
+    from scripts.discussion_questions import load_questions, question_tokens
+    from scripts.render_email_previews import main
+    assert main() == 0
+    payload = _json.loads(capsys.readouterr().out)
+    expected_lede = question_tokens(load_questions())["questions.lede"]
+    for fmt in ("html", "text"):
+        # no question token left unresolved, and the composed lede is present
+        assert "{{ questions." not in payload["pre_meeting_reminder"][fmt]
+        assert expected_lede in payload["pre_meeting_reminder"][fmt]

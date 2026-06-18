@@ -1,0 +1,12 @@
+{
+  "questions": [
+    "Why did the authors combine LSTM and Transformer instead of relying on a single architecture?",
+    "Do the six selected features — NASDAQ, S&P 500, silver futures, USD/CNY, China bond yield, and a coal ETF — genuinely make sense for predicting gold futures?",
+    "Can the hybrid model truly handle sudden market shocks — war, rate hikes, banking crises — or does it only learn past patterns?",
+    "The model performs well but is more complex and slower. Is the extra accuracy worth the extra computation cost?",
+    "Is prediction accuracy enough, or should the paper also show the model helps with real trading, hedging, or risk decisions?",
+    "If it works for Shanghai gold futures, could it also predict Indian or COMEX gold prices?",
+    "The paper says ARIMA, GARCH, and VAR are limited for gold forecasting. Do the authors explain that limitation clearly enough?",
+    "XGBoost–SHAP is used to select key features. Is this a strong method, or could it still miss important market variables?"
+  ]
+}

@@ -1,0 +1,45 @@
+WiDS · NYC AI Reading Group
+===========================
+
+Good morning gorgeous {{ recipient.firstName }},
+
+A quick reminder that we meet {{ meeting.dayName }}. Below is where to be,
+the paper, and a few questions to get the conversation going.
+
+
+WHEN     {{ meeting.when }}
+WHERE    {{ meeting.location }}
+LEADING  {{ meeting.leader }}
+
+Join / add to calendar:
+{{ links.calendar }}
+
+
+THIS MONTH'S PAPER
+{{ paper.title }}
+{{ paper.subtitle }}
+Open in Paper Pal: {{ paper.companionUrl }}
+
+
+DISCUSSION QUESTIONS
+{{ questions.lede }}
+
+{{ questions.text }}
+
+
+BEFORE YOU ARRIVE
+Skim the methods and results sections if nothing else, and jot down one
+question of your own — the best discussions usually start with someone
+else's.
+
+
+See you {{ meeting.dayName }},
+{{ signoff.names }}
+
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
+---
+You're getting this because you RSVP'd to a WiDS NYC reading group event.
+Manage your RSVPs: {{ links.rsvpManage }}
