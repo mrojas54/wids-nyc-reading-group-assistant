@@ -27,6 +27,10 @@ PS — Paper Pal goes live Wednesday morning. Preview link if you
 want a head start:
 {{ links.companionPreview }}
 
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
 ---
 WiDS NYC AI Reading Group
 Member portal: {{ links.portalBase }}/dashboard

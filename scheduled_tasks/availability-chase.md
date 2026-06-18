@@ -166,6 +166,7 @@ Static / config values:
 - `links.companionPreview` — `<portalBase><paper.companion_url>` (e.g. `<portalBase>/papers/2`). If `paper.companion_url` is null, drop the PS preview link by replacing `<a …>Preview link</a>` in the HTML body with the literal text `Preview link coming soon`, and replace the `{{ links.companionPreview }}` line in the `.txt` body with the literal text `(preview link coming soon)`.
 - `deadline.soft` — derived: the upcoming Sunday evening relative to send date (e.g. `Sunday evening`).
 - `stats.submittedCountWord` — `stats.submittedCount` spelled out in English title-case (`One`, `Two`, …, `Nine`, then fallback to the digit string for ≥10). Used in the bold `<strong>… of us</strong>` line.
+- `quote.text` / `quote.by` / `quote.role` — a rotating women-in-STEM quote resolved via `scripts/quotes.py`: set `date_key` = whole days since 1970-01-01 UTC for the send date, then `quote_tokens(select_quote(load_bundle(), date_key))`. Optional with a built-in fallback (seed Grace Hopper quote), so an empty/missing pool never blocks a send. Used by BOTH buckets (reminder 5c, thank-you 5e).
 
 Derived values (v2 composition rules — renderer-side, not in DB):
 - `paper.authorsShort` — first 1–3 surnames from `papers.authors`, joined with `, ` and `&`. ≥4 → first surname + ` et al.`. Examples: `Zhao, Guo & Wang` · `Chen et al.`
@@ -219,6 +220,9 @@ For each non-submitter row:
    | `{{ links.companionPreview }}` | `<portalBase><paper.companion_url>` | falls back to literal `Preview link coming soon` if `paper.companion_url` is null |
    | `{{ links.portalBase }}` | static | |
    | `{{ operator.displayName }}` | static / config | |
+   | `{{ quote.text }}` | rotating pool via `scripts/quotes.py` (Step 5b) | optional — fallback Grace Hopper |
+   | `{{ quote.by }}` | author name from the same selection | optional |
+   | `{{ quote.role }}` | author role from the same selection | optional |
 
    Tokens removed in v2 (do NOT use): `paper.arxivId`, `paper.arxivUrl`,
    `paper.slug`. Their roles are now subsumed by `paper.citation` /
@@ -281,7 +285,7 @@ For each submitter row:
    | `{{ links.rsvpManage }}` | `<portalBase>/me/rsvps` | both | ✓ |
    | `{{ links.portalBase }}` | static | both | ✓ |
    | `{{ haiku.line1 }}` / `{{ haiku.line2 }}` / `{{ haiku.line3 }}` | rotated pool (see template README) | both | optional — fall back to haiku[0] |
-   | `{{ quote.text }}` / `{{ quote.by }}` / `{{ quote.role }}` | rotated pool (women-in-STEM) | both | optional — fall back to Mirzakhani |
+   | `{{ quote.text }}` / `{{ quote.by }}` / `{{ quote.role }}` | rotating pool via `scripts/quotes.py` (Step 5b) | both | optional — fallback Grace Hopper |
 
    Tokens NOT used by rsvp-confirmation (do not need to resolve for this
    bucket): `event.dateLine` (removed — lede is date-agnostic),

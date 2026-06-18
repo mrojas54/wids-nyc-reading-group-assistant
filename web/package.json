@@ -14,7 +14,7 @@
     "node": ">=22.12.0"
   },
   "overrides": {
-    "protobufjs": "^7.6.0",
+    "protobufjs": "^7.6.3",
     "postcss": "^8.5.10"
   },
   "dependencies": {

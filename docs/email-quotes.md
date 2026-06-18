@@ -17,6 +17,22 @@ Supabase email templates are static — rotation is manual.
 Suggested cadence: once a month, or whenever the current quote feels
 stale to the operator.
 
+## Machine-readable pool (availability + reminder emails)
+
+The availability-reminder, availability-thanks, rsvp-confirmation, and
+pre-meeting reminder emails draw their quote from a structured, verified pool
+under `data/quotes/<author-slug>/` (one folder per person: `author.json` plus
+dated `YYYYMMDD_quotes.json` snapshots, with a `quotes.json` symlink for
+humans). `scripts/build_quotes.py` validates sourcing and emits the committed
+bundle `web/lib/quotes.generated.json`; `scripts/quotes.py` (emails) and
+`web/lib/quotes.ts` (dashboard) select from it. Selection considers only quotes
+marked `verified: true`; the build (`scripts/build_quotes.py`) additionally
+requires every verified quote to carry a `sourceUrl` and a `source` note,
+failing CI otherwise.
+
+The rest of this document is the **magic-link** email's manual rotation, which
+is Supabase-static and intentionally separate from the pool above.
+
 ## Quote candidates
 
 Women + non-binary technologists, scientists, and writers whose words

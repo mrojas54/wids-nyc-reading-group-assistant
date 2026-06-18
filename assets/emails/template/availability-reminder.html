@@ -19,7 +19,7 @@
 
     v2 deltas vs v1 (also visible inline next to each affected block):
       1. Citation line uses a single composed {{ paper.citation }} token
-         (HTML-safe) instead of hard-coded `arXiv {{ paper.arxivId }}` —
+         (HTML-safe) instead of hard-coded `arXiv <paper.arxivId>` —
          see Step 5b composition rule in scheduled_tasks/availability-chase.md.
          Tolerates papers that are not arXiv preprints (e.g. journal DOIs).
       2. Location chip is CONDITIONAL — wrapped in BEGIN-OPTIONAL-CHIP /
@@ -28,7 +28,7 @@
       3. Duration + companion-drop-day chips have static fallbacks
          ("~90 min", "Wed") when their source fields are null.
       4. Secondary CTA href is {{ paper.url }} (generic — arXiv abstract,
-         DOI, or journal URL), not the v1 arXiv-only {{ paper.arxivUrl }}.
+         DOI, or journal URL), not the v1 arXiv-only <paper.arxivUrl>.
 
     Template tokens are Mustache-style ({{ recipient.firstName }}) — distinct
     from magic-link.html's Supabase Go-template tokens, because this template
@@ -50,7 +50,7 @@
   <!--[if mso]>
   <style type="text/css">
     table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
-    .serif, .paper-title, .count, .signoff-name { font-family: Georgia, "Times New Roman", serif !important; }
+    .serif, .paper-title, .count, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
   </style>
   <![endif]-->
 
@@ -159,7 +159,7 @@
                       Authors + citation line.
 
                       v2 contract: citation is a single composed string from
-                      {{ paper.citation }}, not a hard-coded "arXiv {{ id }}".
+                      {{ paper.citation }}, not a hard-coded "arXiv <id>".
                       The renderer composes it per the rule in
                       scheduled_tasks/availability-chase.md Step 5b:
 
@@ -391,6 +391,19 @@
                   </td>
                 </tr>
               </table>
+            </td>
+          </tr>
+
+          <!-- ── Closing quote (rotating women-in-STEM) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:26px 32px 0 32px;">
+              <div style="margin:0 auto;width:36px;height:1px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
+              <p class="quote-text serif" style="margin:14px auto 0;max-width:460px;font-family:Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:16.5px;line-height:1.5;letter-spacing:-0.005em;color:#1a1814;">
+                &ldquo;{{ quote.text }}&rdquo;
+              </p>
+              <p style="margin:8px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#6d6757;line-height:1.5;">
+                &mdash; <span style="font-weight:600;color:#1a1814;">{{ quote.by }}</span>, <span style="font-weight:400;color:#8e8674;">{{ quote.role }}</span>
+              </p>
             </td>
           </tr>
 

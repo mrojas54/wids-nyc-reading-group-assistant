@@ -100,7 +100,9 @@ jobs:
             tests/find_paper_suggest_test.py \
             tests/zotero_push_test.py \
             tests/build_arxiv_taxonomy_test.py \
-            tests/render_email_previews_test.py
+            tests/render_email_previews_test.py \
+            tests/quotes_select_test.py \
+            tests/build_quotes_test.py
 
   edge-functions:
     name: edge-functions

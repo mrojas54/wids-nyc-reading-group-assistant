@@ -1,0 +1,10 @@
+{
+  "id": "ada-lovelace",
+  "name": "Ada Lovelace",
+  "role": "Mathematician · first computer programmer",
+  "birthdate": "1815-12-10",
+  "deathdate": "1852-11-27",
+  "fields": ["mathematics", "computing"],
+  "notable_contributions": "Wrote the first published algorithm intended for a machine — Babbage's Analytical Engine.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Ada_Lovelace"
+}

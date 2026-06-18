@@ -10,6 +10,7 @@ import {
 } from "@/lib/queries";
 import { Brandmark, Icon } from "@/components/ui";
 import { NextMeetingCard, type AvailabilityStatus } from "@/components/NextMeetingCard";
+import { QuoteCard } from "@/components/QuoteCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
 import { canFindPaper } from "@/lib/roles";
@@ -80,6 +81,8 @@ export default async function DashboardPage() {
           availabilityStatus={availabilityStatus}
           prepMeetingId={prepMeeting?.id ?? null}
         />
+
+        <QuoteCard />
 
         {meeting?.companion_url && (
           <a

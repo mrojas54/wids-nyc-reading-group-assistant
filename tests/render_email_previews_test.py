@@ -71,3 +71,58 @@ def test_render_ignores_non_matching_braces(malformed):
     rendered, unresolved = render(malformed, {})
     assert rendered == malformed
     assert unresolved == []
+
+
+# Interleaved import (tests/* suppress E402 — see pyproject.toml).
+import pathlib
+
+_TEMPLATES = (
+    pathlib.Path(__file__).resolve().parent.parent / "assets" / "emails" / "template"
+)
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_rsvp_confirmation_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"rsvp-confirmation.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_availability_reminder_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_availability_thanks_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"availability-thanks.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+def test_preview_main_resolves_quotes_from_pool(capsys):
+    import json as _json
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import PREVIEW_DATE_KEY, main
+    assert main() == 0
+    payload = _json.loads(capsys.readouterr().out)
+    expected = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))["quote.text"]
+    # All three emails now carry the quote block: token resolved AND value present.
+    for key in ("rsvp_confirmation", "availability_thanks", "availability_reminder"):
+        for fmt in ("html", "text"):
+            assert "{{ quote.text }}" not in payload[key][fmt]
+            assert expected in payload[key][fmt]
+
+
+def test_preview_main_fails_on_unresolved_token(monkeypatch, capsys):
+    import scripts.render_email_previews as rep
+    broken = dict(rep.REMINDER_TOKENS)
+    broken.pop("paper.title")
+    monkeypatch.setattr(rep, "REMINDER_TOKENS", broken)
+    assert rep.main() == 1
+    assert "unresolved" in capsys.readouterr().err.lower()

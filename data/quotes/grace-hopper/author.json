@@ -1,0 +1,10 @@
+{
+  "id": "grace-hopper",
+  "name": "Grace Hopper",
+  "role": "Computer scientist · US Navy rear admiral",
+  "birthdate": "1906-12-09",
+  "deathdate": "1992-01-01",
+  "fields": ["computer science", "compilers"],
+  "notable_contributions": "Built the first compiler (A-0), drove the creation of COBOL, and popularized the term \"debugging\".",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Grace_Hopper"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "radia-perlman",
+  "name": "Radia Perlman",
+  "role": "Network engineer · \"Mother of the Internet\"",
+  "birthdate": "1951-12-18",
+  "fields": ["computer networking"],
+  "notable_contributions": "Invented the Spanning Tree Protocol, foundational to modern Ethernet networks.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Radia_Perlman"
+}
