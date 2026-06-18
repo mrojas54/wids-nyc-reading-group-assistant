@@ -17,6 +17,7 @@ import re
 import sys
 from pathlib import Path
 
+from scripts.discussion_questions import load_questions, question_tokens
 from scripts.quotes import load_bundle, quote_tokens, select_quote
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -86,6 +87,21 @@ REMINDER_TOKENS = {
     "operator.displayName": "Michelle Rojas",
 }
 
+PRE_MEETING_TOKENS = {
+    "recipient.firstName": "Maya",
+    "meeting.dayName": "Tuesday",
+    "meeting.when": "Tue, Jun 23 · 6:30pm",
+    "meeting.location": "Jack's Wife Freda",
+    "meeting.leader": "Michelle & Claudia",
+    "links.calendar": "https://wids-nyc-reading-group-assistant.vercel.app/events/6/cal.ics",
+    "paper.title": "A Hybrid LSTM–Transformer Model for Gold Futures Price Forecasting",
+    "paper.subtitle": "with XGBoost–SHAP feature selection on Shanghai gold futures",
+    "paper.companionUrl": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
+    "signoff.names": "Michelle & Claudia",
+    "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
+    "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+}
+
 MUSTACHE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
 
@@ -119,10 +135,14 @@ def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list
 
 def main() -> int:
     q = quote_tokens(select_quote(load_bundle(), PREVIEW_DATE_KEY))
+    qtokens = question_tokens(load_questions())
     rsvp, u_rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
     thanks, u_thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
     reminder, u_reminder = render_pair("availability-reminder", {**REMINDER_TOKENS, **q})
-    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder))
+    pre_meeting, u_pre = render_pair(
+        "pre-meeting-reminder", {**PRE_MEETING_TOKENS, **q, **qtokens}
+    )
+    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder + u_pre))
     if unresolved:
         print(f"ERROR: unresolved tokens in rendered output: {unresolved}", file=sys.stderr)
         return 1
@@ -131,6 +151,7 @@ def main() -> int:
             "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},
             "availability_thanks": {"html": thanks["html"], "text": thanks["txt"]},
             "availability_reminder": {"html": reminder["html"], "text": reminder["txt"]},
+            "pre_meeting_reminder": {"html": pre_meeting["html"], "text": pre_meeting["txt"]},
         },
         sys.stdout,
     )
