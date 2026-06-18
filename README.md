@@ -141,7 +141,8 @@ See `docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md` for the
 ```sh
 cd web
 cp .env.example .env.local   # fill in values
-npm install
+nvm use                      # Node 22.22.3 from web/.nvmrc
+npm ci
 npm run dev
 ```
 

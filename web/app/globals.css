@@ -77,8 +77,8 @@
   /*
  * WiDS NYC — Design Tokens
  * Single source of truth: tokens, fonts, type scale, spacing, radius, shadow.
- * See docs/design/style-guide.md for usage. Tokens come from the design bundle
- * generated 2026-05-04 (sage primary + magenta voice + warm paper).
+ * See web/README.md#ui-conventions for usage. Tokens come from the design
+ * bundle generated 2026-05-04 (sage primary + magenta voice + warm paper).
  */
 
   @font-face {
