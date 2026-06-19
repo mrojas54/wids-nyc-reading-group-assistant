@@ -164,6 +164,51 @@ def test_parse_with_diagnostics_counts_blank_description():
     assert diag.blank_group == 0
 
 
+def test_drift_warning_none_when_counts_equal():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    assert drift_warning(155, 155) is None
+
+
+def test_drift_warning_none_when_new_is_higher():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    assert drift_warning(170, 155) is None
+
+
+def test_drift_warning_none_when_drop_within_threshold():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    # baseline 155, threshold 20% -> floor 124. 130 >= 124, so no warning.
+    assert drift_warning(130, 155) is None
+
+
+def test_drift_warning_message_when_drop_exceeds_threshold():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    # baseline 155, threshold 20% -> floor 124. 120 < 124, so warn.
+    msg = drift_warning(120, 155)
+    assert msg is not None
+    assert "120" in msg and "155" in msg
+
+
+def test_drift_warning_boundary_is_exclusive():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    # baseline 100, threshold 20% -> floor exactly 80.
+    # new == floor is NOT a drop "more than 20%", so no warning.
+    assert drift_warning(80, 100) is None
+    # one below the floor warns.
+    assert drift_warning(79, 100) is not None
+
+
+def test_drift_warning_respects_custom_threshold():
+    from scripts.build_arxiv_taxonomy import drift_warning
+    # 10% threshold -> floor 90. 85 < 90 warns; 95 >= 90 does not.
+    assert drift_warning(85, 100, threshold=0.10) is not None
+    assert drift_warning(95, 100, threshold=0.10) is None
+
+
+def test_drift_threshold_constant_is_twenty_percent():
+    from scripts.build_arxiv_taxonomy import DRIFT_THRESHOLD
+    assert DRIFT_THRESHOLD == 0.20
+
+
 def test_render_typescript_escapes_special_characters():
     from scripts.build_arxiv_taxonomy import Category, render_typescript
     # cs.AI is relevant → relevant=True keeps the Category invariant satisfied.
