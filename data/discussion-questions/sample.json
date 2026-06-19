@@ -1,12 +1,12 @@
 {
   "questions": [
-    "Why did the authors combine LSTM and Transformer instead of relying on a single architecture?",
-    "Do the six selected features — NASDAQ, S&P 500, silver futures, USD/CNY, China bond yield, and a coal ETF — genuinely make sense for predicting gold futures?",
-    "Can the hybrid model truly handle sudden market shocks — war, rate hikes, banking crises — or does it only learn past patterns?",
-    "The model performs well but is more complex and slower. Is the extra accuracy worth the extra computation cost?",
-    "Is prediction accuracy enough, or should the paper also show the model helps with real trading, hedging, or risk decisions?",
-    "If it works for Shanghai gold futures, could it also predict Indian or COMEX gold prices?",
-    "The paper says ARIMA, GARCH, and VAR are limited for gold forecasting. Do the authors explain that limitation clearly enough?",
-    "XGBoost–SHAP is used to select key features. Is this a strong method, or could it still miss important market variables?"
+    "Why did the authors combine LSTM and Transformer instead of using only one model?",
+    "Do the six selected features — NASDAQ, S&P 500, silver futures, USD/CNY, China bond yield, and coal ETF — really make sense for predicting gold futures?",
+    "Can the hybrid model truly handle sudden market shocks like war, rate hikes, or banking crises, or does it only learn past patterns?",
+    "The hybrid model performs well, but it is more complex and slower. Is the extra accuracy worth the extra computation cost?",
+    "Is prediction accuracy enough, or should the paper also prove that the model helps investors with real trading, hedging, or risk management decisions?",
+    "If the model works for Shanghai gold futures, can it also predict Indian gold prices or COMEX gold prices?",
+    "The paper says traditional models like ARIMA, GARCH, and VAR are limited for gold futures forecasting. Do the authors explain this limitation clearly enough?",
+    "The authors use XGBoost–SHAP to select key features. Is this a strong method for feature selection, or could it still miss important market variables?"
   ]
 }
