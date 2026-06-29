@@ -30,6 +30,10 @@ marked `verified: true`; the build (`scripts/build_quotes.py`) additionally
 requires every verified quote to carry a `sourceUrl` and a `source` note,
 failing CI otherwise.
 
+For the full transactional-email template map, preview command, and
+idempotency-key conventions, see
+[`docs/runbooks/transactional-emails.md`](runbooks/transactional-emails.md).
+
 The rest of this document is the **magic-link** email's manual rotation, which
 is Supabase-static and intentionally separate from the pool above.
 

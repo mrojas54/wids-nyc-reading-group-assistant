@@ -52,7 +52,7 @@ flowchart TD
     substitute["★ 5c.2 substitute 16 Mustache tokens"]
     idem{5c.3 already sent<br/>this meeting × member?}
     send["★ 5c.4 Gmail MCP → member<br/>HTML body + plain-text body"]
-    log_send[(★ command_log<br/>'Sent reminder meeting=… member=…')]
+    log_send[(★ command_log<br/>idempotency_key<br/>'availability-chase:meeting=…:member=…')]
     summary["★ 5d summary to operator<br/>'Sent reminders to N non-responders'"]
     step5 --> foreach --> render --> substitute --> idem
     idem -->|yes| skip_member([skip this member])
@@ -99,7 +99,7 @@ flowchart TD
 | `scheduled_tasks/availability-chase.md` Step 5 | per-recipient render + send | ★ new |
 | `assets/emails/template/availability-reminder.html` | high-fidelity templated reminder | ★ new |
 | `assets/emails/template/availability-reminder.txt` | plain-text alternative | ★ new |
-| `command_log` | idempotency keys (`meeting=X`, `member=Y`) | ◇ used / ★ new write site |
+| `command_log` | exact `idempotency_key` values for member-send dedupe | ◇ used / ★ new write site |
 | Gmail MCP | actual SMTP send | ◇ pre-existing |
 | `meetings`, `members`, `availability`, `papers` | merge-data sources | ◇ pre-existing |
 
@@ -113,7 +113,15 @@ Michelle's voice without her consent.
 
 ## Idempotency
 
-Step 5c.3's `command_log LIKE '%reminder meeting=<id> member=<id>%'` check
-guarantees that re-running Step 5 — including partial-failure retries
-mid-loop — never double-sends a reminder to the same person for the same
-meeting. Each successful send writes a row keyed by `meeting × member`.
+Step 5c.3 checks the exact
+`idempotency_key = 'availability-chase:meeting=<meeting_id>:member=<member_id>'`
+before sending. Each successful reminder writes the same key to
+`command_log`, and migration `020_command_log_enrichment.sql` adds the partial
+unique index `command_log_idempotency_key_unique` as the race backstop. If a
+retry or overlapping run trips SQLSTATE `23505`, treat it as already sent and
+continue with the next member.
+
+Do not use `summary LIKE` scans for this workflow. They are brittle and do not
+provide the database-level at-most-once guarantee. See
+[`docs/runbooks/transactional-emails.md`](runbooks/transactional-emails.md) for
+the full email template and idempotency map.
