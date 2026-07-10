@@ -19,6 +19,7 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Find-a-paper / suggest | [docs/admin-suggest.md](docs/admin-suggest.md) | [2026-05-06-wids-find-paper-suggest-design.md](docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md), [2026-06-07-arxiv-taxonomy-design.md](docs/superpowers/specs/2026-06-07-arxiv-taxonomy-design.md) | [2026-05-06-wids-find-paper-suggest-implementation.md](docs/superpowers/plans/2026-05-06-wids-find-paper-suggest-implementation.md), [2026-06-07-arxiv-taxonomy.md](docs/superpowers/plans/2026-06-07-arxiv-taxonomy.md) |
 | Zotero bibliography | [docs/runbooks/zotero-bibliography.md](docs/runbooks/zotero-bibliography.md) | [2026-05-05-wids-zotero-integration-design.md](docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md) | [2026-05-05-wids-zotero-integration.md](docs/superpowers/plans/2026-05-05-wids-zotero-integration.md) |
 | Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
+| Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
 
 ## Prerequisites (one-time operator setup)
 
