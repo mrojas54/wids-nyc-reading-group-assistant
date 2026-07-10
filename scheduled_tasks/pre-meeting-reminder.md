@@ -7,6 +7,10 @@ description: Email logistics reminder to active members 2 days before any schedu
 
 Runs daily. For any meeting `status='scheduled'` with `scheduled_at` 2 days out, emails active members the logistics.
 
+See [`docs/pre-meeting-reminder-flow.md`](../docs/pre-meeting-reminder-flow.md)
+for the current live send path, idempotency notes, and the deferred cutover
+checklist for `assets/emails/template/pre-meeting-reminder.{html,txt}`.
+
 ## Step 1 — Find meetings 2 days out
 
 ```sql
