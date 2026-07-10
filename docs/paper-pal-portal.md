@@ -171,7 +171,10 @@ gate-check error instead of pretending the member is unauthorized.
 
 ### Required setup
 
-Apply migrations through `019_meetings_propose_placeholder_unique.sql`.
+Apply migrations through `020_command_log_enrichment.sql`. Paper Pal itself
+uses the artifacts below, and migration `020` is still part of the supported
+go-live baseline because `/admin/logs` enrichment and scheduled-task
+idempotency depend on it.
 Paper Pal depends on:
 
 - `paper_companions` and its RLS policies (`013`)
@@ -181,6 +184,7 @@ Paper Pal depends on:
 - `can_synthesize_paper_pal()` and `current_member_role()` (`017`)
 - `papers-pdfs` Storage bucket and INSERT policy (`018`)
 - placeholder dedupe for member proposals (`019`)
+- command-log enrichment used by the operator runbooks (`020`)
 
 Deploy the Edge Functions:
 
@@ -275,6 +279,7 @@ migrations/
   017_synthesis_gate_rpc.sql
   018_papers_pdfs_bucket.sql
   019_meetings_propose_placeholder_unique.sql
+  020_command_log_enrichment.sql
 
 scheduled_tasks/
   prune-paper-pdfs.md
@@ -310,7 +315,7 @@ npm run typecheck
 
 For ops documentation changes, also spot-check:
 
-1. `migrations/README.md` lists every migration file through `019`.
+1. `migrations/README.md` lists every migration file through `020`.
 2. `scheduled_tasks/README.md` includes every non-deprecated task that
    should be registered.
 3. `supabase/functions/README.md` agrees with

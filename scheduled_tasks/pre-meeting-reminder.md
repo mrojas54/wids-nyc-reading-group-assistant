@@ -16,6 +16,8 @@ checklist for `assets/emails/template/pre-meeting-reminder.{html,txt}`.
 ```sql
 SELECT m.id, m.type, m.scheduled_at, m.location, m.paper_id,
        p.title AS paper_title,
+       p.authors AS paper_authors,
+       p.companion_url AS paper_companion_url,
        leader.name AS leader_name
 FROM meetings m
 LEFT JOIN papers p ON p.id = m.paper_id
@@ -73,7 +75,7 @@ any are unresolved:
 | `links.calendar` | `meetings.calendar_ics_url` or portal event URL |
 | `paper.title` | `papers.title` |
 | `paper.authorsShort` | derived from `papers.authors[]` (see availability-chase.md Step 5b) |
-| `paper.companionUrl` | `<portal>/papers/<slug>/companion` (Paper Pal) |
+| `paper.companionUrl` | `<portalBase><paper_companion_url>` (for example, `<portalBase>/papers/2`; refuse or omit if null) |
 | `links.rsvpManage` | `<portal>/me/rsvps` |
 | `links.portalBase` | `https://planner.widsnyc.org` (or env override) |
 
