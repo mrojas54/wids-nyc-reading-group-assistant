@@ -30,7 +30,7 @@ Before running `/wids-bootstrap`, the operator must:
 ### 1. Supabase project
 - Sign up at https://supabase.com (free tier).
 - Create a new project (note the project URL and `service_role` key).
-- Apply every file in `migrations/` in numeric order (`001` → `020`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
+- Apply every file in `migrations/` in numeric order (`001` → `021`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
 
 ### 2. Google Drive root folder
 - Create a folder in your Drive named `WiDS NYC AI Reading Group`.
