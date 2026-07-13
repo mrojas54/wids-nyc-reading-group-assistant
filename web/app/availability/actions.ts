@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logServerAction } from "@/lib/log";
 import { nyDayAtHour } from "@/lib/time";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { blackedOutDays } from "@/lib/blackout";
 
 export async function submitAvailability(meetingId: number, days: string[]): Promise<void> {
   if (days.length === 0) throw new Error("select at least one day");
@@ -19,6 +21,25 @@ export async function submitAvailability(meetingId: number, days: string[]): Pro
     .eq("auth_user_id", user.id)
     .maybeSingle();
   if (!memberRow) throw new Error("not on roster");
+
+  // Reject blacked-out dates BEFORE deleting existing rows, so a rejected
+  // submit leaves the member's prior availability intact. blackout_periods is
+  // service-role-only (RLS), so read it with the service client, not `sb`.
+  const svc = createSupabaseServiceClient();
+  const { data: periods } = await svc
+    .from("blackout_periods")
+    .select("range_start, range_end");
+  const blocked = blackedOutDays(days, periods ?? []);
+  if (blocked.length > 0) {
+    await logServerAction(
+      "submitAvailability",
+      "failure",
+      `blackout rejected: ${blocked.join(", ")}`,
+    );
+    throw new Error(
+      `These dates fall in a blackout window and can't be selected: ${blocked.join(", ")}`,
+    );
+  }
 
   const { error: delErr } = await sb
     .from("availability")
