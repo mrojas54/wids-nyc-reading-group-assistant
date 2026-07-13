@@ -16,26 +16,50 @@ def test_authors_short(authors, expected):
 
 
 class _FakeCursor:
-    def __init__(self, rows):
-        self._rows = rows
-        self._i = 0
-    def __enter__(self): return self
-    def __exit__(self, *a): return False
-    def execute(self, sql, params=None): self._sql = sql
+    def __init__(self, result):
+        self._result = result
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def execute(self, sql, params=None):
+        self._sql = sql
+
     def fetchone(self):
-        # Return the first queued result set's single row (or None).
-        return self._rows[self._i] if self._i < len(self._rows) else None
+        return self._result
 
 
 class _FakeConn:
-    def __init__(self, rows): self._rows = rows
-    def cursor(self): return _FakeCursor(self._rows)
+    """Yields one queued per-query result (a single row or None) per cursor()
+    call, in order — so the meeting-join query and the added_at fallback see
+    different result sets."""
+
+    def __init__(self, results):
+        self._results = list(results)
+        self._i = 0
+
+    def cursor(self):
+        result = self._results[self._i] if self._i < len(self._results) else None
+        self._i += 1
+        return _FakeCursor(result)
 
 
 def test_select_newest_paper_returns_meeting_paper():
     row = (2, "T", "http://x", "abstract", ["Li Zhao"], 2025, None)
     paper = select_newest_paper(_FakeConn([row]))
     assert paper["id"] == 2 and paper["title"] == "T" and paper["authors"] == ["Li Zhao"]
+
+
+def test_select_newest_paper_uses_added_at_fallback():
+    # Meeting-join query misses (None); the added_at fallback returns a row.
+    # This is the only path that exercises the fallback SELECT + its row->dict.
+    fallback = (7, "Fallback Paper", "http://f", "abstract", ["Ana Ng"], 2024, None)
+    paper = select_newest_paper(_FakeConn([None, fallback]))
+    assert paper["id"] == 7 and paper["title"] == "Fallback Paper"
+    assert paper["authors"] == ["Ana Ng"]
 
 
 def test_select_newest_paper_raises_when_no_papers():
