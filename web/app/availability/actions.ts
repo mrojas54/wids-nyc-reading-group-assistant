@@ -26,9 +26,13 @@ export async function submitAvailability(meetingId: number, days: string[]): Pro
   // submit leaves the member's prior availability intact. blackout_periods is
   // service-role-only (RLS), so read it with the service client, not `sb`.
   const svc = createSupabaseServiceClient();
-  const { data: periods } = await svc
+  const { data: periods, error: periodsErr } = await svc
     .from("blackout_periods")
     .select("range_start, range_end");
+  if (periodsErr) {
+    await logServerAction("submitAvailability", "failure", `blackout read: ${periodsErr.message}`);
+    throw new Error(periodsErr.message);
+  }
   const blocked = blackedOutDays(days, periods ?? []);
   if (blocked.length > 0) {
     await logServerAction(
