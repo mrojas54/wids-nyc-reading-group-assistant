@@ -1,0 +1,43 @@
+WiDS · NYC AI Reading Group
+===========================
+
+A NEW QUEEN HAS STEPPED UP TO REIGN THIS MONTH
+A new lead, this month's paper, and a quick availability check.
+
+
+Hi {{ recipient.firstName }},
+
+This month, {{ lead.name }} is leading our discussion.
+
+  {{ lead.name }} — {{ lead.blurb }}
+
+Her pick: {{ paper.shortTitle }} — {{ paper.summary }}
+
+First, let us know when you're free. Share your availability:
+{{ links.availability }}
+
+
+THIS MONTH'S PAPER
+{{ paper.title }}
+{{ paper.authorsShort }}
+
+Read the paper:
+{{ paper.url }}
+
+
+RECOMMENDED PRE-REQUISITES
+{{ prereqs.lede }}
+
+{{ prereqs.text }}
+
+
+See you soon,
+{{ signoff.names }}
+
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
+---
+You're getting this because you're part of the WiDS NYC AI Reading Group.
+Manage your RSVPs: {{ links.rsvpManage }}

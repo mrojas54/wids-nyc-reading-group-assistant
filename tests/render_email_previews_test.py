@@ -118,6 +118,7 @@ def test_preview_main_resolves_quotes_from_pool(capsys):
         "availability_thanks",
         "availability_reminder",
         "pre_meeting_reminder",
+        "new_paper_announcement",
     ):
         for fmt in ("html", "text"):
             assert "{{ quote.text }}" not in payload[key][fmt]
@@ -161,3 +162,28 @@ def test_preview_main_resolves_question_tokens(capsys):
         # no question token left unresolved, and the composed lede is present
         assert "{{ questions." not in payload["pre_meeting_reminder"][fmt]
         assert expected_lede in payload["pre_meeting_reminder"][fmt]
+
+
+def test_new_paper_announcement_carries_prereq_tokens():
+    # The prerequisites block is this email's purpose — guard its source tokens
+    # so a deleted block fails loudly (the unresolved-token guard can't see an
+    # absent token). HTML injects composed rows; the .txt twin the plain list.
+    html = (_TEMPLATES / "new-paper-announcement.html").read_text(encoding="utf-8")
+    txt = (_TEMPLATES / "new-paper-announcement.txt").read_text(encoding="utf-8")
+    assert "{{ prereqs.lede }}" in html
+    assert "{{ prereqs.html }}" in html
+    assert "{{ prereqs.lede }}" in txt
+    assert "{{ prereqs.text }}" in txt
+
+
+def test_preview_main_resolves_new_paper_announcement(capsys):
+    # main() emits the pair only when every {{ token }} resolved; assert the
+    # new-paper template comes through fully hydrated, prereqs section included.
+    import json as _json
+    from scripts.render_email_previews import main
+    assert main() == 0
+    payload = _json.loads(capsys.readouterr().out)
+    body = payload["new_paper_announcement"]
+    for fmt in ("html", "text"):
+        assert "{{" not in body[fmt]
+    assert "Recommended pre-requisites" in body["html"]

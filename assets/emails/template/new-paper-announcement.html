@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>A new queen has stepped up to reign this month</title>
+
+  <!--
+    New-paper announcement email — WiDS NYC AI Reading Group Planner.
+
+    Source design: ReadingGroupEmail.dc.html — Claude Design project
+    aa31a29a-7e2e-4e43-b93c-8535036e0ac4 (court/queens voice branch). High-
+    fidelity port to email-client-safe table markup; the design's CSS variables
+    are inlined as literal hex. Copy is plain voice by decision — the only
+    court/queens flourish kept is the "Women of Data Science NYC" eyebrow and
+    the "A New Queen Has Stepped Up to Reign This Month" hero headline; keep the
+    rest plain. Email-safe scaffolding mirrors
+    rsvp-confirmation.html / pre-meeting-reminder.html. The Geist font stacks
+    match scripts/prerequisites.py so the injected prereqs.html rows blend.
+    (Token names below are written bare, without the double-brace syntax, so
+    this comment is not itself substituted or left half-rendered.)
+
+    Sent by: scheduled_tasks/new-paper-announcement.md — one Gmail *draft* per
+    active member (never auto-sent). The recommended-prerequisites block is
+    AI-drafted per paper, persisted in papers.prerequisites, then composed into
+    the prereqs.* tokens by scripts/prerequisites.py + generate_prerequisites.py.
+
+    Tokens are Mustache-style (recipient.firstName), resolved by
+    scripts/render_email_previews.py / generate_prerequisites.py. Render REFUSES
+    to emit if any token is unresolved. Required hydrated tokens:
+      recipient.firstName,
+      lead.name, lead.initial, lead.blurb,
+      paper.title, paper.shortTitle, paper.summary, paper.authorsShort, paper.url,
+      prereqs.lede, prereqs.html (.html) / prereqs.text (.txt),
+      signoff.names,
+      links.availability, links.rsvpManage
+    Rotated (shared pool, has fallback): quote.text, quote.by, quote.role
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
+    .serif, .hero, .subhead, .paper-title, .lead-name, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #355c4b; }
+
+    @media only screen and (max-width: 620px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 24px !important; padding-right: 24px !important; }
+      .body-text { font-size: 15px !important; line-height: 1.6 !important; }
+      .hero { font-size: 26px !important; }
+      .paper-title { font-size: 17px !important; }
+      .btn-cell a { padding: 13px 18px !important; font-size: 15px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#1a160f;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#1a160f;">
+
+  <!-- Hidden preheader (inbox-snippet text). Zero-width chars push leaked
+       first-paragraph text off-screen. -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    Meet this month's lead and share your availability.
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (dark page backdrop) ===== -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#1a160f" style="background-color:#1a160f;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+
+        <!-- ===== Email card (solid cream) ===== -->
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#fefcef;border:1px solid #ddd4be;border-radius:14px;">
+
+          <!-- ── Masthead (mark, eyebrow, hero, subhead, rule, wordmark) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:36px 32px 4px 32px;">
+              <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-192.png"
+                   width="48" height="48" alt="WiDS NYC"
+                   style="display:block;border:0;border-radius:10px;width:48px;height:48px;margin:0 auto;">
+              <div style="margin-top:14px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:#a8175a;font-weight:600;line-height:1.4;">
+                &#10022; Women of Data Science NYC &#10022;
+              </div>
+              <h1 class="hero serif" style="margin:12px auto 0;max-width:460px;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-weight:500;font-size:30px;letter-spacing:-0.02em;color:#152a23;line-height:1.2;">
+                A New Queen Has Stepped Up to Reign This Month
+              </h1>
+              <p class="subhead serif" style="margin:12px auto 0;max-width:420px;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:16px;color:#a8175a;line-height:1.5;">
+                A new lead, this month's paper, and a quick availability check.
+              </p>
+              <div style="margin:16px auto 0;width:28px;height:2px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
+              <div style="margin-top:14px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#7e6f55;font-weight:500;line-height:1.4;">
+                WiDS &middot; NYC AI Reading Group
+              </div>
+            </td>
+          </tr>
+
+          <!-- ── Greeting ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:500;line-height:1.5;color:#152a23;">
+                Hi {{ recipient.firstName }},
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Intro paragraph 1 (new lead) ── -->
+          <tr>
+            <td class="pad-x" style="padding:12px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1a160f;">
+                This month, <b style="font-weight:600;color:#152a23;">{{ lead.name }}</b> is leading our discussion. A little about her just below.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Intro paragraph 2 (paper one-liner) ── -->
+          <tr>
+            <td class="pad-x" style="padding:12px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1a160f;">
+                Her pick: <span class="serif" style="font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;color:#152a23;">{{ paper.shortTitle }}</span> &mdash; {{ paper.summary }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── New lead card (initial badge / name / blurb) ── -->
+          <tr>
+            <td class="pad-x" style="padding:22px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#faf8ef;border:1px solid #ddd4be;border-radius:8px;">
+                <tr>
+                  <td valign="top" style="padding:16px 18px;">
+                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:#7e6f55;padding-bottom:12px;line-height:1.4;">
+                      Your lead this month
+                    </div>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="top" width="46" style="width:46px;padding-right:14px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="46" style="width:46px;">
+                            <tr>
+                              <td align="center" valign="middle" height="46" bgcolor="#467560" style="width:46px;height:46px;background-color:#467560;border-radius:23px;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-size:20px;font-weight:500;color:#fefcef;line-height:46px;">
+                                {{ lead.initial }}
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td valign="top">
+                          <div class="lead-name serif" style="font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-size:18px;font-weight:500;color:#152a23;line-height:1.3;">
+                            {{ lead.name }}
+                          </div>
+                          <div style="margin-top:3px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.55;color:#594d3b;">
+                            {{ lead.blurb }}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Availability lead-in + primary CTA ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:24px 32px 0 32px;">
+              <p class="serif" style="margin:0 0 14px 0;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:15px;color:#a8175a;line-height:1.5;">
+                First, let us know when you're free:
+              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td class="btn-cell" align="center" bgcolor="#467560" style="border-radius:10px;background-color:#467560;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.availability }}" style="height:46px;v-text-anchor:middle;width:236px;" arcsize="22%" strokecolor="#467560" fillcolor="#467560">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;">Share your availability &rarr;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <a href="{{ links.availability }}"
+                       style="display:inline-block;padding:14px 24px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;">
+                      Share your availability &rarr;
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Paper card (magenta left border, cream fill) ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#faf8ef;border-left:2px solid #c8226d;border-radius:0 6px 6px 0;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <!-- Eyebrow -->
+                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:#861148;line-height:1.4;">
+                      This month's paper
+                    </div>
+                    <!-- Title -->
+                    <h2 class="paper-title serif" style="margin:8px 0 4px 0;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-size:19px;font-weight:500;letter-spacing:-0.005em;line-height:1.3;color:#152a23;">
+                      {{ paper.title }}
+                    </h2>
+                    <!-- Authors -->
+                    <div class="serif" style="font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:14px;color:#594d3b;line-height:1.45;">
+                      {{ paper.authorsShort }}
+                    </div>
+                    <!-- Read the paper -->
+                    <div style="margin-top:10px;">
+                      <a href="{{ paper.url }}"
+                         style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;color:#355c4b;text-decoration:underline;text-decoration-color:#95b9a3;text-underline-offset:3px;">
+                        Read the paper &rarr;
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Recommended pre-requisites (lede + composed rows) ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 0 32px;">
+              <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:#7e6f55;line-height:1.4;">
+                Recommended pre-requisites
+              </div>
+              <p class="serif" style="margin:6px 0 0 0;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:15px;color:#a8175a;line-height:1.5;">
+                {{ prereqs.lede }}
+              </p>
+              <!-- Rows composed by scripts/prerequisites.py (numbered mono cell + escaped text cell). -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+                {{ prereqs.html }}
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Sign-off ── -->
+          <tr>
+            <td class="pad-x" style="padding:26px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px dashed #b9ae96;padding-top:18px;">
+                    <p style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#29241b;line-height:1.55;">
+                      See you soon,
+                    </p>
+                    <p class="signoff-name serif" style="margin:6px 0 0 0;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:18px;color:#244338;line-height:1.4;">
+                      {{ signoff.names }}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Closing quote (rotating women-in-STEM pool) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:26px 32px 0 32px;">
+              <div style="margin:0 auto;width:36px;height:1px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
+              <div style="margin-top:14px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;text-transform:uppercase;letter-spacing:0.14em;font-weight:600;color:#7e6f55;line-height:1.4;">
+                In her words
+              </div>
+              <p class="quote-text serif" style="margin:10px auto 0;max-width:460px;font-family:Newsreader,Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:17px;line-height:1.45;letter-spacing:-0.005em;color:#152a23;">
+                &ldquo;{{ quote.text }}&rdquo;
+              </p>
+              <p style="margin:8px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#594d3b;line-height:1.5;">
+                &mdash; <span style="font-weight:600;color:#29241b;">{{ quote.by }}</span>, <span style="font-weight:400;color:#7e6f55;">{{ quote.role }}</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td align="center" style="padding:26px 32px 30px 32px;">
+              <p style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;color:#7e6f55;line-height:1.55;">
+                You're getting this because you're part of the WiDS NYC AI Reading Group. <a href="{{ links.rsvpManage }}" style="color:#355c4b;text-decoration:underline;text-underline-offset:2px;">Manage your RSVPs</a>.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- ===== /Email card ===== -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
