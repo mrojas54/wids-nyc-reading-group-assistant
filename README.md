@@ -21,6 +21,7 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Zotero bibliography | [docs/runbooks/zotero-bibliography.md](docs/runbooks/zotero-bibliography.md) | [2026-05-05-wids-zotero-integration-design.md](docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md) | [2026-05-05-wids-zotero-integration.md](docs/superpowers/plans/2026-05-05-wids-zotero-integration.md) |
 | Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
 | Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| Blackout periods | [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md) | [2026-07-12-blackout-dates-design.md](docs/superpowers/specs/2026-07-12-blackout-dates-design.md) | [2026-07-12-blackout-dates.md](docs/superpowers/plans/2026-07-12-blackout-dates.md) |
 
 ## Prerequisites (one-time operator setup)
 
@@ -108,6 +109,7 @@ The leader (a different person each cycle) handles `/wids-find-paper` and then g
 
 - **DB write failed** → check `/admin/logs` or query `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`. See [docs/admin-logs.md](docs/admin-logs.md) for filters, enrichment fields, and idempotency-key conventions.
 - **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
+- **Members can't submit certain dates, or the scheduler skips a window** → those dates fall inside a blackout period (the group is on break). To view, add, extend, or remove windows — and the `range_end`-is-exclusive gotcha — see [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md).
 - **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
 - **Calendar event got rescheduled by someone** → `calendar-rsvp-sync` syncs it back to the DB nightly.
 - **Paper Pal synthesis failed** → the `/new` upload page surfaces the error inline; inspect the Supabase Edge Function logs for `analyze-paper`. The leader retries by re-uploading the PDF at `/new?paperId=<id>`. (Legacy fallback only: if running the deprecated `/wids-make-guide` chain, a failure sets `meetings.status='guide_failed'` and is re-run manually.)
