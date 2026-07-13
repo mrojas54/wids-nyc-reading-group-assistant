@@ -27,6 +27,7 @@ work does not get mistaken for production behavior.
 | `rsvp-confirmation.{html,txt}` | `scheduled_tasks/pre-meeting-reminder.md` Step 4a and `scheduled_tasks/availability-chase.md` Step 5e | Live for attending RSVPs 2 days before a meeting, and for availability submitters during the operator-triggered chase follow-up. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotated from the shared pool. Required tokens: `recipient.firstName`, `lead.name`/`lead.initial`/`lead.blurb`, `paper.title`/`paper.shortTitle`/`paper.summary`/`paper.authorsShort`/`paper.url`, `prereqs.lede` + `prereqs.html` (`.txt` twin uses `prereqs.text`), `signoff.names`, `links.availability`, `links.rsvpManage`. |
 
 ## Preview and validation
 
@@ -108,6 +109,7 @@ Current keys:
 | Availability thank-you to one submitter | `availability-chase:thanks:meeting=<meeting_id>:member=<member_id>` |
 | Pre-meeting reminder run for one meeting | `pre-meeting-reminder:meeting=<id>` |
 | Post-meeting thanks run for one meeting | `post-meeting-thanks:meeting=<id>` |
+| New-paper announcement drafts for one paper | `new-paper-announcement:paper=<paper_id>` |
 
 `availability-chase` operator alerts intentionally do **not** use
 `idempotency_key`; they use `metadata.kind = 'operator_alert'` plus
