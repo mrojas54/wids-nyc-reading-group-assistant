@@ -6,8 +6,13 @@
 
 ## Goal
 
-Prevent the scheduler from proposing meeting dates that fall inside operator-defined
-"blackout" windows. Two windows are needed for 2026:
+Keep meetings out of operator-defined "blackout" windows, enforced at **two points**:
+
+1. **Scheduling** — the scheduler never proposes a candidate slot inside a blackout.
+2. **Availability submission** — members can't submit availability inside a blackout: the
+   portal calendar disables those dates, and the server action rejects any that slip through.
+
+Two windows are needed for 2026:
 
 | Window | Range (America/New_York) | Meaning |
 |---|---|---|
@@ -62,9 +67,12 @@ CREATE TABLE blackout_periods (
 Conventions match `availability` (SERIAL PK, `TIMESTAMPTZ`, `CHECK (range_end > range_start)`).
 
 **RLS:** The database's out-of-band `ensure_rls` event trigger auto-enables RLS on every
-new `public` table. `blackout_periods` is operator config read only by the service-role
-scheduler, so **no browser-facing policies are added** — it follows the same
-service-role-only exception that `command_log` uses. A comment in the migration documents this.
+new `public` table. `blackout_periods` is operator config. Every reader is server-side —
+the scheduler (Supabase MCP, service role) and the two portal readers (the availability page
+and `submitAvailability`, both via `createSupabaseServiceClient()`) — so **no browser-facing
+policies are added**; the table follows the same service-role-only exception `command_log`
+uses. The browser never reads it directly (the page passes disabled dates down as props).
+A comment in the migration documents this.
 
 ## Seed rows
 
@@ -119,6 +127,32 @@ Step 2 explicitly reuses admin's Step 2 query, so the filter applies to reading 
 A one-line pointer will be added there noting the shared blackout filter, so the coupling
 is visible and not accidentally broken.
 
+## Availability submission guard (portal)
+
+Members must not be able to submit availability inside a blackout window. Enforced at two
+layers, both reading `blackout_periods` **server-side via the service-role client** (no RLS
+policy needed):
+
+**Calendar (client UX).** [web/app/availability/page.tsx](../../../web/app/availability/page.tsx)
+(server component) fetches blackout periods via `createSupabaseServiceClient()`, computes the
+set of blacked-out NY calendar dates, and passes it to `AvailabilityForm` → the month calendar,
+which renders those days disabled/unselectable. The form's date list is already pruned to
+today→end-of-next-month; blacked-out days within that range are simply greyed out.
+
+**Server action (authoritative backstop).** In `submitAvailability`
+([web/app/availability/actions.ts:9](../../../web/app/availability/actions.ts)), after the
+member is resolved and **before the existing rows are deleted** (currently line 23), fetch
+blackout periods (service client) and reject the submit if any selected day's 6–9 PM ET slot
+overlaps a blackout. Ordering matters: checking before the delete means a rejected submit
+leaves the member's prior availability intact. The rejection returns a clear error naming the
+offending date(s), surfaced by the form.
+
+**Shared overlap helper.** Both layers call one helper (new `web/lib/blackout.ts`,
+`blackedOutDays(days, periods)`) that reuses the existing `nyDayAtHour(day, hour)` slot
+construction, so the client-disable set and the server-reject decision can never diverge. The
+test matches the scheduler's: a day's slot `[nyDayAtHour(day,18), nyDayAtHour(day,21))` is
+blocked iff `slotStart < bp.range_end AND slotEnd > bp.range_start`.
+
 ## Failure handling / edge cases
 
 - **All availability inside a blackout** → filtered query returns zero rows. Add a distinct
@@ -140,13 +174,22 @@ New `tests/blackout_periods_test.sql`, following the existing `*_test.sql` patte
    availability slot is still present.
 4. Assert the `CHECK (range_end > range_start)` constraint rejects an inverted range.
 
+**Submission guard** — unit-test the shared helper `blackedOutDays(days, periods)` in the web
+app's test setup: a date inside a blackout is returned as blocked, a date in the Aug 1–20 gap
+is not, and a date whose slot straddles a blackout boundary is blocked. If the web app has a
+server-action test harness, add a `submitAvailability` test asserting a blacked-out submit
+throws **and leaves existing rows intact** (delete-after-check ordering); otherwise the helper
+unit test plus manual verification via the preview covers it. (Test harness to be confirmed
+when writing the plan.)
+
 ## Non-goals
 
 - **Manual Google-Calendar reschedules** (`scheduled_tasks/calendar-rsvp-sync.md`) are
   operator overrides that mirror a human's manual choice — they are **not** blocked.
   The blackout governs what the scheduler *proposes*, not what the operator manually books.
-- **Availability submission** is not restricted — members can still submit availability
-  inside a blackout window via the portal; the scheduler simply won't pick those slots.
+- **A database trigger** on `availability` is out of scope — the portal server action is the
+  only write path, so submission is guarded there (calendar + server action), not at the DB
+  level. Simulation/CLI scripts that write availability directly are unaffected.
 - **Recurring/annual blackouts** are out of scope (decision: 2026 only).
 
 ## Migration note
@@ -158,8 +201,17 @@ mis-numbering incidents.
 
 ## Files touched
 
+Scheduler side:
 - `migrations/021_blackout_periods.sql` — new (table + RLS comment + 2 seed rows)
 - `.claude/commands/wids-schedule-admin.md` — `slots` CTE filter + zero-slot halt message
 - `.claude/commands/wids-schedule-reading-group.md` — one-line shared-filter pointer + zero-slot halt message
 - `tests/blackout_periods_test.sql` — new
 - `migrations/README.md` — add `021` row to the migration table
+
+Portal side (availability submission guard):
+- `web/lib/blackout.ts` — new shared `blackedOutDays(days, periods)` helper (reuses `nyDayAtHour`)
+- `web/app/availability/actions.ts` — read blackout periods (service client) + reject overlapping submit, before the delete
+- `web/app/availability/page.tsx` — fetch blacked-out dates (service client), pass to the form
+- `web/app/availability/AvailabilityForm.tsx` — accept disabled-dates prop, forward to the month calendar
+- the month calendar component (path TBD when writing the plan) — render disabled days unselectable
+- web-app test for `blackedOutDays` (+ `submitAvailability` if a server-action harness exists)
