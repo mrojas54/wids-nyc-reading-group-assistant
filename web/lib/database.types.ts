@@ -64,6 +64,30 @@ export type Database = {
           },
         ]
       }
+      blackout_periods: {
+        Row: {
+          created_at: string
+          id: number
+          range_end: string
+          range_start: string
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          range_end: string
+          range_start: string
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          range_end?: string
+          range_start?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       command_log: {
         Row: {
           actor: string | null
