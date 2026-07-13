@@ -75,3 +75,29 @@ def test_build_gather_contract_shape():
     assert c["paper_id"] == 2 and c["title"] == "T" and c["url"] == "http://x"
     assert set(c["instructions"]["produce"]) == {"short_title", "summary", "lede", "items"}
     assert c["instructions"]["items_count"] == 3
+
+
+def test_build_tokens_maps_all_template_keys():
+    from scripts.generate_prerequisites import build_tokens
+    paper = {"id": 2, "title": "Full Title", "url": "http://x",
+             "authors": ["Li Zhao", "Mei Guo", "Wei Wang"]}
+    prereqs = {"lede": "Groundwork.", "items": ["a", "b", "c"],
+               "summary": "it forecasts gold.", "short_title": "Short T"}
+    per_send = {"recipient.firstName": "Maya", "lead.name": "Claudia",
+                "lead.initial": "C", "lead.blurb": "leads this one.",
+                "signoff.names": "Michelle & Claudia",
+                "links.availability": "http://a", "links.rsvpManage": "http://r"}
+    quote = {"quote.text": "q", "quote.by": "Grace Hopper", "quote.role": "CS"}
+    t = build_tokens(paper, prereqs, per_send, quote)
+    assert t["paper.title"] == "Full Title"
+    assert t["paper.shortTitle"] == "Short T"
+    assert t["paper.summary"] == "it forecasts gold."
+    assert t["paper.authorsShort"] == "Zhao, Guo & Wang"
+    assert t["prereqs.lede"] == "Groundwork." and "<tr>" in t["prereqs.html"]
+    assert t["recipient.firstName"] == "Maya" and t["quote.by"] == "Grace Hopper"
+
+
+def test_render_new_paper_email_raises_on_unresolved():
+    from scripts.generate_prerequisites import render_new_paper_email
+    with pytest.raises(ValueError):
+        render_new_paper_email({"recipient.firstName": "Maya"})  # missing most tokens
