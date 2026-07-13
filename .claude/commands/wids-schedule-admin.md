@@ -30,9 +30,15 @@ Compute the highest-overlap window. For each pair (range_start, range_end) appea
 In SQL (single query):
 ```sql
 WITH slots AS (
-  SELECT DISTINCT range_start AS slot_start,
-                  range_start + interval '90 minutes' AS slot_end
-  FROM availability WHERE meeting_id = <admin_id>
+  SELECT DISTINCT av.range_start AS slot_start,
+                  av.range_start + interval '90 minutes' AS slot_end
+  FROM availability av
+  WHERE av.meeting_id = <admin_id>
+    AND NOT EXISTS (          -- skip slots overlapping any blackout window
+      SELECT 1 FROM blackout_periods bp
+      WHERE av.range_start < bp.range_end
+        AND av.range_start + interval '90 minutes' > bp.range_start
+    )
 ),
 overlaps AS (
   SELECT s.slot_start, s.slot_end,
@@ -111,4 +117,5 @@ VALUES ('slash_command', '/wids-schedule-admin', 'success',
 ## Failure handling
 
 - No availability rows → halt: "No availability collected yet. Members submit via the portal at `${PORTAL_URL}/availability`. Wait for responses or run `availability-chase` to nudge non-responders."
+- Availability exists but the filtered window list is empty (every submitted slot falls in a blackout) → halt: "All submitted availability falls within a blackout window. No bookable slot — collect availability outside the blackout, or clear the relevant `blackout_periods` row."
 - Calendar event creation fails → no DB update; log failure with the error message.

@@ -7,6 +7,7 @@ import {
   pruneToWindow,
 } from "@/components/MonthCalendar";
 import { Button } from "@/components/ui";
+import { isDayBlackedOut, type BlackoutPeriod } from "@/lib/blackout";
 import { submitAvailability } from "./actions";
 
 function startOfDay(d: Date): Date {
@@ -16,17 +17,22 @@ function startOfDay(d: Date): Date {
 export function AvailabilityForm({
   meetingId,
   initialDays,
+  blackoutPeriods = [],
 }: {
   meetingId: number;
   initialDays: string[];
+  blackoutPeriods?: BlackoutPeriod[];
 }) {
   // Mirror the calendar's pruning so the "N days selected" counter is
   // correct from first render — without this, stale pre-fill entries show
-  // up in the count even though no cell renders as selected.
+  // up in the count even though no cell renders as selected. Blacked-out
+  // days get the same treatment so the count matches what the calendar shows.
   const prunedInitial = useMemo(() => {
     const today = startOfDay(new Date());
-    return pruneToWindow(initialDays, today, endOfNextMonth(today));
-  }, [initialDays]);
+    return pruneToWindow(initialDays, today, endOfNextMonth(today)).filter(
+      (k) => !isDayBlackedOut(k, blackoutPeriods),
+    );
+  }, [initialDays, blackoutPeriods]);
   const [days, setDays] = useState<string[]>(prunedInitial);
   const [pending, start] = useTransition();
 
@@ -43,7 +49,11 @@ export function AvailabilityForm({
 
   return (
     <div className="availability-form">
-      <MonthCalendar initialSelected={prunedInitial} onChange={setDays} />
+      <MonthCalendar
+        initialSelected={prunedInitial}
+        onChange={setDays}
+        blackoutPeriods={blackoutPeriods}
+      />
 
       <div className="cal-summary">
         <div className="count">

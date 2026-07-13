@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { isDayBlackedOut, type BlackoutPeriod } from "@/lib/blackout";
 
 type Props = {
   initialSelected: string[];
@@ -14,6 +15,8 @@ type Props = {
   horizonEnd?: Date;
   /** Inject a stable "today" for tests/snapshots. */
   today?: Date;
+  /** Blackout windows; days overlapping one render disabled and are pruned from selection. */
+  blackoutPeriods?: BlackoutPeriod[];
 };
 
 const WK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -103,6 +106,7 @@ export function MonthCalendar({
   onChange,
   horizonEnd: horizonEndProp,
   today: todayProp,
+  blackoutPeriods = [],
 }: Props) {
   const today = useMemo(() => startOfDay(todayProp ?? new Date()), [todayProp]);
   const horizonEnd = useMemo(
@@ -112,8 +116,15 @@ export function MonthCalendar({
 
   // Prune pre-fill at mount so stale rows (past dates, out-of-window) don't
   // sit as invisible Set entries the user can't deselect. See pruneToWindow.
+  // Blacked-out days get the same treatment (mirrors the window-pruning
+  // rationale): a disabled cell the user can't deselect must not sit in the Set.
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(pruneToWindow(initialSelected, today, horizonEnd)),
+    () =>
+      new Set(
+        pruneToWindow(initialSelected, today, horizonEnd).filter(
+          (k) => !isDayBlackedOut(k, blackoutPeriods),
+        ),
+      ),
   );
 
   // Render the current month and (if the horizon spills) the next month.
@@ -150,7 +161,7 @@ export function MonthCalendar({
           const key = isoDay(date);
           const inHorizon = date >= today && date <= horizonEnd;
           const isPast = date < today;
-          const disabled = !inHorizon || isPast;
+          const disabled = !inHorizon || isPast || isDayBlackedOut(key, blackoutPeriods);
           const isSelected = selected.has(key);
           const isToday = sameDay(date, today);
           const cls = [

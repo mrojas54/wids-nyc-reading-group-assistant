@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { Brandmark, Icon } from "@/components/ui";
 import { AvailabilityForm } from "./AvailabilityForm";
 
@@ -97,6 +98,15 @@ export default async function AvailabilityPage({
     new Date(r.range_start).toISOString().slice(0, 10),
   );
 
+  // Display-only fetch: unlike the server action (which fails closed on a
+  // blackout-read error), this page degrades gracefully via `?? []` — a
+  // failed read here just means no greying, not a bypass of the rule, since
+  // submission is still checked authoritatively server-side.
+  const svc = createSupabaseServiceClient();
+  const { data: blackoutPeriods } = await svc
+    .from("blackout_periods")
+    .select("range_start, range_end");
+
   return (
     <div className="shell">
       <header className="shell-header">
@@ -125,7 +135,11 @@ export default async function AvailabilityPage({
           </p>
         </div>
 
-        <AvailabilityForm meetingId={prep.id} initialDays={initialDays} />
+        <AvailabilityForm
+          meetingId={prep.id}
+          initialDays={initialDays}
+          blackoutPeriods={blackoutPeriods ?? []}
+        />
       </main>
     </div>
   );
