@@ -58,6 +58,13 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 | `SUPABASE_SERVICE_ROLE_KEY`       | Supabase project settings → API | Secret; mark Sensitive in Vercel.                                                                                                           |
 | `NEXT_PUBLIC_SITE_URL`            | Vercel deployment URL           | e.g. `https://wids-nyc.vercel.app`. Used to build magic-link callback URLs.                                                                 |
 | `NEXT_PUBLIC_GITHUB_REPO`         | This repo                       | `mrojas54/wids-nyc-reading-group-assistant`. Used for the Colab "Open notebook" button on companion pages; if unset, the button is hidden.  |
+| `SPECTER2_MODEL_BLOB_URL`         | Vercel Blob                     | Private Blob URL for `specter2_int8.onnx`. Required when `/admin/suggest` falls back to local WASM embeddings or runs cache warmup.          |
+| `BLOB_READ_WRITE_TOKEN`           | Vercel Blob                     | Secret token read by `@vercel/blob` for private model fetches. Required with `SPECTER2_MODEL_BLOB_URL`; mark Sensitive in Vercel.            |
+| `S2_API_KEY`                      | Semantic Scholar                | Optional. When unset, suggest calls S2 unauthenticated and falls back to WASM immediately on 429 rate limits.                                |
+| `PAPER_PAL_INPORTAL_SYNTHESIS`    | Operator choice                 | Optional feature flag for `/new`; defaults false when unset. Edge Function role gates remain the enforcement boundary.                       |
+
+For the full suggest/SPECTER2 workflow, cache warmup, and troubleshooting guide,
+see [../docs/admin-suggest.md](../docs/admin-suggest.md).
 
 ### Vercel project shape
 

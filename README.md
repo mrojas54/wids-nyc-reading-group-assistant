@@ -69,6 +69,7 @@ Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-s
 - Connect this GitHub repo to Vercel.
 - Set the **Root Directory** to `web` in project settings.
 - Add env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_GITHUB_REPO=mrojas54/wids-nyc-reading-group-assistant`.
+- For `/admin/suggest` SPECTER2 fallback, also add `SPECTER2_MODEL_BLOB_URL` and `BLOB_READ_WRITE_TOKEN` from Vercel Blob. `S2_API_KEY` is optional; when unset, suggest calls Semantic Scholar unauthenticated and falls back to WASM on rate limits.
 - In Supabase → Authentication → URL Configuration, add `<vercel-url>/auth/callback` to the allowed redirect list.
 - See [web/README.md](web/README.md) for full deployment notes.
 
