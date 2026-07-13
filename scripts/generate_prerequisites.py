@@ -64,3 +64,30 @@ def select_newest_paper(conn: psycopg.Connection) -> dict[str, Any]:
     if row is None:
         raise LookupError("no papers in the database")
     return _row_to_paper(row)
+
+
+def build_gather_contract(paper: dict[str, Any]) -> dict[str, Any]:
+    """Emit the JSON the agent uses to draft the announcement's generated fields.
+
+    The agent reads this, drafts with Claude, and persists the result to
+    papers.prerequisites (status='draft') via the Supabase MCP.
+    """
+    return {
+        "paper_id": paper["id"],
+        "title": paper["title"],
+        "abstract": paper.get("abstract") or "",
+        "authors": paper.get("authors") or [],
+        "url": paper["url"],
+        "instructions": {
+            "produce": ["short_title", "summary", "lede", "items"],
+            "items_count": 3,
+            "guidance": (
+                "short_title: a <=12-word rewrite of the title for the intro line. "
+                "summary: ONE sentence (<=30 words) completing 'she'll steer the "
+                "discussion on <short_title> — <summary>'. lede: one line framing "
+                "the prerequisites. items: exactly 3 concrete things to review "
+                "before the discussion (concepts/skills), each <=20 words. "
+                "Return JSON {short_title, summary, lede, items:[3]}."
+            ),
+        },
+    }

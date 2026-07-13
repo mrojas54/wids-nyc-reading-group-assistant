@@ -65,3 +65,13 @@ def test_select_newest_paper_uses_added_at_fallback():
 def test_select_newest_paper_raises_when_no_papers():
     with pytest.raises(LookupError):
         select_newest_paper(_FakeConn([None]))
+
+
+def test_build_gather_contract_shape():
+    from scripts.generate_prerequisites import build_gather_contract
+    paper = {"id": 2, "title": "T", "abstract": "A", "authors": ["Li Zhao"],
+             "url": "http://x", "year": 2025, "prerequisites": None}
+    c = build_gather_contract(paper)
+    assert c["paper_id"] == 2 and c["title"] == "T" and c["url"] == "http://x"
+    assert set(c["instructions"]["produce"]) == {"short_title", "summary", "lede", "items"}
+    assert c["instructions"]["items_count"] == 3
