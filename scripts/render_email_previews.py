@@ -122,12 +122,15 @@ NEW_PAPER_TOKENS = {
 }
 
 # Illustrative prerequisites for the preview (production values come from
-# papers.prerequisites via scripts/generate_prerequisites.py).
+# papers.prerequisites via scripts/generate_prerequisites.py). Items may be a
+# plain string or a {text, url} mapping — a url renders a clickable link.
 PREVIEW_PREREQS = (
     "A little groundwork will make the discussion land harder.",
     [
-        "Skim how an LSTM cell carries state across a sequence.",
-        "Recall what self-attention computes in a transformer block.",
+        {"text": "Skim how an LSTM cell carries state across a sequence.",
+         "url": "https://colah.github.io/posts/2015-08-Understanding-LSTMs/"},
+        {"text": "Recall what self-attention computes in a transformer block.",
+         "url": "https://jalammar.github.io/illustrated-transformer/"},
         "Have a one-line intuition for why feature fusion can help forecasting.",
     ],
 )
