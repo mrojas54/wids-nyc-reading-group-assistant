@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from scripts.discussion_questions import load_questions, question_tokens
+from scripts.prerequisites import prereq_tokens
 from scripts.quotes import load_bundle, quote_tokens, select_quote
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -102,6 +103,35 @@ PRE_MEETING_TOKENS = {
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
 }
 
+NEW_PAPER_TOKENS = {
+    "recipient.firstName": "Maya",
+    "lead.name": "Claudia",
+    "lead.initial": "C",
+    "lead.blurb": "Claudia works on time-series forecasting and volunteered to "
+                  "steer us through this one.",
+    "paper.title": "Hybrid LSTM–Transformer Architecture with Multi-Scale "
+                   "Feature Fusion for High-Accuracy Gold Futures Price Forecasting",
+    "paper.shortTitle": "A Hybrid LSTM–Transformer Model for Gold Futures Forecasting",
+    "paper.summary": "it pairs an LSTM with a transformer and multi-scale "
+                     "feature fusion to forecast gold futures prices.",
+    "paper.authorsShort": "Zhao, Guo & Wang",
+    "paper.url": "https://doi.org/10.3390/math13101551",
+    "signoff.names": "Michelle & Claudia",
+    "links.availability": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
+    "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
+}
+
+# Illustrative prerequisites for the preview (production values come from
+# papers.prerequisites via scripts/generate_prerequisites.py).
+PREVIEW_PREREQS = (
+    "A little groundwork will make the discussion land harder.",
+    [
+        "Skim how an LSTM cell carries state across a sequence.",
+        "Recall what self-attention computes in a transformer block.",
+        "Have a one-line intuition for why feature fusion can help forecasting.",
+    ],
+)
+
 MUSTACHE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
 
@@ -142,7 +172,11 @@ def main() -> int:
     pre_meeting, u_pre = render_pair(
         "pre-meeting-reminder", {**PRE_MEETING_TOKENS, **q, **qtokens}
     )
-    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder + u_pre))
+    pq = prereq_tokens(PREVIEW_PREREQS[0], list(PREVIEW_PREREQS[1]))
+    new_paper, u_new = render_pair(
+        "new-paper-announcement", {**NEW_PAPER_TOKENS, **q, **pq}
+    )
+    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder + u_pre + u_new))
     if unresolved:
         print(f"ERROR: unresolved tokens in rendered output: {unresolved}", file=sys.stderr)
         return 1
@@ -152,6 +186,7 @@ def main() -> int:
             "availability_thanks": {"html": thanks["html"], "text": thanks["txt"]},
             "availability_reminder": {"html": reminder["html"], "text": reminder["txt"]},
             "pre_meeting_reminder": {"html": pre_meeting["html"], "text": pre_meeting["txt"]},
+            "new_paper_announcement": {"html": new_paper["html"], "text": new_paper["txt"]},
         },
         sys.stdout,
     )
