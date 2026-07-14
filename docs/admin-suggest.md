@@ -98,13 +98,16 @@ Format-wise, the system handles:
 | Format | Example | What happens |
 |---|---|---|
 | arXiv URL | `https://arxiv.org/abs/2501.12345` | Parsed to `ARXIV:2501.12345` |
-| arXiv ID | `arXiv:2501.12345` or `ARXIV:2501.12345` | Used as-is |
+| arXiv ID | `arXiv:2501.12345`, `2501.12345`, or `cs.AI/0601001` | Parsed to `ARXIV:...` |
 | DOI URL | `https://doi.org/10.3390/math13101551` | Parsed to `DOI:10.3390/math13101551` |
 | Bare DOI | `10.3390/math13101551` | Parsed to `DOI:...` |
-| S2 paper URL | `https://www.semanticscholar.org/paper/abc123...` | Uses the 40-char hash |
+| Canonical S2 ID | `CorpusId:123456789` or `ARXIV:2501.12345` | Used as-is |
+| S2 paper URL | `https://www.semanticscholar.org/paper/abc123...` | Uses the paper URL identifier |
 
-Anything that doesn't match these patterns is silently dropped. If all
-your inputs are unparseable, you'll get a 400 error explaining why.
+Anything that doesn't match these patterns is dropped before resolution. If all
+your inputs are unparseable, `/api/admin/resolve-papers` returns a 400 explaining
+why. If an input parses but neither S2 nor the arXiv fallback can return title
+metadata, it is omitted from the resolved candidate list.
 
 When using the category helper, copy either the arXiv ID (`arXiv:2501.12345`) or
 the abstract URL (`https://arxiv.org/abs/2501.12345`) from arXiv. The category
@@ -140,9 +143,9 @@ browser aborts at 60 seconds so it can still receive the server's JSON
 - "Timed out after 60 s" or a JSON `{"error":"timeout"}` response →
   cold start or local WASM inference was unusually slow. Just retry —
   the second request is often warm.
-- "Semantic Scholar is unavailable" → S2 is having a bad day. Wait a
-  bit. The system will try the local fallback automatically, so this
-  only fires if BOTH S2 and the local model failed.
+- A 502 with `s2_auth` or `s2_request` → S2 returned an auth or bad-request
+  response that should not be guessed around. Check `S2_API_KEY` and the paper
+  ID format. Transient S2 failures and 429s fall through to WASM automatically.
 
 ---
 
@@ -150,11 +153,25 @@ browser aborts at 60 seconds so it can still receive the server's JSON
 
 ### The high-level flow
 
-When you submit, the request travels through three layers:
+When you submit, the browser does three pieces of prep work before the ranking
+request:
+
+1. `GET /api/suggest` starts a same-Lambda SPECTER2 warmup. This endpoint lives
+   in the same route file as `POST /api/suggest` so the module-scope
+   `modelPromise` can be reused by the later POST when Vercel keeps both calls
+   on the same warm container.
+2. `POST /api/admin/resolve-papers` parses pasted IDs/URLs, fetches title and
+   abstract metadata from Semantic Scholar, falls back to the arXiv export API
+   for arXiv papers S2 does not know yet, and upserts resolvable papers into
+   `papers`.
+3. `GET /api/admin/past-picks?window=all|last6m` loads the comparison set from
+   `papers` rows that have `s2_paper_id`.
+
+Then `POST /api/suggest` runs the embedding and ranking pipeline:
 
 ```
 Your browser
-    │  POST /api/suggest  { candidates, past_picks, lambda }
+    │  POST /api/suggest  { candidates, past_picks, lambda, k? }
     ▼
 Vercel Node Function (a single serverless container)
     │
@@ -168,10 +185,13 @@ Vercel Node Function (a single serverless container)
     ▼ Compute MMR ranking → JSON response
 ```
 
-The whole pipeline is wrapped in a 55-second server timeout and a
-60-second client abort. The split is deliberate: the server needs to
-finish under Vercel's 60-second `maxDuration` so it can return a clean
-504 JSON body instead of being killed by the platform.
+The whole POST pipeline is wrapped in a 55-second server timeout and a
+60-second client abort. The split is deliberate: the server needs to finish
+under Vercel's 60-second `maxDuration` so it can return a clean 504 JSON body
+instead of being killed by the platform. Cancellation is cooperative: the
+timeout signal is checked before WASM inference and between SPECTER2 chunks, so
+a single CPU-bound `session.run` call is allowed to finish before the next abort
+check.
 
 ### Why "embeddings" at all
 
@@ -252,6 +272,8 @@ A few decisions worth understanding:
 | Single embedding space (`model='specter_v2'`) for both S2 and WASM | Adapter-fused ONNX matches S2's vectors closely enough; mixing them in one pgvector column is safe |
 | Vectors cached forever in Supabase | A paper's embedding never changes (model is frozen), so re-fetching is wasted |
 | WASM model loaded lazily (singleton promise) | All-cache-hit requests skip the 5–15s load entirely |
+| GET warmup shares the same route file as POST | Vercel isolates route files into separate functions; colocating GET and POST is what lets them share the model singleton on a warm container |
+| Admin cache warmup batches at 10 by default | Each `/api/admin/backfill-embeddings` call stays inside the 60s function budget while still hydrating multiple missing vectors |
 | 55 s server timeout, 60 s client/function budget | Lets the route return a clean JSON 504 before Vercel's hard kill while still giving cold SPECTER2 starts room to finish |
 | Auth check happens BEFORE any DB or S2 access | Don't leak DB queries to logged-out users |
 | Failed cache writes don't break the request | Cache is a perf optimization, not a correctness gate |
@@ -294,6 +316,42 @@ The same canonical JSON is used by `/wids-find-paper search --category <code>` t
 validate category filters and by the `pick` flow to map arXiv category terms into
 topic-tagging context. Unknown codes are intentionally dropped or rejected rather
 than guessed.
+
+### Warming the embedding cache
+
+Use this after a deploy that touches suggest runtime code, after applying a large
+paper backfill, or before a leader session where cold-start latency matters.
+
+From the portal:
+
+1. Sign in as a member whose `members.role` is `operator`, `leader`, or `admin`.
+2. Open `/admin/suggest`.
+3. Expand **Cache warmup (admin)**.
+4. Click **Warm embedding cache** and leave the tab open until it reports that
+   the cache is warm.
+
+What happens behind the button:
+
+- The browser loops over `POST /api/admin/backfill-embeddings` with
+  `{ "batch_size": 10 }`.
+- The route selects every `papers` row with `s2_paper_id`, subtracts existing
+  `paper_embeddings` rows where `model='specter_v2'`, and embeds the first
+  missing batch.
+- For each batch, S2 hits are cached directly. S2 429s, missing embeddings,
+  missing-corpus responses, and transient S2 failures fall through to WASM.
+- The loop stops when the route returns `remaining: 0`; if all eligible papers
+  were already cached, it returns `embedded: 0`.
+
+Operational constraints:
+
+- `SPECTER2_MODEL_BLOB_URL` and `BLOB_READ_WRITE_TOKEN` must be present for WASM
+  fallback or backfill to load the private ONNX model from Vercel Blob.
+- `S2_API_KEY` is optional. Without it, S2 requests are unauthenticated and the
+  route intentionally falls back to WASM immediately on 429 instead of retrying
+  inside the same rate-limit window.
+- The route uses the service-role Supabase client because it writes
+  `paper_embeddings`; do not expose it to members outside the leader/admin role
+  gate.
 
 ### Re-quantizing the SPECTER2 model
 
@@ -387,6 +445,18 @@ No code change, no redeploy needed beyond restarting the function
 
 The benefit of having a key: per-key rate limits instead of per-IP,
 and access to higher tiers if usage grows.
+
+### Troubleshooting runtime failures
+
+| Symptom / response | Likely source | What to check |
+|---|---|---|
+| `401 {"error":"unauthorized"}` or `403 {"error":"forbidden"}` from `/api/suggest` or `/api/admin/*` | Role gate | Confirm the user is signed in and `members.role` is `operator`, `leader`, or `admin`. |
+| `400 {"error":"no_valid_urls"}` from `/api/admin/resolve-papers` | Input parsing | Use arXiv IDs/URLs, DOI values/URLs, canonical S2 IDs such as `CorpusId:...`, or Semantic Scholar paper URLs. |
+| `200 {"resolved":[]}` from `/api/admin/resolve-papers` | Metadata lookup failed after parsing | For arXiv papers, confirm the ID exists in the arXiv export API; for DOI/S2 IDs, check Semantic Scholar can resolve the paper. |
+| `502 {"error":"s2_auth"}` | Bad S2 credentials | Remove or replace `S2_API_KEY`; unauthenticated mode is supported, but an invalid key fails closed. |
+| `502 {"error":"wasm_model_load_failed"}` | Private model load or integrity check | Confirm `SPECTER2_MODEL_BLOB_URL`, `BLOB_READ_WRITE_TOKEN`, and the SHA pinned in `web/lib/suggest/specter2-wasm.ts` match the Vercel Blob object. |
+| `504 {"error":"timeout"}` or browser "Timed out after 60 s" | Cold model load plus S2/embedding work exceeded the budget | Retry once while the container is warm; if it repeats, warm the embedding cache and inspect Vercel logs for `suggest_request` / `backfill_batch`. |
+| Results are slow but successful with many `fallback` diagnostics | S2 lacks embeddings or is rate-limiting | Add `S2_API_KEY` for higher limits, warm the cache, or reduce the candidate batch for one-off sessions. |
 
 ---
 
