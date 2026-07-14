@@ -31,11 +31,15 @@ class _FakeCursor:
     def fetchone(self):
         return self._result
 
+    def fetchall(self):
+        return list(self._result or [])
+
 
 class _FakeConn:
-    """Yields one queued per-query result (a single row or None) per cursor()
-    call, in order — so the meeting-join query and the added_at fallback see
-    different result sets."""
+    """Yields one queued per-query result per cursor() call, in order — so the
+    meeting-candidates query (consumed via fetchall) and the added_at fallback
+    (consumed via fetchone) see different result sets. Queue a *list* of rows for
+    the candidates query and a single row/None for the fallback."""
 
     def __init__(self, results):
         self._results = list(results)
@@ -47,24 +51,79 @@ class _FakeConn:
         return _FakeCursor(result)
 
 
+# Candidate rows carry the 7 paper columns plus (status, scheduled_at, meeting_id).
+def _candidate(paper_id, title, status, scheduled_at, meeting_id):
+    return (paper_id, title, "http://x", "abstract", ["Li Zhao"], 2025, None,
+            status, scheduled_at, meeting_id)
+
+
 def test_select_newest_paper_returns_meeting_paper():
-    row = (2, "T", "http://x", "abstract", ["Li Zhao"], 2025, None)
-    paper = select_newest_paper(_FakeConn([row]))
+    row = _candidate(2, "T", "prep", None, 6)
+    paper = select_newest_paper(_FakeConn([[row]]))
     assert paper["id"] == 2 and paper["title"] == "T" and paper["authors"] == ["Li Zhao"]
 
 
 def test_select_newest_paper_uses_added_at_fallback():
-    # Meeting-join query misses (None); the added_at fallback returns a row.
-    # This is the only path that exercises the fallback SELECT + its row->dict.
+    # Meeting-candidates query misses (no rows); the added_at fallback returns a
+    # row. This is the only path that exercises the fallback SELECT + row->dict.
     fallback = (7, "Fallback Paper", "http://f", "abstract", ["Ana Ng"], 2024, None)
-    paper = select_newest_paper(_FakeConn([None, fallback]))
+    paper = select_newest_paper(_FakeConn([[], fallback]))
     assert paper["id"] == 7 and paper["title"] == "Fallback Paper"
     assert paper["authors"] == ["Ana Ng"]
 
 
 def test_select_newest_paper_raises_when_no_papers():
-    with pytest.raises(LookupError):
-        select_newest_paper(_FakeConn([None]))
+    # match= guards against passing on an incidental KeyError (a LookupError
+    # subclass) from empty-row handling instead of the intended raise.
+    with pytest.raises(LookupError, match="no papers"):
+        select_newest_paper(_FakeConn([[], None]))
+
+
+def test_pick_newest_prefers_inflight_prep_over_more_recent_done():
+    # The bug: an unscheduled prep meeting (scheduled_at=None) must still win
+    # over a completed meeting with a real, more-recent date. The announcement is
+    # about the cycle being set up, not the last one that happened.
+    from datetime import datetime, timezone
+
+    from scripts.generate_prerequisites import _pick_newest_meeting
+    done = _candidate(2, "Gold Futures", "done",
+                      datetime(2026, 6, 19, tzinfo=timezone.utc), 6)
+    prep = _candidate(40, "Meta-Harness", "prep", None, 37)
+    paper = _pick_newest_meeting([done, prep])
+    assert paper is not None and paper["id"] == 40 and paper["title"] == "Meta-Harness"
+
+
+def test_pick_newest_ignores_cancelled_meetings():
+    from datetime import datetime, timezone
+
+    from scripts.generate_prerequisites import _pick_newest_meeting
+    cancelled = _candidate(9, "Cancelled", "cancelled",
+                           datetime(2026, 7, 1, tzinfo=timezone.utc), 50)
+    done = _candidate(2, "Done", "done",
+                      datetime(2026, 6, 19, tzinfo=timezone.utc), 6)
+    paper = _pick_newest_meeting([cancelled, done])
+    assert paper is not None and paper["id"] == 2  # cancelled skipped
+
+
+def test_pick_newest_done_fallback_orders_by_date_not_id():
+    # No in-flight meeting: fall back to the most recent completed one BY DATE,
+    # not by meeting id (id 31 is newer-numbered but older-dated than id 6).
+    from datetime import datetime, timezone
+
+    from scripts.generate_prerequisites import _pick_newest_meeting
+    older_high_id = _candidate(22, "Older", "done",
+                               datetime(2025, 11, 12, tzinfo=timezone.utc), 31)
+    recent_low_id = _candidate(2, "Recent", "done",
+                               datetime(2026, 6, 19, tzinfo=timezone.utc), 6)
+    paper = _pick_newest_meeting([older_high_id, recent_low_id])
+    assert paper is not None and paper["id"] == 2
+
+
+def test_pick_newest_returns_none_when_no_live_candidates():
+    from scripts.generate_prerequisites import _pick_newest_meeting
+    assert _pick_newest_meeting([]) is None
+    cancelled = _candidate(9, "C", "cancelled", None, 5)
+    assert _pick_newest_meeting([cancelled]) is None
 
 
 def test_build_gather_contract_shape():
