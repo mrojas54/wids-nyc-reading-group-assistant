@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { newestPrepMeeting } from "@/lib/queries";
 import { Brandmark, Icon } from "@/components/ui";
 import { AvailabilityForm } from "./AvailabilityForm";
 
@@ -39,14 +40,7 @@ export default async function AvailabilityPage({
     if (!requested) notFound();
     prep = requested;
   } else {
-    const { data: latestPrep } = await sb
-      .from("meetings")
-      .select("id, type")
-      .eq("status", "prep")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    prep = latestPrep;
+    prep = await newestPrepMeeting(sb);
   }
 
   const {

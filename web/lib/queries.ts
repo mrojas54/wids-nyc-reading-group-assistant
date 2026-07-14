@@ -33,17 +33,66 @@ export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | nul
 
   if (scheduled) return mapMeeting(scheduled);
 
-  const { data: prep } = await sb
-    .from("meetings")
-    .select(
-      "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(title, companion_url)",
-    )
-    .eq("status", "prep")
-    .order("created_at", { ascending: false })
+  const { data: prep } = await orderNewestPrep(
+    sb
+      .from("meetings")
+      .select(
+        "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(title, companion_url)",
+      )
+      .eq("status", "prep"),
+  )
     .limit(1)
     .maybeSingle();
 
   return prep ? mapMeeting(prep) : null;
+}
+
+/**
+ * Orders a `status=prep` meetings query so that "the newest prep meeting" is a
+ * TOTAL order — one row, always the same row.
+ *
+ * created_at alone is not enough. It defaults to now(), which in Postgres is
+ * transaction_timestamp() — fixed for the whole transaction — and the cycle
+ * bootstrap inserts the admin + reading_group pair in a SINGLE transaction. The
+ * two rows therefore carry a byte-identical created_at every cycle (observed
+ * 2026-07-14 on meetings #36/#37), and an ORDER BY that ties is only a partial
+ * order: Postgres may hand back either row, and will happily change its mind
+ * when the plan changes. So break the tie deliberately:
+ *
+ *   type — TEXT with a CHECK, not an enum, so DESC sorts lexicographically and
+ *          puts 'reading_group' ahead of 'admin'. Members should be pointed at
+ *          the paper, not the admin slot. An admin meeting is still returned
+ *          when it is the only thing in prep — it collects availability too.
+ *   id   — SERIAL: unique and non-null, the backstop that makes the order total
+ *          no matter what else ties.
+ *
+ * Shared by every "current prep meeting" lookup on purpose. If the dashboard
+ * and /availability ordered differently, the dashboard could nudge a member
+ * toward one meeting while the form it deep-links to resolved to the other.
+ */
+function orderNewestPrep<Q extends { order(col: string, opts: { ascending: boolean }): Q }>(
+  q: Q,
+): Q {
+  return q
+    .order("created_at", { ascending: false })
+    .order("type", { ascending: false })
+    .order("id", { ascending: false });
+}
+
+export type PrepMeetingRef = { id: number; type: string };
+
+/**
+ * The prep meeting members are currently being scheduled into — the same row
+ * nextMeeting()'s tier-2 fallback lands on. Used by /availability when no
+ * `?meeting=<id>` param pins a specific meeting.
+ */
+export async function newestPrepMeeting(sb: SupabaseClient): Promise<PrepMeetingRef | null> {
+  const { data } = await orderNewestPrep(
+    sb.from("meetings").select("id, type").eq("status", "prep"),
+  )
+    .limit(1)
+    .maybeSingle();
+  return (data as PrepMeetingRef | null) ?? null;
 }
 
 function mapMeeting(row: any): NextMeeting {
