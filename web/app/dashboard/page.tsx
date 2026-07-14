@@ -47,7 +47,10 @@ export default async function DashboardPage() {
   const member = memberResult.data;
 
   const stats = await myStats(sb, submitted, memberId);
-  const showFindPaper = canFindPaper(member?.role);
+  // The banner is a prompt to *choose* a paper, so it stops once the next meeting
+  // has one — permission alone would keep nagging leaders to pick a paper that is
+  // already picked. No meeting (or no paper on it) still shows it.
+  const showFindPaper = canFindPaper(member?.role) && !meeting?.paper_id;
 
   const firstName = member?.name ? String(member.name).split(/\s+/)[0] : null;
 
