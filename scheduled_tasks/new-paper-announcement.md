@@ -147,7 +147,7 @@ It emits `{"paper_id", "html", "text"}` with every `{{ token }}` resolved, and
 **errors (exit 1) if any token is unresolved** — never create a draft from a
 partial render. Create a Gmail **draft** (never auto-send) to that member:
 
-- **Subject:** a court-voice line, e.g. `A new queen reigns this month — <short_title>`
+- **Subject:** `WiDS NYC AI Reading Group - <Month Year>` (e.g. `WiDS NYC AI Reading Group - August 2026`), where the month is the reading-group meeting's month
 - **HTML body:** the `html` field
 - **Plain-text alternative:** the `text` field
 
