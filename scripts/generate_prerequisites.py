@@ -22,7 +22,7 @@ import json
 import os
 import re
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,21 @@ DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
 _ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 _PAPER_COLS = "id, title, url, abstract, authors, year, prerequisites"
+
+# A meeting is part of the current, announceable cycle while it is being planned
+# (prep) or locked to a date (scheduled); 'done'/'cancelled' are past cycles.
+_INFLIGHT_STATUSES = ("prep", "scheduled")
+# tz-aware floor so a NULL scheduled_at sorts oldest without mixing naive/aware.
+_MIN_DT = datetime(1, 1, 1, tzinfo=timezone.utc)
+
+# Candidate rows carry the paper columns plus the meeting fields the ranking
+# needs (status, scheduled_at, meeting id). Ordering is decided in Python
+# (_pick_newest_meeting) so it is unit-testable without a live database.
+_MEETING_CANDIDATES_SQL = (
+    f"SELECT p.{_PAPER_COLS.replace(', ', ', p.')}, m.status, m.scheduled_at, m.id "
+    "FROM meetings m JOIN papers p ON p.id = m.paper_id "
+    "WHERE m.paper_id IS NOT NULL"
+)
 
 
 def authors_short(authors: list[str]) -> str:
@@ -56,19 +71,44 @@ def _row_to_paper(row: tuple[Any, ...]) -> dict[str, Any]:
     return paper
 
 
+def _rank_meeting(candidate: tuple[Any, ...]) -> tuple[Any, ...]:
+    """Sort key (higher wins) for a meeting-paper candidate row.
+
+    Within a status group, the most recent scheduled date wins, then the newest
+    meeting row. A NULL scheduled_at floors to the oldest date, so a dated
+    meeting outranks an undated one of the same status.
+    """
+    scheduled_at, meeting_id = candidate[8], candidate[9]
+    return (scheduled_at is not None, scheduled_at or _MIN_DT, meeting_id)
+
+
+def _pick_newest_meeting(candidates: list[tuple[Any, ...]]) -> dict[str, Any] | None:
+    """Choose the current cycle's paper from meeting-candidate rows, or None.
+
+    An in-flight (prep/scheduled) cycle always outranks completed meetings — the
+    announcement is about the cycle being set up, whose meeting has no date yet,
+    not the last one that happened. Cancelled meetings are ignored. Returns None
+    when nothing is eligible so the caller can fall back to the newest-added
+    paper.
+    """
+    live = [c for c in candidates if c[7] != "cancelled"]
+    if not live:
+        return None
+    inflight = [c for c in live if c[7] in _INFLIGHT_STATUSES]
+    best = max(inflight or live, key=_rank_meeting)
+    return _row_to_paper(best[:7])
+
+
 def select_newest_paper(conn: psycopg.Connection) -> dict[str, Any]:
-    """The paper of the most recent meeting that has one; else the newest-added
-    paper. Raises LookupError when no papers exist."""
+    """The paper of the current cycle's meeting (in-flight preferred over
+    completed); else the newest-added paper. Raises LookupError when no papers
+    exist. See _pick_newest_meeting for the ranking."""
     with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT p.{_PAPER_COLS.replace(', ', ', p.')} "
-            "FROM meetings m JOIN papers p ON p.id = m.paper_id "
-            "WHERE m.paper_id IS NOT NULL "
-            "ORDER BY m.scheduled_at DESC NULLS LAST, m.id DESC LIMIT 1"
-        )
-        row = cur.fetchone()
-    if row is not None:
-        return _row_to_paper(row)
+        cur.execute(_MEETING_CANDIDATES_SQL)
+        candidates = cur.fetchall()
+    paper = _pick_newest_meeting(candidates)
+    if paper is not None:
+        return paper
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_PAPER_COLS} FROM papers ORDER BY added_at DESC LIMIT 1")
         row = cur.fetchone()
