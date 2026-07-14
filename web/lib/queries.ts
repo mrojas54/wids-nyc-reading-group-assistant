@@ -23,7 +23,7 @@ export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | nul
   const { data: scheduled } = await sb
     .from("meetings")
     .select(
-      "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(title, companion_url)",
+      "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(id, title, companion_url, paper_companions(paper_id))",
     )
     .eq("status", "scheduled")
     .gte("scheduled_at", nowIso)
@@ -37,7 +37,7 @@ export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | nul
     sb
       .from("meetings")
       .select(
-        "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(title, companion_url)",
+        "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(id, title, companion_url, paper_companions(paper_id))",
       )
       .eq("status", "prep"),
   )
@@ -95,6 +95,23 @@ export async function newestPrepMeeting(sb: SupabaseClient): Promise<PrepMeeting
   return (data as PrepMeetingRef | null) ?? null;
 }
 
+// Paper Pal stores each companion in `paper_companions` and renders it at
+// /papers/<paper_id>. The legacy `papers.companion_url` column holds a
+// denormalised copy of that same path, left over from the retired
+// /wids-make-companion flow — and the Paper Pal generator never writes it, so it
+// is NULL for every Paper-Pal-era paper. Gating on the column therefore hid every
+// Paper Pal companion. The companion row is the source of truth; fall back to the
+// column only for pre-Paper-Pal papers that have one.
+function companionUrl(papers: any): string | null {
+  // paper_companions.paper_id is both PK and FK, so PostgREST may collapse this
+  // 1-to-1 embed to a bare object instead of a single-element array.
+  const embed = papers?.paper_companions;
+  const hasCompanion = Array.isArray(embed) ? embed.length > 0 : embed != null;
+
+  if (hasCompanion && papers?.id != null) return `/papers/${papers.id}`;
+  return papers?.companion_url ?? null;
+}
+
 function mapMeeting(row: any): NextMeeting {
   return {
     id: row.id,
@@ -105,7 +122,7 @@ function mapMeeting(row: any): NextMeeting {
     leader_name: row.members?.name ?? null,
     paper_id: row.paper_id,
     paper_title: row.papers?.title ?? null,
-    companion_url: row.papers?.companion_url ?? null,
+    companion_url: companionUrl(row.papers),
   };
 }
 
@@ -257,7 +274,7 @@ export async function myHistory(sb: SupabaseClient, limit = 10): Promise<History
   const { data } = await sb
     .from("meeting_attendance")
     .select(
-      "meetings:meeting_id!inner(id, scheduled_at, status, papers:paper_id(title, companion_url))",
+      "meetings:meeting_id!inner(id, scheduled_at, status, papers:paper_id(id, title, companion_url, paper_companions(paper_id)))",
     )
     .eq("rsvp_status", "attending")
     .eq("meetings.status", "done")
@@ -275,6 +292,6 @@ export async function myHistory(sb: SupabaseClient, limit = 10): Promise<History
       meeting_id: m.id,
       paper_title: m.papers?.title ?? null,
       date: m.scheduled_at ?? null,
-      companion_url: m.papers?.companion_url ?? null,
+      companion_url: companionUrl(m.papers),
     }));
 }

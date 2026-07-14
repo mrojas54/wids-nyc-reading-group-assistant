@@ -234,6 +234,153 @@ describe("myHistory", () => {
     const { sb } = buildHistorySb([]);
     expect(await myHistory(sb, 10)).toEqual([]);
   });
+
+  it("links a Paper Pal companion even when the legacy companion_url is unset", async () => {
+    const { sb } = buildHistorySb([
+      {
+        meetings: {
+          id: 5,
+          scheduled_at: "2026-04-01T00:00:00Z",
+          status: "done",
+          papers: {
+            id: 17,
+            title: "TimesFM",
+            companion_url: null,
+            paper_companions: [{ paper_id: 17 }],
+          },
+        },
+      },
+    ]);
+    const items = await myHistory(sb, 10);
+    expect(items[0].companion_url).toBe("/papers/17");
+  });
+});
+
+// --- nextMeeting ---------------------------------------------------------
+
+// Paper Pal stores companions in `paper_companions.payload` and never writes
+// the legacy `papers.companion_url` column, so the column is NULL for every
+// Paper-Pal-era paper. Gating the dashboard's companion card on that column
+// therefore hid every Paper Pal companion. Presence of a `paper_companions`
+// row — not the column — is the source of truth.
+
+function buildNextMeetingSb(opts: { scheduled?: unknown; prep?: unknown }): {
+  sb: SupabaseClient;
+  selectArgs: string[];
+} {
+  const selectArgs: string[] = [];
+  let call = 0;
+
+  const sb = {
+    from: vi.fn().mockImplementation(() => ({
+      select: vi.fn((arg: string) => {
+        selectArgs.push(arg);
+        const tier = call++;
+        const builder: Record<string, unknown> = {};
+        for (const m of ["eq", "gte", "order", "limit"]) {
+          builder[m] = () => builder;
+        }
+        builder.maybeSingle = () =>
+          Promise.resolve({
+            data: (tier === 0 ? opts.scheduled : opts.prep) ?? null,
+          });
+        return builder;
+      }),
+    })),
+  } as unknown as SupabaseClient;
+
+  return { sb, selectArgs };
+}
+
+function prepRow(papers: unknown) {
+  return {
+    id: 37,
+    type: "reading_group",
+    status: "prep",
+    scheduled_at: null,
+    location: null,
+    leader_id: 21,
+    paper_id: 40,
+    members: { name: "Niharika Krishnan" },
+    papers,
+  };
+}
+
+describe("nextMeeting — companion link", () => {
+  it("derives the Paper Pal link from paper_companions when companion_url is NULL", async () => {
+    const { sb } = buildNextMeetingSb({
+      prep: prepRow({
+        id: 40,
+        title: "Meta-Harness",
+        companion_url: null, // legacy column — Paper Pal never writes it
+        paper_companions: [{ paper_id: 40 }], // the real companion
+      }),
+    });
+
+    const m = await nextMeeting(sb);
+    expect(m?.companion_url).toBe("/papers/40");
+  });
+
+  it("handles a 1-to-1 embed returned as an object rather than an array", async () => {
+    // paper_companions.paper_id is both PK and FK, so PostgREST may collapse
+    // the embed to a bare object. Accept either shape.
+    const { sb } = buildNextMeetingSb({
+      prep: prepRow({
+        id: 40,
+        title: "Meta-Harness",
+        companion_url: null,
+        paper_companions: { paper_id: 40 },
+      }),
+    });
+
+    expect((await nextMeeting(sb))?.companion_url).toBe("/papers/40");
+  });
+
+  it("falls back to the legacy companion_url when no companion row exists", async () => {
+    const { sb } = buildNextMeetingSb({
+      prep: prepRow({
+        id: 6,
+        title: "Legacy static companion",
+        companion_url: "/papers/6",
+        paper_companions: [],
+      }),
+    });
+
+    expect((await nextMeeting(sb))?.companion_url).toBe("/papers/6");
+  });
+
+  it("returns null when the paper has no companion at all", async () => {
+    const { sb } = buildNextMeetingSb({
+      prep: prepRow({
+        id: 40,
+        title: "Meta-Harness",
+        companion_url: null,
+        paper_companions: [],
+      }),
+    });
+
+    expect((await nextMeeting(sb))?.companion_url).toBeNull();
+  });
+
+  it("returns null companion_url when the meeting has no paper yet", async () => {
+    const { sb } = buildNextMeetingSb({
+      prep: { ...prepRow(null), paper_id: null },
+    });
+
+    const m = await nextMeeting(sb);
+    expect(m?.companion_url).toBeNull();
+    expect(m?.paper_title).toBeNull();
+  });
+
+  it("asks PostgREST for the paper_companions embed in both tiers", async () => {
+    const { sb, selectArgs } = buildNextMeetingSb({});
+    await nextMeeting(sb);
+    // Tier 1 (scheduled) misses, so tier 2 (prep) runs too — both must embed.
+    expect(selectArgs).toHaveLength(2);
+    for (const arg of selectArgs) {
+      expect(arg).toContain("paper_companions");
+    }
+  });
 });
 
 // --- nextMeeting ---------------------------------------------------------
