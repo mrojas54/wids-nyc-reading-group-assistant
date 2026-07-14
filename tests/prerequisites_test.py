@@ -36,3 +36,47 @@ def test_prereq_tokens_rejects_bad_input(bad):
     lede, items = bad
     with pytest.raises(ValueError):
         prereq_tokens(lede, items)
+
+
+# --- linked items: an item may be {"text", "url"} to render a clickable link ---
+
+def test_prereq_tokens_renders_link_items_as_anchors():
+    t = prereq_tokens("L", [{"text": "RAG basics", "url": "https://arxiv.org/abs/2005.11401"}])
+    assert '<a href="https://arxiv.org/abs/2005.11401"' in t["prereqs.html"]
+    assert ">RAG basics</a>" in t["prereqs.html"]
+    assert t["prereqs.html"].count("<tr>") == 1
+
+
+def test_prereq_tokens_link_url_is_attribute_escaped():
+    t = prereq_tokens("L", [{"text": "x", "url": "https://e.test/a?b=1&c=2"}])
+    assert 'href="https://e.test/a?b=1&amp;c=2"' in t["prereqs.html"]  # & escaped in attr
+
+
+def test_prereq_tokens_text_appends_url_for_link_items():
+    t = prereq_tokens("L", [{"text": "RAG basics", "url": "https://arxiv.org/abs/2005.11401"}])
+    assert t["prereqs.text"] == "01. RAG basics — https://arxiv.org/abs/2005.11401"
+
+
+def test_prereq_tokens_mixes_plain_and_link_items():
+    t = prereq_tokens("L", ["plain", {"text": "linked", "url": "https://x.test"}])
+    assert t["prereqs.html"].count("<tr>") == 2
+    assert "<a href=" in t["prereqs.html"]
+    assert t["prereqs.text"] == "01. plain\n\n02. linked — https://x.test"
+
+
+def test_prereq_tokens_dict_without_url_renders_plain():
+    t = prereq_tokens("L", [{"text": "no link here"}])
+    assert "no link here" in t["prereqs.html"]
+    assert "<a href=" not in t["prereqs.html"]
+    assert t["prereqs.text"] == "01. no link here"
+
+
+@pytest.mark.parametrize("bad", [
+    {"text": "", "url": "https://x.test"},   # blank text
+    {"text": "x", "url": ""},                # blank url
+    {"text": "x", "url": 5},                 # non-string url
+    {"url": "https://x.test"},               # missing text
+])
+def test_prereq_tokens_rejects_bad_link_items(bad):
+    with pytest.raises(ValueError):
+        prereq_tokens("L", [bad])

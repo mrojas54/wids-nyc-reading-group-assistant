@@ -72,9 +72,18 @@ draft exactly this shape (**exactly 3 items**):
   "short_title": "<=12-word rewrite of the title for the intro line",
   "summary": "one sentence (<=30 words) completing 'she'll steer the discussion on <short_title> — <summary>'",
   "lede": "one line framing the prerequisites",
-  "items": ["concept/skill to review (<=20 words)", "…", "…"]
+  "items": [
+    {"text": "concept/skill to review (<=20 words)", "url": "https://a-resource-to-review-it"},
+    {"text": "…", "url": "https://…"},
+    {"text": "…", "url": "https://…"}
+  ]
 }
 ```
+
+Each item is `{text, url}`: `text` is the concept to review, `url` links to a
+real, reputable resource (arXiv, Wikipedia, a canonical blog/tutorial) where a
+member can review it — verify each URL resolves before persisting. `url` is
+optional; a plain string still works for an item with no good link.
 
 ## Step 4 — Persist the draft bundle
 
@@ -85,7 +94,11 @@ Persist via the Supabase MCP `execute_sql`, adding the metadata fields
 UPDATE papers
 SET prerequisites = jsonb_build_object(
   'lede', '<lede>',
-  'items', jsonb_build_array('<item 1>', '<item 2>', '<item 3>'),
+  'items', jsonb_build_array(
+    jsonb_build_object('text', '<item 1>', 'url', '<url 1>'),
+    jsonb_build_object('text', '<item 2>', 'url', '<url 2>'),
+    jsonb_build_object('text', '<item 3>', 'url', '<url 3>')
+  ),
   'summary', '<summary>',
   'short_title', '<short_title>',
   'status', 'draft',
