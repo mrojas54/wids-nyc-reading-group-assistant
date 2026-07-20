@@ -21,6 +21,7 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Zotero bibliography | [docs/runbooks/zotero-bibliography.md](docs/runbooks/zotero-bibliography.md) | [2026-05-05-wids-zotero-integration-design.md](docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md) | [2026-05-05-wids-zotero-integration.md](docs/superpowers/plans/2026-05-05-wids-zotero-integration.md) |
 | Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
 | Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| New-paper announcement | [scheduled_tasks/new-paper-announcement.md](scheduled_tasks/new-paper-announcement.md) | [2026-07-13-reading-group-email-and-prerequisites-design.md](docs/superpowers/specs/2026-07-13-reading-group-email-and-prerequisites-design.md) | [2026-07-13-reading-group-email-and-prerequisites.md](docs/superpowers/plans/2026-07-13-reading-group-email-and-prerequisites.md) |
 | Blackout periods | [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md) | [2026-07-12-blackout-dates-design.md](docs/superpowers/specs/2026-07-12-blackout-dates-design.md) | [2026-07-12-blackout-dates.md](docs/superpowers/plans/2026-07-12-blackout-dates.md) |
 
 ## Prerequisites (one-time operator setup)
@@ -30,7 +31,7 @@ Before running `/wids-bootstrap`, the operator must:
 ### 1. Supabase project
 - Sign up at https://supabase.com (free tier).
 - Create a new project (note the project URL and `service_role` key).
-- Apply every file in `migrations/` in numeric order (`001` → `021`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
+- Apply every file in `migrations/` in numeric order (`001` → `022`) — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
 
 ### 2. Google Drive root folder
 - Create a folder in your Drive named `WiDS NYC AI Reading Group`.
@@ -63,7 +64,7 @@ The operator must have a `reading-group-guide` skill installed. The make-guide c
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
-Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. Keep `new-paper-announcement` available as an operator-triggered prompt, but do not put it on a recurring schedule. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
 
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.
@@ -104,7 +105,7 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
 
-The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). Once the paper and leader are locked, the operator runs the manual [`new-paper-announcement`](scheduled_tasks/new-paper-announcement.md) prompt to create per-member Gmail drafts for review; it never auto-sends. `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
 
 ### When something goes wrong
 
@@ -148,7 +149,7 @@ See `docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md` for the
 ```sh
 cd web
 cp .env.example .env.local   # fill in values
-nvm use                      # Node 22.22.3 from web/.nvmrc
+nvm install && nvm use       # install/select Node 22.22.3 from web/.nvmrc
 npm ci
 npm run dev
 ```
@@ -162,6 +163,10 @@ push, arXiv taxonomy, email preview rendering) are managed with
 [uv](https://docs.astral.sh/uv/). Dependencies and tool config live in a single
 [pyproject.toml](pyproject.toml); the resolved set is pinned in the committed
 `uv.lock`.
+
+Install `uv` first if `uv --version` is unavailable; use the
+[official installer](https://docs.astral.sh/uv/getting-started/installation/)
+and restart the shell so its install directory is on `PATH`.
 
 ```sh
 uv sync                  # install the locked dependency set (creates .venv/)

@@ -17,6 +17,9 @@ work does not get mistaken for production behavior.
 - At-most-once sends require migration
   `020_command_log_enrichment.sql`, which adds `command_log.idempotency_key`
   and the `command_log_idempotency_key_unique` partial unique index.
+- New-paper announcement drafts additionally require migration
+  `022_papers_prerequisites.sql`, which adds the editable
+  `papers.prerequisites` JSONB bundle.
 
 ## Template matrix
 
@@ -27,7 +30,7 @@ work does not get mistaken for production behavior.
 | `rsvp-confirmation.{html,txt}` | `scheduled_tasks/pre-meeting-reminder.md` Step 4a and `scheduled_tasks/availability-chase.md` Step 5e | Live for attending RSVPs 2 days before a meeting, and for availability submitters during the operator-triggered chase follow-up. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotated from the shared pool. Required tokens: `recipient.firstName`, `lead.name`/`lead.initial`/`lead.blurb`, `paper.title`/`paper.shortTitle`/`paper.summary`/`paper.authorsShort`/`paper.url`, `prereqs.lede` + `prereqs.html` (`.txt` twin uses `prereqs.text`), `signoff.names`, `links.availability`, `links.rsvpManage`. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed/blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Required tokens: `recipient.firstName`, `lead.name`/`lead.initial`/`lead.blurb`, `paper.title`/`paper.shortTitle`/`paper.summary`/`paper.authorsShort`/`paper.url`, `prereqs.lede` + `prereqs.html` (`.txt` twin uses `prereqs.text`), `signoff.names`, `links.availability`, `links.rsvpManage`. |
 
 ## Preview and validation
 
@@ -48,11 +51,14 @@ uv run pytest -c tests/pytest.ini -v \
   tests/render_email_previews_test.py \
   tests/discussion_questions_test.py \
   tests/quotes_select_test.py \
-  tests/build_quotes_test.py
+  tests/build_quotes_test.py \
+  tests/prerequisites_test.py \
+  tests/generate_prerequisites_test.py
 ```
 
-CI runs the same Python checks, plus `uv run ruff check scripts tests` and
-`uv run ty check`.
+CI runs the core preview/quote tests plus `uv run ruff check scripts tests` and
+`uv run ty check`. Run the two prerequisite tests above when changing the
+announcement workflow.
 
 ## Quote workflow
 
@@ -96,10 +102,11 @@ After changing the question source or composer, run the preview command and
 
 ## Idempotency keys
 
-Apply migrations in numeric order through `020` before operating these
-workflows. Keyed scheduled-task sends should check the exact key first, insert
-the same key when logging success, and treat SQLSTATE `23505` from the unique
-index as "already sent."
+Apply migrations in numeric order through `022` before operating these
+workflows. Migration `020` provides idempotency; migration `022` is required by
+the new-paper announcement. Keyed scheduled-task sends should check the exact
+key first, insert the same key when logging success, and treat SQLSTATE `23505`
+from the unique index as "already sent."
 
 Current keys:
 
@@ -125,8 +132,10 @@ provides.
 - Do not assume a template is live because it renders in previews. Check the
   scheduled-task spec that sends it.
 - Do not commit `*_rendered.*` preview artifacts.
-- Paper Pal links should use the stored relative companion path:
-  `<portalBase><papers.companion_url>` (for example,
-  `https://.../papers/2`), not the old `/papers/<slug>/companion` shape.
+- The portal treats a `paper_companions` row as the current source of truth and
+  derives `/papers/<paper_id>`. The existing reminder task specs still read
+  `papers.companion_url`; if that legacy field is null, those emails omit or
+  replace the preview link even when the portal companion exists. In either
+  path, do not use the retired `/papers/<slug>/companion` shape.
 - Magic-link email rotation is manual in Supabase and separate from the
   structured quote pool used by the other templates.

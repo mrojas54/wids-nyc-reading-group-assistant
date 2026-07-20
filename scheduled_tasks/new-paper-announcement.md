@@ -30,10 +30,21 @@ generator connects directly with psycopg. That is **not** the same as
 uv run python -m scripts.generate_prerequisites --mode gather
 ```
 
-This selects the newest paper — the most recent `meetings` row with a
-`paper_id`, falling back to `papers` ordered by `added_at DESC` — and prints a
-JSON contract: `{paper_id, title, abstract, authors, url, instructions}`. Read
-`paper_id` from it for the steps below.
+This selects the current cycle's paper and prints a JSON contract:
+`{paper_id, title, abstract, authors, url, instructions}`. Selection is
+deliberately cycle-aware:
+
+1. Collect meetings with a `paper_id` and discard `status='cancelled'`.
+2. If any `prep` or `scheduled` meetings exist, consider only those in-flight
+   rows. An undated prep row must beat a dated `done` row from the prior cycle.
+3. Within the chosen group, prefer rows with a `scheduled_at`, then the latest
+   `scheduled_at`, then the highest meeting `id`.
+4. If no eligible meeting remains, fall back to the newest paper by
+   `papers.added_at DESC`.
+
+Read `paper_id` from the contract for the steps below. Do not replace this with
+a simple `scheduled_at DESC` query: that can announce the previous cycle while
+the current prep meeting is still undated.
 
 If the command exits non-zero with "no papers in the database", there is nothing
 to announce: log `no_action` (Step 7) and stop.
