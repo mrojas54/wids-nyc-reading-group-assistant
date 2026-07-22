@@ -194,8 +194,9 @@ export function SectionBreakdownTile({
                           key={id}
                           id={`math-${id.replace(/[^a-z0-9]/gi, "-")}`}
                         >
-                          {/* TODO: render KaTeX once we wire the dependency.
-                              For now show the formula as monospace code. */}
+                          {/* Monospace stub — KaTeX rendering is tracked in
+                              issue #118 (see docs/superpowers/plans/
+                              2026-05-16-paper-pal-katex-math-handoff.md). */}
                           <code className="pp-sb-math-formula">{m.formula}</code>
                           <div className="pp-sb-math-summary">
                             {m.simplifiedExplanation || m.description}
