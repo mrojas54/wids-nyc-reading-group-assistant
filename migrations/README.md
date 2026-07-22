@@ -1,7 +1,7 @@
 # Database migrations
 
 SQL migrations for the WiDS NYC reading-group Supabase project, applied
-**in numeric order** (`001` → `020`). They are hand-applied — paste each file
+**in numeric order**. They are hand-applied — paste each file
 into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool.
 There is no migration-tracking table; filenames define order only.
 
@@ -28,6 +28,7 @@ There is no migration-tracking table; filenames define order only.
 | `019_meetings_propose_placeholder_unique.sql` | Partial unique index on `meetings(paper_id)` for `prep` `reading_group` rows with no `planned_by_admin_id` — one member-proposed placeholder per paper, so concurrent `proposePaper` calls can't mint duplicates. |
 | `020_command_log_enrichment.sql` | Adds `command_log.duration_ms`, `metadata` (JSONB, default `{}`), `idempotency_key` (nullable, partial-unique for at-most-once keyed runs), and `actor`. Writers: `web/lib/log.ts` (`logServerAction` 5th arg) and `scripts/zotero_push.py` (`record_failure` kwargs). |
 | `021_blackout_periods.sql` | Creates the `blackout_periods` table (half-open `[range_start, range_end)` windows) and seeds the two 2026 summer-break windows. Service-role-only (no RLS policies), read by the scheduler and the availability portal. |
+| `022_papers_prerequisites.sql` | Adds nullable `papers.prerequisites` JSONB — the AI-drafted announcement bundle (`{lede, items, summary, short_title, status, model, generated_at}`) consumed by the new-paper-announcement email via `scripts/generate_prerequisites.py`. Additive + nullable; papers RLS unaffected. |
 
 ## `ensure_rls` event trigger
 
@@ -49,8 +50,8 @@ browser (anon/authenticated). `command_log` is the one accepted exception
   `paper_suggestions`, `command_log`.
 - Portal columns and helpers exist: `members.auth_user_id`, `members.role`
   accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`,
-  `papers.zotero_item_key`, `availability.created_at`, the
-  `current_member_id()` function, and 10 RLS policies.
+  `papers.zotero_item_key`, `papers.prerequisites`, `availability.created_at`,
+  the `current_member_id()` function, and 10 RLS policies.
 - Paper Pal artifacts exist: `paper_companions`,
   `paper_socratic_turns`, `paper_embeddings`, the
   `upsert_paper_companion()`, `can_synthesize_paper_pal(int)`, and
