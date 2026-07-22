@@ -56,9 +56,8 @@ uv run pytest -c tests/pytest.ini -v \
   tests/generate_prerequisites_test.py
 ```
 
-CI runs the core preview/quote tests plus `uv run ruff check scripts tests` and
-`uv run ty check`. Run the two prerequisite tests above when changing the
-announcement workflow.
+CI collects the full `tests/` tree, including both prerequisite tests above,
+then also runs `uv run ruff check scripts tests` and `uv run ty check`.
 
 ## Quote workflow
 
@@ -102,7 +101,7 @@ After changing the question source or composer, run the preview command and
 
 ## Idempotency keys
 
-Apply migrations in numeric order through `022` before operating these
+Apply every repository migration in numeric order before operating these
 workflows. Migration `020` provides idempotency; migration `022` is required by
 the new-paper announcement. Keyed scheduled-task sends should check the exact
 key first, insert the same key when logging success, and treat SQLSTATE `23505`

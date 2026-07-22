@@ -91,19 +91,12 @@ jobs:
       - name: Type-check (ty)
         run: uv run ty check
 
-      # scripts/pilot_cli.py is intentionally not collected — it is a live-DB
-      # operator CLI (not a pytest module). It lives under scripts/ so a naive
-      # `pytest tests` no longer tries to import it.
+      # Collect the whole tests/ tree so new *_test.py files gate automatically
+      # (a hand-maintained file list silently dropped new tests in July 2026).
+      # scripts/pilot_cli.py is a live-DB operator CLI, not a pytest module; it
+      # lives under scripts/ so this collection never imports it.
       - name: Run unit tests
-        run: |
-          uv run pytest -c tests/pytest.ini -v \
-            tests/find_paper_suggest_test.py \
-            tests/zotero_push_test.py \
-            tests/build_arxiv_taxonomy_test.py \
-            tests/render_email_previews_test.py \
-            tests/discussion_questions_test.py \
-            tests/quotes_select_test.py \
-            tests/build_quotes_test.py
+        run: uv run pytest -c tests/pytest.ini -v tests/
 
   edge-functions:
     name: edge-functions

@@ -171,10 +171,10 @@ gate-check error instead of pretending the member is unauthorized.
 
 ### Required setup
 
-Apply all repository migrations through the latest file (`022` at the time of
-writing). Paper Pal itself uses the artifacts below, and migration `020` is
-still part of the supported go-live baseline because `/admin/logs` enrichment
-and scheduled-task idempotency depend on it.
+Apply every repository migration in numeric order. Paper Pal itself uses the
+artifacts below, and migration `020` is still part of the supported go-live
+baseline because `/admin/logs` enrichment and scheduled-task idempotency depend
+on it.
 Paper Pal depends on:
 
 - `paper_companions` and its RLS policies (`013`)
@@ -327,8 +327,7 @@ npm run typecheck
 
 For ops documentation changes, also spot-check:
 
-1. `migrations/README.md` lists every migration file through the latest file
-   (`022` at the time of writing).
+1. `migrations/README.md` lists every numbered migration file.
 2. `scheduled_tasks/README.md` distinguishes recurring, manual, and deprecated
    task prompts.
 3. `supabase/functions/README.md` agrees with
