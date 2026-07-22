@@ -52,6 +52,10 @@ package = false
 
 [tool.ruff]
 target-version = "py311"
+# Demo teaching notebooks under web/public are published artifacts, not
+# maintained source — their literate style (inline semicolons, re-imports)
+# is deliberate. Excluding them keeps whole-repo `ruff check .` green.
+extend-exclude = ["web/public/notebooks"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests use a deliberate literate style: a smoke `import` test runs first, then
