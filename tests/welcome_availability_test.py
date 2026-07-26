@@ -34,6 +34,7 @@ TOKENS = {
     # complains about tokens the template needs and the caller omitted.
     "recipient.firstName": "Priyanka",
     "vouch.name": "Michelle Rojas",
+    "vouch.blurb": "I'm your person for anything you want to ask before the first meeting.",
     "answerBy": "Mon, Aug 3",
     "links.availability": "https://example.test/availability?meeting=37",
     "links.companion": "https://example.test/papers/40",
@@ -129,6 +130,40 @@ def _visible_text(html_body: str) -> str:
     parser = Extract()
     parser.feed(html_body)
     return " ".join(" ".join(parser.chunks).split())
+
+
+def test_doc_comments_are_stripped_from_the_shipped_html():
+    """Comments are in the message source even when not rendered.
+
+    The header comment carries repo paths, migration numbers, and the
+    *alternate* wording of copy the recipient is reading — none of which
+    belongs in a member's inbox via "Show original".
+    """
+    html = _compose()["html"]
+    for leak in (
+        "scripts/welcome_availability.py",
+        "migrations/023",
+        "Grab her number",          # the third-party blurb, documented in the comment
+        "Claude Design handoff",
+        "BLOCK MARKERS",
+        "Port decisions",
+    ):
+        assert leak not in html, f"doc comment shipped: {leak!r}"
+
+
+def test_outlook_conditionals_survive_comment_stripping():
+    """The MSO style block and the VML button are comments too — keep them."""
+    html = _compose()["html"]
+    assert "<!--[if mso]>" in html
+    assert "<![endif]-->" in html
+    assert "v:roundrect" in html
+    assert 'arcsize="22%"' in html
+    assert "<w:anchorlock/>" in html
+    # The downlevel-revealed pair that hides the VML from real browsers.
+    assert "<!--[if !mso]><!-- -->" in html
+    assert "<!--<![endif]-->" in html
+    # And the non-Outlook anchor is still the one carrying the href.
+    assert html.count("availability?meeting=37") >= 2
 
 
 def test_head_comment_never_leaks_into_visible_text():
@@ -328,6 +363,37 @@ def test_missing_token_raises_rather_than_mailing_braces():
     assert "vouch.name" in str(excinfo.value)
 
 
+def test_vouch_blurb_is_a_token_not_baked_copy():
+    """The design's card copy only works when the voucher is a third party.
+
+    When the voucher is also the sender — the common case, since the operator
+    usually does the introducing — "Grab her number before the first meeting"
+    reads as being about the person signing the email. So the line is supplied
+    per send.
+    """
+    src = (
+        __import__("pathlib").Path(__file__).resolve().parent.parent
+        / "assets/emails/template/welcome-availability.html"
+    ).read_text(encoding="utf-8")
+    # The third-party wording must not be hard-coded into the card markup.
+    card = src[src.index("BEGIN-BLOCK: vouch") : src.index("END-BLOCK: vouch")]
+    assert "{{ vouch.blurb }}" in card
+    assert "Grab her number" not in card
+
+    bodies = _compose()
+    blurb = TOKENS["vouch.blurb"]
+    # The HTML body carries the escaped form (I&#x27;m); the twin is literal.
+    assert __import__("html").escape(blurb, quote=True) in bodies["html"]
+    # The twin wraps at 68 columns, so compare whitespace-normalised.
+    assert blurb in " ".join(bodies["txt"].split())
+
+
+def test_vouch_blurb_not_required_when_vouch_card_is_off():
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.blurb"}
+    bodies = compose(Content(tokens=thin, blocks=Blocks(vouch=False)))
+    assert "VOUCHED IN BY" not in bodies["txt"]
+
+
 def test_vouch_off_still_requires_the_name_and_says_so_loudly():
     """Documented wart, not an oversight.
 
@@ -349,3 +415,24 @@ def test_paper_tokens_not_required_when_paper_card_is_off():
     thin = {k: v for k, v in TOKENS.items() if not k.startswith("paper.")}
     bodies = compose(Content(tokens=thin, blocks=Blocks(paper_card=False)))
     assert "THIS CYCLE'S PAPER" not in bodies["txt"]
+
+
+def test_html_tokens_are_escaped_but_text_tokens_are_not():
+    """render() does no escaping, so the composer must.
+
+    "Michelle & Claudia" shipped a bare ampersand — forgiven by browsers but
+    invalid; a name or title carrying < or > would break the document. The
+    plain-text twin must NOT be escaped, or the reader sees "&amp;".
+    """
+    bodies = _compose()
+    assert "Michelle &amp; Claudia" in bodies["html"]
+    assert "Michelle & Claudia" not in bodies["html"]
+    assert "Michelle & Claudia" in bodies["txt"]
+    assert "&amp;" not in bodies["txt"]
+
+
+def test_markup_in_a_token_cannot_break_the_html():
+    hostile = {**TOKENS, "vouch.name": '<script>alert(1)</script> & "quoted"'}
+    html_body = compose(Content(tokens=hostile))["html"]
+    assert "<script>" not in html_body
+    assert "&lt;script&gt;" in html_body

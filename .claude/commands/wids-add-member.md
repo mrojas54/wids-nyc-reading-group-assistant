@@ -162,6 +162,7 @@ Tokens to resolve (full list in the template's header comment):
 |---|---|
 | `recipient.firstName` | `split_part(members.name, ' ', 1)` — but confirm, see below |
 | `vouch.name` | `SELECT v.name FROM members m JOIN members v ON v.id = m.vouched_by WHERE m.id = <member_id>` — NULL means no voucher, see Step 5a |
+| `vouch.blurb` | Block D's body line. **Depends on whether the voucher is the sender.** Third party: "Grab her number before the first meeting — she's your person for anything you want to ask." Voucher is the sender (i.e. `vouched_by` = the operator, which is common): "I'm your person for anything you want to ask before the first meeting." Shipping the third-party line when the host vouched reads as "grab her number" about the person signing the email. |
 | `answerBy` | Operator-supplied date, default +7 days |
 | `links.availability` | `<portalBase>/availability?meeting=<meeting_id>` |
 | `links.companion` | `<portalBase>/papers/<paper_id>` — verify it resolves, see Step 5a |

@@ -43,7 +43,8 @@ We're so glad to see you're keeping the mind sharp and steady. {{ vouch.name }} 
 [[BEGIN:vouch]]
 
 VOUCHED IN BY
-{{ vouch.name }} — grab her number before the first meeting; she's your person for anything you want to ask.
+{{ vouch.name }}
+{{ vouch.blurb }}
 [[END:vouch]]
 [[BEGIN:meet_strip]]
 

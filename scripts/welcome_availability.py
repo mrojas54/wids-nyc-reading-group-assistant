@@ -31,6 +31,7 @@ Run tests via:
 """
 from __future__ import annotations
 
+import html
 import re
 import textwrap
 from dataclasses import dataclass, field
@@ -134,6 +135,49 @@ def _unwrap(block: str, name: str) -> str:
     return block
 
 
+# Documentation comments must not ship. HTML comments are not rendered, but
+# they are in the message source — visible through "Show original" — and this
+# template's header comment carries repo file paths, migration numbers, design
+# rationale, and the *alternate* wording of copy the recipient is reading. None
+# of that belongs in a member's inbox, and it is ~5 KB on every send.
+#
+# Outlook's conditional comments MUST survive, including the deliberately
+# malformed downlevel-revealed pair (`<!--[if !mso]><!-- -->` … `<!--<![endif]-->`).
+# The two lookaheads below are what distinguish a conditional from a doc
+# comment: a conditional's content starts with `[if`, and the closing half
+# starts with `<![endif]`.
+# A lookahead-based "skip anything starting with [if" is NOT sufficient, and
+# getting this wrong is expensive. The downlevel-revealed opener
+# `<!--[if !mso]><!-- -->` contains a *nested* `<!--`; a scanner that declines
+# to match at the outer delimiter simply matches at the inner one, strips
+# `<!-- -->`, and leaves `<!--[if !mso]>` unclosed — which swallows the CTA
+# anchor into an open comment in every non-Outlook client. The button vanishes
+# in Gmail and Apple Mail while still looking perfect in Outlook.
+#
+# So the conditionals are lifted out to sentinels first, longest form before
+# shortest, and restored afterwards. Sentinels use NUL, which cannot occur in
+# the template.
+_CONDITIONALS = (
+    "<!--[if !mso]><!-- -->",
+    "<!--<![endif]-->",
+    "<!--[if mso]>",
+    "<![endif]-->",
+)
+_ANY_COMMENT = re.compile(r"<!--[\s\S]*?-->")
+
+
+def _strip_html_comments(html: str) -> str:
+    """Remove documentation comments, preserving MSO/VML conditionals."""
+    for i, token in enumerate(_CONDITIONALS):
+        html = html.replace(token, f"\x00c{i}\x00")
+    html = _ANY_COMMENT.sub("", html)
+    for i, token in enumerate(_CONDITIONALS):
+        html = html.replace(f"\x00c{i}\x00", token)
+    if "\x00" in html:
+        raise CompositionError("comment-stripping sentinel survived")
+    return html
+
+
 #: The handoff hard-wraps the plain-text twin at ~68 characters.
 TXT_WIDTH = 68
 
@@ -184,7 +228,20 @@ def _compose_one(
         names = (_DOC_BLOCK,) + OPTIONAL_BLOCKS
 
     body = _strip_blocks(src, pattern, keep, names)
-    rendered, unresolved = render(body, content.tokens)
+    tokens = content.tokens
+    if ext == "html":
+        # Before substitution: the header comment lists token names, and
+        # stripping first keeps them out of the unresolved tally entirely.
+        body = _strip_html_comments(body)
+        # render() is a plain string substituter with no escaping, so a token
+        # value goes into the markup verbatim. "Michelle & Claudia" then ships
+        # a bare ampersand — which browsers forgive, but is invalid, and a name
+        # or paper title containing < or > would break the document outright.
+        # No token in this template is meant to carry markup (unlike
+        # availability-reminder's paper.citation, which deliberately holds an
+        # <em>), so escaping all of them is safe and closes the whole class.
+        tokens = {k: html.escape(v, quote=True) for k, v in tokens.items()}
+    rendered, unresolved = render(body, tokens)
     if ext == "txt":
         rendered = _wrap_txt(rendered)
     return rendered, unresolved
@@ -231,6 +288,10 @@ def compose(content: Content) -> dict[str, str]:
 PREVIEW_TOKENS = {
     "recipient.firstName": "Priyanka",
     "vouch.name": "Michelle Rojas",
+    "vouch.blurb": (
+        "I'm your person for anything you want to ask before the first "
+        "meeting."
+    ),
     "answerBy": "Mon, Aug 3",
     "links.availability": (
         "https://wids-nyc-reading-group-assistant.vercel.app/availability?meeting=37"

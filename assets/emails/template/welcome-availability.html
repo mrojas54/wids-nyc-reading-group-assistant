@@ -91,7 +91,22 @@
                             Side effect worth keeping: no name in the body
                             means no split_part(name,' ',1) mis-greeting for
                             members who go by a middle name.
-      vouch.name            NEW — operator-supplied, no schema column
+      vouch.name            members.vouched_by -> members.name (migration 023)
+      vouch.blurb           block D's body line. A token because the right copy
+                            depends on who the voucher is relative to the
+                            sender, and the design was written for only one of
+                            the two cases:
+                              third-party voucher (the design's copy):
+                                "Grab her number before the first meeting —
+                                 she's your person for anything you want to
+                                 ask."
+                              voucher IS the sender (common — the operator
+                              often does the introducing):
+                                "I'm your person for anything you want to ask
+                                 before the first meeting."
+                            Shipping the third-party line when the host vouched
+                            reads as "grab her number" about the person signing
+                            the email.
       answerBy              operator-supplied date, e.g. "Mon, Aug 3"
       links.availability    <portalBase>/availability?meeting=<id>
       links.companion       <portalBase>/papers/<id>
@@ -219,7 +234,7 @@
                         <td valign="top">
                           <p style="margin:0 0 3px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#355c4b;font-weight:600;line-height:1.4;">Vouched in by</p>
                           <p style="margin:0 0 2px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;color:#152a23;letter-spacing:-0.005em;line-height:1.3;">{{ vouch.name }}</p>
-                          <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#29241b;">Grab her number before the first meeting — she's your person for anything you want to ask.</p>
+                          <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#29241b;">{{ vouch.blurb }}</p>
                         </td>
                       </tr>
                     </table>
