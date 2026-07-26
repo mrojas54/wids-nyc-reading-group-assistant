@@ -29,6 +29,7 @@ There is no migration-tracking table; filenames define order only.
 | `020_command_log_enrichment.sql` | Adds `command_log.duration_ms`, `metadata` (JSONB, default `{}`), `idempotency_key` (nullable, partial-unique for at-most-once keyed runs), and `actor`. Writers: `web/lib/log.ts` (`logServerAction` 5th arg) and `scripts/zotero_push.py` (`record_failure` kwargs). |
 | `021_blackout_periods.sql` | Creates the `blackout_periods` table (half-open `[range_start, range_end)` windows) and seeds the two 2026 summer-break windows. Service-role-only (no RLS policies), read by the scheduler and the availability portal. |
 | `022_papers_prerequisites.sql` | Adds nullable `papers.prerequisites` JSONB — the AI-drafted announcement bundle (`{lede, items, summary, short_title, status, model, generated_at}`) consumed by the new-paper-announcement email via `scripts/generate_prerequisites.py`. Additive + nullable; papers RLS unaffected. |
+| `023_members_vouched_by.sql` | Adds nullable self-referencing `members.vouched_by INT REFERENCES members(id) ON DELETE SET NULL`, a `members_vouched_by_not_self` CHECK, and a partial index. Source for the `{{ vouch.name }}` token in `welcome-availability`. Nullable by design — every pre-existing row has no voucher, and a NULL is the signal to render that email with `Blocks(vouch=False)`. No GRANT change, so the column stays invisible to `authenticated` portal sessions (migration 002 restricted `members` reads to `id, name, role`). |
 
 ## `ensure_rls` event trigger
 
@@ -48,10 +49,11 @@ browser (anon/authenticated). `command_log` is the one accepted exception
 - 10 base tables exist: `members`, `topics`, `papers`, `paper_topics`,
   `meetings`, `volunteers`, `availability`, `meeting_attendance`,
   `paper_suggestions`, `command_log`.
-- Portal columns and helpers exist: `members.auth_user_id`, `members.role`
-  accepts `leader` / `admin`, `papers.companion_url`, `papers.s2_paper_id`,
-  `papers.zotero_item_key`, `papers.prerequisites`, `availability.created_at`,
-  the `current_member_id()` function, and 10 RLS policies.
+- Portal columns and helpers exist: `members.auth_user_id`,
+  `members.vouched_by`, `members.role` accepts `leader` / `admin`,
+  `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`,
+  `papers.prerequisites`, `availability.created_at`, the
+  `current_member_id()` function, and 10 RLS policies.
 - Paper Pal artifacts exist: `paper_companions`,
   `paper_socratic_turns`, `paper_embeddings`, the
   `upsert_paper_companion()`, `can_synthesize_paper_pal(int)`, and
