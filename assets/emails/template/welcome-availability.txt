@@ -1,0 +1,93 @@
+[[BEGIN:_doc]]
+Plain-text twin of welcome-availability.html — the multipart/alternative body.
+
+Reproduced from the handoff README's verbatim block, with its bracket
+placeholders swapped for this repo's Mustache tokens.
+
+WRAPPING. The handoff shows this body hard-wrapped at ~68 characters. That is
+a property of the OUTPUT, not of this file. Prose paragraphs are stored here
+as one long logical line each and are wrapped to 68 columns by
+scripts/welcome_availability._wrap_txt after substitution. Do not hand-wrap
+them back: the README's pre-wrapped copy was laid out around a short
+"[Member]" placeholder, and a real name ("Michelle Rojas") pushed the last
+word of a line onto its own line, because line-by-line wrapping cannot
+re-flow a paragraph that was already broken for a different token width.
+
+Structural lines — section headers, the aligned Cadence/Evenings/Your hosts
+block, the three bullets, the bare URLs — stay one per line and are short
+enough that the wrapper never touches them. A line with no spaces is never
+wrapped, which is how the URLs survive intact.
+
+[[BEGIN:<name>]] / [[END:<name>]] lines are block markers consumed by the
+composer. It drops a section here whenever the same block is toggled off in
+the HTML, so the two bodies cannot drift. The markers never survive
+composition — if you see one in a sent email, the body was substituted
+directly instead of composed.
+
+The court-voice header (block B) has no twin analogue by design; the twin
+opens at the greeting either way.
+
+GREETING. Both bodies read "Hey Queen," — the operator's pick of register for
+handoff Open Question 5. The README's twin read "Hi [First name],"; that is
+resolved in favour of the group's in-house address, so neither body carries a
+first-name token. Keep the two greetings identical if either changes.
+
+One deviation from the handoff's verbatim block: the quote attribution sits
+on its own line rather than trailing the quote, so a long quote can never
+push the wrap into the author's name ("— Katherine / Johnson"). The HTML
+marks that attribution white-space:nowrap for the same reason.
+[[END:_doc]]
+Hey Queen,
+
+We're so glad to see you're keeping the mind sharp and steady. {{ vouch.name }} vouched you in! We just need one thing from you: your availability.
+[[BEGIN:vouch]]
+
+VOUCHED IN BY
+{{ vouch.name }} — grab her number before the first meeting; she's your person for anything you want to ask.
+[[END:vouch]]
+[[BEGIN:meet_strip]]
+
+THE GROUP
+Cadence:     every two months
+Evenings:    6–9 PM ET
+Your hosts:  {{ signoff.names }}
+[[END:meet_strip]]
+[[BEGIN:availability]]
+
+WHAT WE NEED FROM YOU
+Tap every evening you're free. We take the date with the most yeses.
+
+  · Answer by {{ answerBy }}
+  · Covers this month and next
+  · Resubmit anytime — latest answer wins
+[[END:availability]]
+
+Open availability:
+{{ links.availability }}
+[[BEGIN:note]]
+
+SIGNING IN THE FIRST TIME
+Enter this email address; we send a one-time link — no password, expires in 15 minutes. The date prompt is on your dashboard once you're in.
+[[END:note]]
+[[BEGIN:paper_card]]
+
+THIS CYCLE'S PAPER
+{{ paper.title }}
+— {{ paper.byline }} ({{ paper.citation }})
+
+{{ paper.hook }}
+
+Companion:
+{{ links.companion }}
+[[END:paper_card]]
+
+That's it — just the dates. See you in the room,
+{{ signoff.names }}
+[[BEGIN:quote]]
+
+"{{ quote.text }}"
+— {{ quote.by }}
+[[END:quote]]
+
+—
+{{ vouch.name }} vouched you in. Reply to come off this list.
