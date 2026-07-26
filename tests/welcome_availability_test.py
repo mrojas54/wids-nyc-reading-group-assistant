@@ -436,3 +436,24 @@ def test_markup_in_a_token_cannot_break_the_html():
     html_body = compose(Content(tokens=hostile))["html"]
     assert "<script>" not in html_body
     assert "&lt;script&gt;" in html_body
+
+
+def test_no_inline_svg_anywhere():
+    """Gmail strips <svg> outright — icons must be PNG or Unicode.
+
+    The handoff specified four inline Lucide glyphs. In a real Gmail draft all
+    of them rendered as nothing; the CTA arrow survived only because it was
+    already a text character. Regression guard so nobody reintroduces one.
+    """
+    html_body = _compose()["html"]
+    assert "<svg" not in html_body.lower()
+    assert "</svg>" not in html_body.lower()
+    # The replacements are present.
+    assert "&#10003;" in html_body        # check, vouch avatar
+    assert "&#8594;" in html_body         # arrow, CTA + companion link
+
+
+def test_mark_is_a_hosted_png_not_svg():
+    html_body = _compose()["html"]
+    assert "branding/mark-reader-96.png" in html_body
+    assert 'alt="WiDS NYC AI Reading Group"' in html_body
