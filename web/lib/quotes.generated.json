@@ -28,6 +28,80 @@
     },
     {
       "author": {
+        "id": "barbara-liskov",
+        "name": "Barbara Liskov",
+        "role": "Computer scientist · Turing Award 2008",
+        "birthdate": "1939-11-07",
+        "fields": [
+          "programming languages",
+          "distributed computing",
+          "data abstraction"
+        ],
+        "notable_contributions": "Designed CLU, which introduced abstract data types to programming languages, and gave her name to the Liskov substitution principle.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Barbara_Liskov"
+      },
+      "quotes": [
+        {
+          "id": "liskov-just-powerful-enough",
+          "text": "Designing something just powerful enough is an art.",
+          "year": 2019,
+          "source": "Quanta Magazine, \"Barbara Liskov Is the Architect of Modern Algorithms\" (20 Nov 2019)",
+          "sourceUrl": "https://www.quantamagazine.org/barbara-liskov-is-the-architect-of-modern-algorithms-20191120/",
+          "verified": true
+        },
+        {
+          "id": "liskov-let-go-of-pleasing",
+          "text": "Let go of the need to please.",
+          "year": 2019,
+          "source": "Quanta Magazine, \"Barbara Liskov Is the Architect of Modern Algorithms\" (20 Nov 2019). Her answer on how she navigated being one of very few women in the field: \"Women are socialized to please.\"",
+          "sourceUrl": "https://www.quantamagazine.org/barbara-liskov-is-the-architect-of-modern-algorithms-20191120/",
+          "verified": true
+        },
+        {
+          "id": "liskov-overcoming-obstacles",
+          "text": "You don't get to be a successful scientist without overcoming a lot of obstacles.",
+          "year": null,
+          "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Not found in the ACM Turing Award interview transcript, the Quanta profile, the MIT Technology Review profile, or Wikiquote. Held at verified:false so it is excluded from email selection until a primary source is found.",
+          "sourceUrl": null,
+          "verified": false
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "frances-allen",
+        "name": "Frances Allen",
+        "role": "Compiler pioneer · first woman to win the Turing Award",
+        "birthdate": "1932-08-04",
+        "fields": [
+          "compilers",
+          "program optimization",
+          "parallel computing"
+        ],
+        "notable_contributions": "Founded the field of automatic program optimization; first woman named an IBM Fellow and, in 2006, the first woman to receive the Turing Award.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Frances_Allen"
+      },
+      "quotes": [
+        {
+          "id": "allen-look-beyond-environment",
+          "text": "My advice to the young women of today is to look beyond their immediate environment and to find the courage to do what they think is important.",
+          "year": null,
+          "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Her documented advice to young women (ACM-W, above) reads differently, and this wording was not found in the ACM-W spotlight, the IBM history page, or the IEEE oral history. Held at verified:false until a primary source is found.",
+          "sourceUrl": null,
+          "verified": false
+        },
+        {
+          "id": "allen-work-not-career",
+          "text": "Focus on your work, not your career — that will happen later.",
+          "year": null,
+          "source": "ACM-W \"Spotlight on Frances E. Allen\", interview by Bettina Bair for the ACM-W Connections newsletter. First clause of her advice to young women in computing; the full passage continues \"build professional networks; get multiple mentors and be a mentor ... have fun.\" En dash normalised from the source's hyphen.",
+          "sourceUrl": "https://women.acm.org/spotlight-on-frances-e-allen/",
+          "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
         "id": "grace-hopper",
         "name": "Grace Hopper",
         "role": "Computer scientist · US Navy rear admiral",
@@ -106,6 +180,47 @@
           "source": "NASA interview",
           "sourceUrl": "https://en.wikiquote.org/wiki/Katherine_Johnson",
           "verified": true
+        }
+      ]
+    },
+    {
+      "author": {
+        "id": "mary-allen-wilkes",
+        "name": "Mary Allen Wilkes",
+        "role": "LINC programmer · wrote the first personal-computer operating system",
+        "birthdate": "1937-09-25",
+        "fields": [
+          "operating systems",
+          "assemblers",
+          "interactive computing"
+        ],
+        "notable_contributions": "Wrote the operating system and LAP assembler for the LINC, working from a machine installed in her parents' living room in 1965; later left computing to practise law.",
+        "wikipediaUrl": "https://en.wikipedia.org/wiki/Mary_Allen_Wilkes"
+      },
+      "quotes": [
+        {
+          "id": "wilkes-adventures-straight-and-narrow",
+          "text": "I had a lot of adventures that young men would never have had, because they would have been on the straight and narrow.",
+          "year": 2021,
+          "source": "Oral History of Mary Allen Wilkes, part 1, interviewed by David C. Brock, Computer History Museum, recorded 28 July 2021 (CHM reference X9522.2021). On being refused a Rotary fellowship because she was a woman, and going into computing instead. Trimmed at a clause boundary; the sentence continues \", got to get this professional degree and so forth.\"",
+          "sourceUrl": "https://archive.computerhistory.org/resources/access/text/2024/06/102792262-05-01-acc.pdf",
+          "verified": true
+        },
+        {
+          "id": "wilkes-programmers-were-fungible",
+          "text": "Programmers were all women and they were fungible. They need a programmer, send her here or send her there.",
+          "year": 2021,
+          "source": "Oral History of Mary Allen Wilkes, part 1, interviewed by David C. Brock, Computer History Museum, recorded 28 July 2021 (CHM reference X9522.2021). On being reassigned to Wes Clark's advanced computer design group at Lincoln Lab in 1961.",
+          "sourceUrl": "https://archive.computerhistory.org/resources/access/text/2024/06/102792262-05-01-acc.pdf",
+          "verified": true
+        },
+        {
+          "id": "wilkes-world-more-interesting-for-women",
+          "text": "I have to say that I think the world has gotten more interesting for women.",
+          "year": null,
+          "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Not present in part 1 of the Computer History Museum oral history transcript (searched); part 2 was not checked, and it may come from her 2019 Wellesley colloquium talk or the podcast interview, neither of which has a published transcript. Held at verified:false until located.",
+          "sourceUrl": null,
+          "verified": false
         }
       ]
     },

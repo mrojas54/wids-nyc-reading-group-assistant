@@ -1,0 +1,26 @@
+[
+  {
+    "id": "liskov-just-powerful-enough",
+    "text": "Designing something just powerful enough is an art.",
+    "year": 2019,
+    "source": "Quanta Magazine, \"Barbara Liskov Is the Architect of Modern Algorithms\" (20 Nov 2019)",
+    "sourceUrl": "https://www.quantamagazine.org/barbara-liskov-is-the-architect-of-modern-algorithms-20191120/",
+    "verified": true
+  },
+  {
+    "id": "liskov-let-go-of-pleasing",
+    "text": "Let go of the need to please.",
+    "year": 2019,
+    "source": "Quanta Magazine, \"Barbara Liskov Is the Architect of Modern Algorithms\" (20 Nov 2019). Her answer on how she navigated being one of very few women in the field: \"Women are socialized to please.\"",
+    "sourceUrl": "https://www.quantamagazine.org/barbara-liskov-is-the-architect-of-modern-algorithms-20191120/",
+    "verified": true
+  },
+  {
+    "id": "liskov-overcoming-obstacles",
+    "text": "You don't get to be a successful scientist without overcoming a lot of obstacles.",
+    "year": null,
+    "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Not found in the ACM Turing Award interview transcript, the Quanta profile, the MIT Technology Review profile, or Wikiquote. Held at verified:false so it is excluded from email selection until a primary source is found.",
+    "sourceUrl": null,
+    "verified": false
+  }
+]
