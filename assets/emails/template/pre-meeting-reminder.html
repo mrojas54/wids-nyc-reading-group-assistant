@@ -13,28 +13,20 @@
     Pre-meeting reminder email — WiDS NYC AI Reading Group Planner.
 
     Source design: Claude Design handoff "design_handoff_pre_meeting_reminder /
-    Pre-Meeting Reminder Email.html". High-fidelity port to email-client-safe
-    table markup; the prototype's CSS variables are inlined as literal hex.
+    Pre-Meeting Reminder Email.html". Spec:
+    docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md
 
-    Email-safety deltas vs the browser prototype (see the spec
-    docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md):
-      1. The cream dotted-grid card background (radial-gradient +
-         background-attachment:local) is dropped — clients strip
-         background-images. The card is solid cream #fefcef on the dark
-         #1a160f backdrop.
-      2. The prototype's inline-SVG logo lockup is replaced by the hosted PNG
-         brand mark (mark-reader-192.png), matching the sibling templates —
-         inline-SVG logos do not render in Gmail/Outlook. Small decorative
-         icons stay inline SVG, as the sibling templates already do.
-      3. The numbered discussion list (CSS ::before counters) is a table whose
-         01/02… cells are real text, composed server-side by
-         scripts/discussion_questions.py and injected as {{ questions.html }}.
-      4. Per-phrase bold inside questions is dropped (escaped plain text) so the
-         future per-paper auto-loader needn't emit markup.
+    Deltas vs the browser prototype:
+      1. The cream dotted-grid card background is dropped; the card is solid
+         #fefcef on the dark #1a160f backdrop. Its stated reason is REFUTED —
+         reinstating the grid is open design work. See the runbook.
+      2. The inline-SVG logo lockup is replaced by the hosted PNG brand mark
+         (mark-reader-192.png). Small decorative icons stay inline SVG.
+      3. The numbered discussion list is a table whose 01/02… cells are real
+         text, composed by scripts/discussion_questions.py into questions.html.
 
-    Tokens are Mustache-style ({{ recipient.firstName }}), resolved by the agent
-    driving Gmail MCP (scripts/render_email_previews.py). Wiring into
-    scheduled_tasks/pre-meeting-reminder.md is deferred (spec §8).
+    Merge fields: docs/runbooks/transactional-emails.md, Token contracts.
+    Wiring into scheduled_tasks/pre-meeting-reminder.md is deferred (spec §8).
   -->
 
   <!--[if mso]>

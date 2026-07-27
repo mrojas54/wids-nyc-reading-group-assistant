@@ -53,7 +53,97 @@ work does not get mistaken for production behavior.
 | `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. **Not renderable by `render_email_previews.py`** — it carries per-send block toggles that must be resolved before substitution, so it goes through `compose()` instead. Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotated from the shared pool. Required tokens: `recipient.firstName`, `lead.name`/`lead.initial`/`lead.blurb`, `paper.title`/`paper.shortTitle`/`paper.summary`/`paper.authorsShort`/`paper.url`, `prereqs.lede` + `prereqs.html` (`.txt` twin uses `prereqs.text`), `signoff.names`, `links.availability`, `links.rsvpManage`. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotated from the shared pool. Full field list under Token contracts below. |
+
+## Token contracts
+
+Authoritative list of merge fields per template. **This is the only copy** — the
+template head comments used to duplicate it and were collapsed to pointers here,
+because two copies drift silently and the templates cannot be trusted to carry
+the current one.
+
+Token names are written bare throughout, for the reason given in Architecture
+above: a delimited token inside a comment gets substituted with real recipient
+values and counts as required even when its block is off.
+
+### `availability-thanks`
+
+Required — refuse to send if any is unresolved:
+
+    recipient.firstName
+    paper.title, paper.authorsShort, paper.citation, paper.url
+    operator.displayName
+    links.portalBase
+
+Optional, with fallbacks:
+
+    paper.location            omit the chip entirely if null
+    paper.duration            fallback "~90 min"
+    paper.companionDropDay    fallback "Wed"
+    links.companionPreview    fallback to the literal "Preview link coming soon"
+                              (see Step 5b note in availability-chase.md)
+    quote.text / quote.by / quote.role
+                              fallback to the seed Grace Hopper quote
+
+### `rsvp-confirmation`
+
+Required — refuse to send if any is unresolved:
+
+    recipient.firstName
+    links.calendar, links.rsvpManage, links.portalBase
+    paper.title, paper.authorsShort, paper.companionUrl
+
+Optional / rotated — fall back to `haiku[0]` plus the Grace Hopper quote:
+
+    haiku.line1, haiku.line2, haiku.line3
+    quote.text, quote.by, quote.role
+
+### `new-paper-announcement`
+
+Required hydrated tokens; `render()` refuses to emit if any is unresolved:
+
+    recipient.firstName
+    lead.name, lead.initial, lead.blurb
+    paper.title, paper.shortTitle, paper.summary, paper.authorsShort, paper.url
+    prereqs.lede, prereqs.html          (the .txt twin uses prereqs.text)
+    signoff.names
+    links.availability, links.rsvpManage
+
+Rotated from the shared pool, has a fallback:
+
+    quote.text, quote.by, quote.role
+
+### `availability-reminder`
+
+Merge fields live in `scheduled_tasks/availability-chase.md` (Step 5: operator
+`remind` flow), which is its operational spec. Not duplicated here.
+
+### `pre-meeting-reminder`
+
+Previously undocumented anywhere — recorded here 2026-07-27 after an audit found
+five tokens with no contract in any file. Preview-only today; verify against the
+live send path before wiring it into a workflow.
+
+    recipient.firstName
+    meeting.when, meeting.dayName, meeting.location, meeting.leader
+    paper.title, paper.subtitle, paper.companionUrl
+    questions.lede, questions.html      (the .txt twin uses questions.text)
+    links.calendar, links.rsvpManage
+    signoff.names
+    quote.text, quote.by, quote.role
+
+`questions.*` are emitted by `scripts/discussion_questions.py` so the template
+stays logic-free — see the Discussion-question workflow section below. `quote.*`
+comes from the shared pool with a fallback. The `.html` and `.txt` twins are
+otherwise identical in their field set.
+
+### `welcome-availability`
+
+Contract is enforced in code by `scripts/welcome_availability.py`, which raises
+rather than returning a body with an unresolved token or a surviving block
+marker. The per-token rationale — which tokens are deliberately unused, and the
+first-name hazards — stays in that template's head comment, since it is design
+reasoning rather than a field list.
 
 ## Preview and validation
 
