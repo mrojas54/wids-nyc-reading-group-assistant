@@ -5,7 +5,8 @@ argument-hint: <name> | <email> | [phone] | [whatsapp] | [vouched-by]
 
 # /wids-add-member <name> | <email> | [phone] | [whatsapp] | [vouched-by]
 
-Two phases: insert the member → draft the welcome email, operator confirms the send.
+Two phases: insert the member → draft the welcome email. The **operator** sends
+it; this command cannot (Step 6).
 
 Use this when someone asks to join between cycles. It is the single-member
 counterpart to `/wids-bootstrap` Step 5 (bulk CSV import) plus the reminder
@@ -229,17 +230,40 @@ Sanity-checked against meeting 37 / paper 40 with real values: both bodies
 compose clean, the twin wraps to 68 columns, and the rendered card matches the
 handoff's reference screenshot.
 
-## Step 6 — Draft, then confirm the send
+## Step 6 — Draft, then hand off the send
 
-Create a **Gmail draft** via the Gmail MCP — multipart, both the rendered HTML
-and plain-text bodies, single recipient. Subject: `Welcome to WiDS NYC AI
-Reading Group — when can you make it?`
+Create a **Gmail draft** via the Gmail MCP `create_draft` — multipart, both the
+rendered HTML and plain-text bodies, single recipient. Subject: `So glad you're
+here — let us know when you can join us`.
 
-Do not send yet. Show the operator the resolved subject, recipient, and the
-plain-text body, then ask: "Draft is in Gmail. Reply `send` to send it as-is,
-or edit it in Gmail and send it yourself."
+**You cannot send it. The operator has to.** This is a hard capability limit,
+not a safety pause: the Gmail MCP exposes `create_draft`, `update_draft`,
+`list_drafts`, `get_message`, `get_thread`, `search_threads`, and the label
+tools — and no send tool of any kind. Do not tell the operator to "reply `send`
+and I'll send it"; that offer cannot be honoured, and an earlier version of this
+step promised exactly that.
 
-Only on an explicit `send` reply, send it and log:
+So: show the operator the resolved subject, recipient, and the plain-text body,
+then say: "Draft is in Gmail — open it and send it when it looks right. Tell me
+once it's gone and I'll log it."
+
+Warn them in the same breath that **the mark will be missing from what they
+send**. Gmail's compose window drops the remote `<img>` outright — verified
+twice against real sends, the `<img>` element is simply absent from the
+delivered source — and pressing Send in the composer ships the composer's DOM.
+Everything else survives, because every painted background carries a `bgcolor`
+attribute (see the template's head comment). Nothing is broken; the logo is
+just absent until the `cid:` inline-attachment work lands.
+
+Two more things the composer does on that path, worth knowing before the
+operator hand-edits:
+
+* It replaces the hand-wrapped `.txt` twin with one auto-derived from the HTML.
+* It strips `background-color` from inline styles, keeping only the `bgcolor`
+  attributes. That is why those attributes are load-bearing rather than
+  belt-and-braces.
+
+Once the operator confirms it is sent, log it:
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
@@ -257,11 +281,15 @@ chase from nudging a member who was just personally emailed. A unique violation
 (SQLSTATE 23505) means the chase already reached them — treat it as "already
 sent", don't resend.
 
-If the operator edits and sends from Gmail instead, still write the log row —
-ask them to confirm they sent it, then insert with the same key.
+Write the row on the operator's word that it went, not on your own action —
+you never see the send. If they edited the draft before sending, the row is
+still correct: it records that the member was reached, not what the body said.
+If they say they did **not** send it, write nothing; an unsent draft logged as
+sent silences the nightly chase for a member who was never emailed.
 
 ## Step 7 — Report
 
 State the member id, what was stored (including whether whatsapp was set), the
-meeting the reminder points at, and whether the email was sent or left as a
-draft.
+meeting the reminder points at, and whether the draft is still sitting in Gmail
+or the operator has confirmed sending it. Never report an email as sent on the
+strength of having drafted it.
