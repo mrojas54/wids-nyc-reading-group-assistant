@@ -13,14 +13,28 @@ work does not get mistaken for production behavior.
   `scripts/welcome_availability.py` is the worked example of a composer:
   block markers stripped first, then substitution, then a wrap pass on the
   text body.
-- **Do not document a token in live `{{ … }}` syntax inside a template
-  comment.** `render()` substitutes every delimited token it finds, comments
-  included, so a documented token gets replaced with the recipient's real
-  values (leaking them into the shipped body) and counts as required even
-  when the block using it is toggled off. List token names bare. For the same
-  reason, never write a literal comment-close inside an HTML comment: it ends
-  the comment early and dumps the remaining notes into the email as visible
-  text.
+- **HTML comments never ship.** Every path that turns a template into a body
+  — `render_pair()` in the preview renderer, `compose()` in
+  `welcome_availability.py`, `render_new_paper_email()` in
+  `generate_prerequisites.py` — runs
+  `render_email_previews.strip_html_comments()` on the HTML *before*
+  substitution. Head comments carry repo paths, migration numbers, and the
+  alternate wording of copy the recipient is reading; none of it belongs in an
+  inbox via "Show original", and it is several KB on every send. Outlook's
+  conditional comments (`<!--[if mso]>`, the downlevel-revealed
+  `<!--[if !mso]><!-- -->` pair) are lifted to sentinels and restored, so they
+  survive. Add a new send path and you must strip on it too — a `.txt` twin
+  needs no strip, since its doc header is a `[[BEGIN:_doc]]` block.
+- Because stripping runs first, documenting a token in live `{{ … }}` syntax
+  inside a comment is no longer a leak: the comment is gone before `render()`
+  sees it. (It used to substitute the recipient's real values into the shipped
+  comment — `rsvp-confirmation.html`'s header rendered as "Template tokens are
+  Mustache-style (Maya)".) Listing token names bare is still the clearer
+  house style, but nothing depends on it now.
+- **Never write a literal comment-close inside an HTML comment.** This one
+  still bites, and harder than before: `-->` ends the comment early, so the
+  stripper removes only up to that point and dumps the remaining notes into
+  the email as visible text.
 - Preview rendering writes `*_rendered.html` and `*_rendered.txt` next to the
   sources. Those files are ignored by git and should not be committed.
 - Member-facing scheduled-task sends use the operator Gmail MCP. Supabase Auth

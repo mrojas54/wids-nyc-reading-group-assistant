@@ -40,7 +40,12 @@ import textwrap
 from dataclasses import dataclass, field
 from typing import Literal
 
-from scripts.render_email_previews import TEMPLATES, render
+from scripts.render_email_previews import (
+    TEMPLATES,
+    RenderError,
+    render,
+    strip_html_comments,
+)
 
 STEM = "welcome-availability"
 
@@ -129,47 +134,24 @@ def _unwrap(block: str, name: str) -> str:
     return block
 
 
-# Documentation comments must not ship. HTML comments are not rendered, but
-# they are in the message source — visible through "Show original" — and this
-# template's header comment carries repo file paths, migration numbers, design
-# rationale, and the *alternate* wording of copy the recipient is reading. None
-# of that belongs in a member's inbox, and it is ~5 KB on every send.
-#
-# Outlook's conditional comments MUST survive, including the deliberately
-# malformed downlevel-revealed pair (`<!--[if !mso]><!-- -->` … `<!--<![endif]-->`).
-# The two lookaheads below are what distinguish a conditional from a doc
-# comment: a conditional's content starts with `[if`, and the closing half
-# starts with `<![endif]`.
-# A lookahead-based "skip anything starting with [if" is NOT sufficient, and
-# getting this wrong is expensive. The downlevel-revealed opener
-# `<!--[if !mso]><!-- -->` contains a *nested* `<!--`; a scanner that declines
-# to match at the outer delimiter simply matches at the inner one, strips
-# `<!-- -->`, and leaves `<!--[if !mso]>` unclosed — which swallows the CTA
-# anchor into an open comment in every non-Outlook client. The button vanishes
-# in Gmail and Apple Mail while still looking perfect in Outlook.
-#
-# So the conditionals are lifted out to sentinels first, longest form before
-# shortest, and restored afterwards. Sentinels use NUL, which cannot occur in
-# the template.
-_CONDITIONALS = (
-    "<!--[if !mso]><!-- -->",
-    "<!--<![endif]-->",
-    "<!--[if mso]>",
-    "<![endif]-->",
-)
-_ANY_COMMENT = re.compile(r"<!--[\s\S]*?-->")
+# Documentation comments must not ship — this template's header comment alone
+# is ~5 KB of repo file paths, migration numbers, design rationale, and the
+# *alternate* wording of copy the recipient is reading. The stripper (and the
+# reasoning behind its sentinel dance, which is what keeps the Outlook
+# conditionals alive) lives in `scripts.render_email_previews` so this composer
+# and the preview/JSON renderer cannot drift apart on what ships.
 
 
-def _strip_html_comments(html: str) -> str:
-    """Remove documentation comments, preserving MSO/VML conditionals."""
-    for i, token in enumerate(_CONDITIONALS):
-        html = html.replace(token, f"\x00c{i}\x00")
-    html = _ANY_COMMENT.sub("", html)
-    for i, token in enumerate(_CONDITIONALS):
-        html = html.replace(f"\x00c{i}\x00", token)
-    if "\x00" in html:
-        raise CompositionError("comment-stripping sentinel survived")
-    return html
+def _strip_html_comments(body: str) -> str:
+    """Strip doc comments, restating failures as :class:`CompositionError`.
+
+    ``compose()`` promises exactly one failure type, so the shared stripper's
+    :class:`RenderError` is translated rather than allowed to escape.
+    """
+    try:
+        return strip_html_comments(body)
+    except RenderError as exc:
+        raise CompositionError(str(exc)) from exc
 
 
 #: The handoff hard-wraps the plain-text twin at ~68 characters.
