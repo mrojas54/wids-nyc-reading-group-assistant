@@ -242,10 +242,16 @@ For each non-submitter row:
    LIMIT 1;
    ```
 
-4. Send via Gmail MCP. Single recipient per send (no bcc fan-out — each
-   member gets a personalised body). Include **both** the rendered HTML
-   body and the rendered plain-text body so clients that strip HTML still
-   read correctly (handoff acceptance criterion #2).
+4. Create a **Gmail draft** per member via the Gmail MCP `create_draft`.
+   Single recipient per draft (no bcc fan-out — each member gets a
+   personalised body). Include **both** the rendered HTML body and the
+   rendered plain-text body so clients that strip HTML still read correctly
+   (handoff acceptance criterion #2).
+
+   **You cannot send it. The operator has to.** The Gmail MCP exposes no send
+   tool of any kind — see `.claude/commands/wids-add-member.md` Step 6 for the
+   full capability limit. An earlier version of this step read "Send via Gmail
+   MCP", which was unfollowable as written.
 
 5. Log:
 
@@ -310,8 +316,10 @@ For each submitter row:
    LIMIT 1;
    ```
 
-4. Send via Gmail MCP. Multipart (HTML + plain-text), single recipient
-   per send. Default subject: `You're in — thanks for the RSVP`. The
+4. Create a **Gmail draft** via the Gmail MCP `create_draft` — multipart
+   (HTML + plain-text), single recipient per draft. The operator sends it;
+   the MCP has no send tool. Default subject: `You're in — thanks for the
+   RSVP`. The
    operator's `subject="..."` override from Step 3 applies ONLY to the
    reminder bucket (Step 5c); the thank-you keeps its fixed subject so
    submitters don't get re-pinged with reminder-style urgency wording.
