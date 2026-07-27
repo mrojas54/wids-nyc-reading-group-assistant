@@ -1,0 +1,26 @@
+[
+  {
+    "id": "wilkes-adventures-straight-and-narrow",
+    "text": "I had a lot of adventures that young men would never have had, because they would have been on the straight and narrow.",
+    "year": 2021,
+    "source": "Oral History of Mary Allen Wilkes, part 1, interviewed by David C. Brock, Computer History Museum, recorded 28 July 2021 (CHM reference X9522.2021). On being refused a Rotary fellowship because she was a woman, and going into computing instead. Trimmed at a clause boundary; the sentence continues \", got to get this professional degree and so forth.\"",
+    "sourceUrl": "https://archive.computerhistory.org/resources/access/text/2024/06/102792262-05-01-acc.pdf",
+    "verified": true
+  },
+  {
+    "id": "wilkes-programmers-were-fungible",
+    "text": "Programmers were all women and they were fungible. They need a programmer, send her here or send her there.",
+    "year": 2021,
+    "source": "Oral History of Mary Allen Wilkes, part 1, interviewed by David C. Brock, Computer History Museum, recorded 28 July 2021 (CHM reference X9522.2021). On being reassigned to Wes Clark's advanced computer design group at Lincoln Lab in 1961.",
+    "sourceUrl": "https://archive.computerhistory.org/resources/access/text/2024/06/102792262-05-01-acc.pdf",
+    "verified": true
+  },
+  {
+    "id": "wilkes-world-more-interesting-for-women",
+    "text": "I have to say that I think the world has gotten more interesting for women.",
+    "year": null,
+    "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Not present in part 1 of the Computer History Museum oral history transcript (searched); part 2 was not checked, and it may come from her 2019 Wellesley colloquium talk or the podcast interview, neither of which has a published transcript. Held at verified:false until located.",
+    "sourceUrl": null,
+    "verified": false
+  }
+]

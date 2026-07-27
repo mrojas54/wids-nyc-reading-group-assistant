@@ -103,8 +103,33 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - Periodically export Form 2 responses to `<drive_root>/cycles/<cycle_label>/rg-form-responses.csv`. (Same passive ingestion via `process-form`. Also retired once the portal cuts over.)
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
+7. **Optional anytime**: `/wids-add-member <name> | <email> | [phone] | [whatsapp]` — someone asks to join between cycles. Inserts the member (email lowercased, phone normalized to E.164), then drafts the availability reminder for whatever meeting is in `prep` and waits for you to reply `send`. See [Adding a member mid-cycle](#adding-a-member-mid-cycle).
 
 The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
+
+### Adding a member mid-cycle
+
+`/wids-add-member` covers the common case — someone meets you at an event and asks to join. It is the single-member counterpart to the bulk CSV import in `/wids-bootstrap` Step 5, plus the reminder half of `scheduled_tasks/availability-chase.md`.
+
+```
+/wids-add-member Ada Lovelace | ada@example.com | (212) 555-0143
+```
+
+Three things it handles that are easy to get wrong by hand:
+
+- **Email is lowercased before insert.** `web/app/auth/callback/route.ts` links a sign-in to its member row with `.eq("email", user.email.toLowerCase())`. A row stored with any uppercase still receives a magic link and still signs in — but `auth_user_id` never links, so the member lands on a dashboard with no record and their availability writes fail RLS. This failure looks like "the portal is broken for one person."
+- **Phone is normalized to E.164.** `members_phone_e164_check` rejects `(212) 555-0143` outright. Ten digits get `+1`; anything ambiguous halts and asks rather than guessing a country code. It also asks whether the number is on WhatsApp instead of assuming — the roster is split roughly half and half.
+- **The reminder claims the `availability-chase:meeting=<id>:member=<id>` idempotency key.** That is the same key the nightly chase dedupes on, so a member you just emailed personally doesn't get nudged again the next night.
+
+The email is **drafted, never auto-sent** — same posture as `new-paper-announcement`. You reply `send`, or edit it in Gmail and send it yourself.
+
+It renders `assets/emails/template/welcome-availability`, the welcome-and-vouch design ported from the Claude Design handoff. Unlike `availability-reminder` (written for a lapsed regular), this one is written for exactly this moment. It carries nine per-send block toggles — turn a block off rather than inventing content for it, particularly the paper card when the companion link doesn't resolve and the vouch card when nobody actually vouched. To check whether a companion link resolves, query `paper_companions.payload` for that paper id — **not** `web/content/papers/<id>.json`, which is the deprecated static-fixture path and is absent for most live papers. Both bodies come from one content object via `scripts/welcome_availability.py`, so a block dropped from the HTML drops from the plain-text twin too. Preview with:
+
+```bash
+uv run python -m scripts.welcome_availability
+```
+
+If no meeting is in `prep`, the command adds the member and stops there — they'll be picked up by the next `/wids-meeting-start`.
 
 ### When something goes wrong
 

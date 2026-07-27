@@ -63,12 +63,23 @@ thin primary-source trail)*
 sad. The world should have so many female engineers that it wouldn't
 be at all noteworthy."*
 
+**Barbara Liskov** — *"Designing something just powerful enough is an
+art."* and *"Let go of the need to please."* — both from the Quanta
+Magazine profile, 20 Nov 2019.
+
 **Barbara Liskov** — *"You don't get to be a successful scientist
-without overcoming a lot of obstacles."*
+without overcoming a lot of obstacles."* *(verify source — searched the
+ACM Turing interview transcript, the Quanta profile, the MIT Technology
+Review profile, and Wikiquote without finding it; held at
+`verified: false` in `data/quotes/barbara-liskov/`)*
+
+**Frances Allen** — *"Focus on your work, not your career — that will
+happen later."* — ACM-W spotlight, interview by Bettina Bair.
 
 **Frances Allen** — *"My advice to the young women of today is to
 look beyond their immediate environment and to find the courage to do
-what they think is important."*
+what they think is important."* *(verify source — her documented ACM-W
+advice reads differently; held at `verified: false`)*
 
 **Joan Clarke** — *"It was easy to make decisions for myself, harder
 to make them for others."* *(verify source — Clarke was bound by the
@@ -78,8 +89,16 @@ record; this quote has no traceable primary source)*
 **Hedy Lamarr** — *"The brains of people are more interesting than
 the looks, I think."*
 
+**Mary Allen Wilkes** — *"I had a lot of adventures that young men
+would never have had, because they would have been on the straight and
+narrow."* and *"Programmers were all women and they were fungible."* —
+both from her Computer History Museum oral history, 28 July 2021.
+
 **Mary Allen Wilkes** — *"I have to say that I think the world has
-gotten more interesting for women."*
+gotten more interesting for women."* *(verify source — not in part 1 of
+the CHM oral history transcript; part 2 unchecked, and it may come from
+her 2019 Wellesley colloquium or a podcast, neither transcribed. Held at
+`verified: false`)*
 
 ## Sourcing rule
 

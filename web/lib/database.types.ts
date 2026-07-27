@@ -249,6 +249,7 @@ export type Database = {
           name: string
           phone: string | null
           role: string
+          vouched_by: number | null
           whatsapp: string | null
         }
         Insert: {
@@ -260,6 +261,7 @@ export type Database = {
           name: string
           phone?: string | null
           role?: string
+          vouched_by?: number | null
           whatsapp?: string | null
         }
         Update: {
@@ -271,9 +273,18 @@ export type Database = {
           name?: string
           phone?: string | null
           role?: string
+          vouched_by?: number | null
           whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "members_vouched_by_fkey"
+            columns: ["vouched_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       paper_companions: {
         Row: {

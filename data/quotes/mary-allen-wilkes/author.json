@@ -1,0 +1,9 @@
+{
+  "id": "mary-allen-wilkes",
+  "name": "Mary Allen Wilkes",
+  "role": "LINC programmer · wrote the first personal-computer operating system",
+  "birthdate": "1937-09-25",
+  "fields": ["operating systems", "assemblers", "interactive computing"],
+  "notable_contributions": "Wrote the operating system and LAP assembler for the LINC, working from a machine installed in her parents' living room in 1965; later left computing to practise law.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Mary_Allen_Wilkes"
+}

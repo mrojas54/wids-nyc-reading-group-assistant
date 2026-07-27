@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <!-- Voice-neutral on purpose: block A and block B ship different headlines,
+       and a title copied from either one contradicts the other. -->
+  <title>WiDS NYC AI Reading Group</title>
+
+  <!--
+    Welcome + availability email — WiDS NYC AI Reading Group Planner.
+    Sent when an existing member vouches a new person in.
+
+    Source design: Claude Design handoff bundle "Vouched in group email /
+    design_handoff_reading_group_email/" (README.md + ReadingGroupEmail.dc.html).
+    High-fidelity port of the "paper note" card to email-client-safe
+    table-based markup. The prototype's flexbox, gap, and multi-layer
+    background shorthand are preview-only; the VALUES here are literal from
+    the handoff README, the technique is table + inline style.
+
+    BLOCK MARKERS — this template is NOT rendered by flat substitution alone.
+    scripts/render_email_previews.render() has no conditionals, so the nine
+    per-send content switches are resolved BEFORE substitution by
+    scripts/welcome_availability.py, which strips each block delimited by a
+    pair of HTML comments reading `BEGIN-BLOCK: <name>` and
+    `END-BLOCK: <name>` (see any block below for the literal form — it is
+    deliberately not reproduced inside this comment, because a nested comment
+    close would terminate this one early and dump these notes into the top of
+    every sent email as visible text)
+    for every block toggled off. The same composer emits the .txt twin from
+    the same content object, so a block dropped here drops there too — the
+    handoff calls hand-syncing the two bodies the likeliest thing to drift.
+    Never mail this file through render() directly; go through the composer.
+
+    Exactly one header renders. `court_voice` selects block B; block A is its
+    derived inverse. Neither "both" nor "neither" is reachable by construction
+    (see BlockToggles.headers() in the composer).
+
+    Deliberate deviations from the WiDS NYC design system, all three kept per
+    the handoff:
+      1. Dotted-grid card texture — the system bans gradients on UI surfaces,
+         but sanctions this 24px dot grid as the "study group" graph-paper note.
+      2. Title-case court header (block B) — ceremonial exception to the
+         system's sentence-case rule.
+      3. 6px radii on cards/blocks vs the portal's 10/14px (email convention).
+         CTA keeps 10px.
+
+    Port decisions where the handoff left the technique open:
+      * Dotted grid ships as an inline `background-image: radial-gradient(...)`
+        over a `bgcolor="#fefcef"` solid. Apple Mail/iOS honor it; Gmail and
+        Outlook strip it and fall back to flat cream. Graceful, no image
+        request, no invented asset.
+      * Page backdrop is #fefcef, not the prototype's #1a160f — the handoff is
+        explicit that the dark backdrop is preview chrome and not part of the
+        email. The card border (#ddd4be) carries the edge.
+      * Card shadow dropped. The handoff says it reads only against the dark
+        preview backdrop and "can be dropped" in a real inbox.
+      * NO INLINE SVG ANYWHERE. Gmail strips <svg> outright — not "degrades",
+        removes — so the Lucide check/book/arrow glyphs the handoff specifies
+        rendered as nothing at all in a real Gmail draft. Outlook and Yahoo
+        strip it too; only Apple Mail is reliable. Every icon here is either a
+        hosted PNG or a Unicode character:
+          check (vouch avatar)   &#10003; in the sage circle
+          arrow (CTA, companion) &#8594;  — the CTA already used this and was
+                                 the one icon that survived, which is the tell
+          book (paper eyebrow)   dropped; it was decorative next to a label
+                                 that already reads "This cycle's paper"
+        Do not reintroduce SVG for these. If a future icon needs real artwork,
+        host a PNG under web/public/branding/ like the mark.
+      * The 48x48 mark ships as the already-hosted 2x PNG
+        (branding/mark-reader-96.png), which IS the Codex mark the handoff
+        describes — open book, circuit traces, magenta accent node at cx 44.
+        URL verified 200 image/png. Remote images are subject to the
+        recipient's image-loading settings; the headline and the eyebrow below
+        it carry the branding on their own if it never loads.
+      * Cadence strip (E) is a 3-cell table that stacks under 640px via the
+        .stack-cell media query. Outlook holds three columns — accepted by the
+        handoff.
+
+    Merge tokens are Mustache, matching the rest of assets/emails/template/.
+    Full contract in docs/runbooks/transactional-emails.md.
+
+    Listed WITHOUT the mustache delimiters on purpose. render() substitutes
+    every delimited token it finds, comments included — a token written in
+    live syntax here would be replaced with the recipient's real values
+    (leaking them into a shipped HTML comment) and would also be counted as
+    required even when the block that actually uses it is toggled off. Keep
+    this list inert, and do not write a delimited example anywhere in this
+    comment: the composer's leftover-token check cannot tell prose about the
+    syntax from an unsubstituted token.
+
+      recipient.firstName   NOT USED by this template — the operator chose the
+                            "Hey Queen," register (handoff Open Question 5),
+                            which addresses the reader by the group's in-house
+                            term rather than by name. Kept in the contract
+                            because availability-reminder and rsvp-confirmation
+                            still use it, and because reinstating a
+                            personalised greeting here is a one-line change.
+                            Side effect worth keeping: no name in the body
+                            means no split_part(name,' ',1) mis-greeting for
+                            members who go by a middle name.
+      vouch.name            members.vouched_by -> members.name (migration 023)
+      vouch.blurb           block D's body line. A token because the right copy
+                            depends on who the voucher is relative to the
+                            sender, and the design was written for only one of
+                            the two cases:
+                              third-party voucher (the design's copy):
+                                "Grab her number before the first meeting —
+                                 she's your person for anything you want to
+                                 ask."
+                              voucher IS the sender (common — the operator
+                              often does the introducing):
+                                "I'm your person for anything you want to ask
+                                 before the first meeting."
+                            Shipping the third-party line when the host vouched
+                            reads as "grab her number" about the person signing
+                            the email.
+      answerBy              operator-supplied date, e.g. "Mon, Aug 3"
+      links.availability    <portalBase>/availability?meeting=<id>
+      links.companion       <portalBase>/papers/<id>
+      signoff.names         operator-supplied
+      operator.email        footer reply-to (unsubscribe is a human reply)
+      paper.title / paper.byline / paper.citation / paper.hook   block I only
+      quote.text / quote.by      block K only, via scripts/quotes.py
+
+    Compatibility target: Gmail (web/iOS/Android), Apple Mail (macOS/iOS),
+    Outlook 2019+ (Windows) via VML roundrect, Outlook web.
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
+    .serif, .paper-title, .signoff-name, .quote-text, .court-head, .court-sub, .ask-lede, .host-value { font-family: Georgia, "Times New Roman", serif !important; }
+    .mono { font-family: Consolas, "Courier New", monospace !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #355c4b; }
+
+    @media only screen and (max-width: 640px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 24px !important; padding-right: 24px !important; }
+      .pad-x-footer { padding-left: 24px !important; padding-right: 24px !important; }
+      .headline { font-size: 20px !important; }
+      .court-head { font-size: 27px !important; }
+      .paper-title { font-size: 18px !important; }
+      /* Cadence strip (E): three cells stack. Outlook ignores this and holds
+         three columns, which the handoff explicitly accepts. */
+      .stack-cell { display: block !important; width: 100% !important; border-right: 0 !important; border-bottom: 1px solid #ddd4be !important; }
+      .stack-cell-last { border-bottom: 0 !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#fefcef;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#1a160f;">
+
+  <!-- Hidden preheader (inbox-preview text). Trailing zero-width whitespace
+       pushes any leaked first-paragraph snippet out of the preview pane. -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    {{ vouch.name }} vouched you in &mdash; we just need your evening availability.
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (page backdrop) ===== -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#fefcef" style="background-color:#fefcef;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+
+        <!-- ===== Email card (paper note) =====
+             Dotted grid: radial-gradient over the cream solid. Clients that
+             strip background-image get flat #fefcef, which is the intended
+             fallback. -->
+        <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" bgcolor="#fefcef"
+               style="width:640px;max-width:640px;background-color:#fefcef;background-image:radial-gradient(circle at 12px 12px, #ddd4be 1px, transparent 1.4px);background-size:24px 24px;background-position:0 0;background-repeat:repeat;border:1px solid #ddd4be;border-radius:6px;">
+
+          <tr>
+            <td class="pad-x" style="padding:44px 52px 28px;">
+
+              <!-- ══════ BLOCK B — Header, "court" voice ══════ -->
+              <!-- BEGIN-BLOCK: header_court -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding:0 0 28px;">
+                    <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.28em;text-transform:uppercase;color:#a8175a;font-weight:600;line-height:1.4;padding-bottom:12px;">&#10022; &nbsp; A Member Said Your Name &nbsp; &#10022;</div>
+                    <div class="court-head" style="font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-size:32px;font-weight:500;letter-spacing:-0.015em;color:#152a23;line-height:1.12;">A small room, and<br>one open chair</div>
+                    <div class="court-sub" style="font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:15px;color:#a8175a;line-height:1.45;max-width:34ch;margin:8px auto 0;padding-top:8px;">You were named by a member — that is the whole of the admission rite.</div>
+                    <div style="width:28px;height:2px;line-height:2px;font-size:0;background-color:#c8226d;margin:14px auto;">&nbsp;</div>
+                    <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;line-height:1.4;">WiDS NYC AI Reading Group</div>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: header_court -->
+
+              <!-- ══════ BLOCK A — Header, standard mark (default) ══════ -->
+              <!-- BEGIN-BLOCK: header_standard -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding:0 0 28px;">
+                    <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-96.png"
+                         width="48" height="48" alt="WiDS NYC AI Reading Group"
+                         style="display:block;margin:0 auto 10px;border:0;width:48px;height:48px;">
+                    <div class="headline" style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#152a23;line-height:1.25;max-width:24ch;margin:0 auto;">So glad you're here — let us know when you can join us</div>
+                    <div style="width:24px;height:2px;line-height:2px;font-size:0;background-color:#c8226d;margin:10px auto;">&nbsp;</div>
+                    <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;line-height:1.4;">WiDS NYC AI Reading Group</div>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: header_standard -->
+
+              <!-- ══════ BLOCK C — Greeting + intro (always on) ══════ -->
+              <!-- Greeting is the group's in-house address, not a name slot —
+                   operator's pick of register (handoff Open Question 5). It
+                   deliberately carries no first-name token: see the note on
+                   recipient.firstName in the head comment. -->
+              <p style="margin:0 0 12px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:17px;font-weight:500;color:#152a23;line-height:1.4;">Hey Queen,</p>
+              <p style="margin:0 0 16px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1a160f;max-width:54ch;">
+                We're so glad to see your desire to keep the mind sharp and steady. <b style="font-weight:600;">{{ vouch.name }}</b> vouched you in! We just need one thing from you: <b style="font-weight:600;">your availability.</b>
+              </p>
+
+              <!-- ══════ BLOCK D — Vouch card ══════ -->
+              <!-- BEGIN-BLOCK: vouch -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 20px;border:1px solid #7ba393;background-color:#f2f5f2;border-radius:6px;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td width="52" valign="top" style="width:52px;padding-right:16px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="52" style="width:52px;height:52px;background-color:#467560;border-radius:26px;">
+                            <tr>
+                              <td align="center" valign="middle" height="52" style="height:52px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:24px;line-height:52px;color:#fefcef;">&#10003;</td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td valign="top">
+                          <p style="margin:0 0 3px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#355c4b;font-weight:600;line-height:1.4;">Vouched in by</p>
+                          <p style="margin:0 0 2px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;color:#152a23;letter-spacing:-0.005em;line-height:1.3;">{{ vouch.name }}</p>
+                          <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#29241b;">{{ vouch.blurb }}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: vouch -->
+
+              <!-- ══════ BLOCK E — Cadence strip ══════ -->
+              <!-- BEGIN-BLOCK: meet_strip -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 24px;border:1px solid #ddd4be;border-radius:6px;background-color:#fdfbf3;">
+                <tr>
+                  <td class="stack-cell" width="33.33%" valign="top" style="width:33.33%;padding:14px 18px;border-right:1px solid #ddd4be;">
+                    <p style="margin:0 0 4px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;font-weight:600;line-height:1.4;">Cadence</p>
+                    <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#152a23;font-weight:500;letter-spacing:-0.005em;line-height:1.4;">Every two months</p>
+                  </td>
+                  <td class="stack-cell" width="33.33%" valign="top" style="width:33.33%;padding:14px 18px;border-right:1px solid #ddd4be;">
+                    <p style="margin:0 0 4px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;font-weight:600;line-height:1.4;">Evenings</p>
+                    <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#152a23;font-weight:500;letter-spacing:-0.005em;line-height:1.4;">6–9 PM ET</p>
+                  </td>
+                  <td class="stack-cell stack-cell-last" width="33.33%" valign="top" style="width:33.33%;padding:14px 18px;">
+                    <p style="margin:0 0 4px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;font-weight:600;line-height:1.4;">Your hosts</p>
+                    <p class="host-value" style="margin:0;font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:15px;color:#152a23;font-weight:500;line-height:1.4;">{{ signoff.names }}</p>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: meet_strip -->
+
+              <!-- ══════ BLOCK F — The ask ══════ -->
+              <!-- BEGIN-BLOCK: availability -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 24px;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 4px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;font-weight:600;line-height:1.4;">What we need from you</p>
+                    <p class="ask-lede" style="margin:0 0 14px;font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:15px;color:#a8175a;line-height:1.45;">Tap every evening you're free. We take the date with the most yeses.</p>
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #ddd4be;background-color:#fdfbf3;border-radius:6px;">
+                      <tr>
+                        <td class="mono" style="padding:12px 16px;font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-size:11.5px;letter-spacing:0.02em;color:#594d3b;line-height:1.9;">
+                          <span style="white-space:nowrap;">Answer by <b style="color:#152a23;font-weight:600;">{{ answerBy }}</b></span>
+                          &nbsp;&nbsp;&nbsp;
+                          <span style="white-space:nowrap;">Covers this month and next</span>
+                          &nbsp;&nbsp;&nbsp;
+                          <span style="white-space:nowrap;">Resubmit anytime — latest answer wins</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: availability -->
+
+              <!-- ══════ BLOCK G — Primary CTA (always on) ══════
+                   Bulletproof: VML roundrect for Outlook, table-cell anchor
+                   elsewhere. arcsize 22% ≈ the 10px radius at 46px height. -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 28px;">
+                <tr>
+                  <td align="center" bgcolor="#467560" style="background-color:#467560;border-radius:10px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.availability }}" style="height:48px;v-text-anchor:middle;width:210px;" arcsize="22%" stroke="f" fillcolor="#467560">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:500;">Open availability &#8594;</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-- -->
+                    <a href="{{ links.availability }}"
+                       style="display:inline-block;padding:14px 22px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:500;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;border:1px solid transparent;border-radius:10px;">
+                      Open availability&nbsp;&nbsp;<span style="font-size:15px;">&#8594;</span>
+                    </a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+
+              <!-- ══════ BLOCK H — First-sign-in note ══════
+                   Do not drop. web/middleware.ts redirects an unauthed visit
+                   to "/", so the ?meeting= deep link does not survive sign-in.
+                   This block is the workaround and must sit BELOW the CTA. -->
+              <!-- BEGIN-BLOCK: note -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 28px;border:1px solid #83a897;background-color:#f1f5f2;border-radius:6px;">
+                <tr>
+                  <td style="padding:16px 18px;">
+                    <p style="margin:0 0 6px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#355c4b;font-weight:600;line-height:1.4;">Signing in the first time</p>
+                    <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#29241b;">Enter this email address; we send a one-time link — no password, expires in 15 minutes. The date prompt is on your dashboard once you're in.</p>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: note -->
+
+              <!-- ══════ BLOCK I — Paper card ══════ -->
+              <!-- BEGIN-BLOCK: paper_card -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 28px;background-color:#fdfbf3;border-left:2px solid #c8226d;border-radius:0 6px 6px 0;">
+                <tr>
+                  <td style="padding:14px 18px;">
+                    <p style="margin:0 0 4px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;color:#861148;font-weight:600;line-height:1.4;">This cycle's paper</p>
+                    <h2 class="paper-title" style="margin:0 0 2px;font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-size:19px;font-weight:500;color:#152a23;line-height:1.3;letter-spacing:-0.005em;">{{ paper.title }}</h2>
+                    <p class="serif" style="margin:0 0 6px;font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:14px;color:#594d3b;line-height:1.5;">{{ paper.byline }} &nbsp;·&nbsp; <span class="mono" style="font-family:'Geist Mono',ui-monospace,Menlo,monospace;font-style:normal;font-size:12px;">{{ paper.citation }}</span></p>
+                    <p style="margin:0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#29241b;max-width:52ch;">{{ paper.hook }}</p>
+                    <p style="margin:10px 0 0;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;font-weight:500;line-height:1.4;">
+                      <a href="{{ links.companion }}" style="color:#355c4b;text-decoration:underline;text-decoration-color:#95b9a3;text-underline-offset:2px;">Read the companion in Paper Pal</a>
+                      <span style="text-decoration:none;color:#355c4b;">&nbsp;&#8594;</span>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: paper_card -->
+
+              <!-- ══════ BLOCK J — Sign-off (always on) ══════ -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px dashed #cbc1a8;">
+                <tr>
+                  <td style="padding-top:18px;">
+                    <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;color:#29241b;line-height:1.55;">That's it — just the dates. See you in the room,</div>
+                    <div class="signoff-name" style="font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:18px;color:#244338;line-height:1.4;padding-top:4px;">{{ signoff.names }}</div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- ══════ BLOCK K — Rotating quote ══════ -->
+              <!-- BEGIN-BLOCK: quote -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:22px;border-top:1px solid #e2dac6;">
+                <tr>
+                  <td style="padding-top:16px;">
+                    <div class="quote-text" style="font-family:'Newsreader',Charter,'Iowan Old Style',Georgia,serif;font-size:14.5px;line-height:1.5;font-style:italic;color:#3d3527;letter-spacing:-0.003em;">&ldquo;{{ quote.text }}&rdquo; <span style="font-style:normal;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11.5px;color:#7e6f55;white-space:nowrap;">— {{ quote.by }}</span></div>
+                  </td>
+                </tr>
+              </table>
+              <!-- END-BLOCK: quote -->
+
+            </td>
+          </tr>
+
+          <!-- ══════ BLOCK L — Footer (always on) ══════
+               No preference-center URL by design; unsubscribe is a human reply. -->
+          <tr>
+            <td class="pad-x-footer" align="center" style="padding:14px 44px 22px;">
+              <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;line-height:1.55;color:#594d3b;max-width:52ch;margin:0 auto;">
+                <b style="font-weight:600;color:#29241b;">{{ vouch.name }}</b> vouched you in. <a href="mailto:{{ operator.email }}" style="color:#355c4b;text-decoration:underline;text-decoration-color:#95b9a3;text-underline-offset:2px;">Reply</a> to come off this list.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+        <!-- ===== /Email card ===== -->
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
