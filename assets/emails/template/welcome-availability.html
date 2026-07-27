@@ -102,17 +102,21 @@
             identical technique (plain remote <img>, same host,
             mark-reader-192.png) and its mark renders in every message sent
             that way. This is the verified-good path.
-          * Sent by pressing Send in the Gmail compose window — what ships is
-            the composer's DOM, and the composer appears to drop the <img>
-            outright rather than merely leave it unloaded (an API-created
-            draft opened in compose showed no mark AND no reserved 48x48 box,
-            and Gmail's auto-derived plain-text alternative carried no alt
-            text). Treat the mark as likely LOST on this path until someone
-            actually sends one to themselves and looks.
+          * Sent by pressing Send in the Gmail compose window — the mark is
+            LOST. Verified by an actual send-to-self on 2026-07-26: the
+            received message rendered every background correctly (the bgcolor
+            attributes did their job) but carried no mark and no reserved
+            48x48 box. What ships on this path is the composer's DOM, and the
+            composer drops the remote <img> outright rather than merely
+            leaving it unloaded. Same send also proves the composer replaces
+            the hand-wrapped .txt twin with one auto-derived from the HTML.
         So: do not "fix" this into a cid: inline attachment merely because the
-        mark looks missing in a draft — that is expected in compose. Reach for
-        cid: only if a real send is confirmed to drop it, and note that cid:
-        would be the fix for the compose-send path specifically.
+        mark looks missing in an unsent draft — that much is expected in
+        compose. But if the operator routinely sends by hand from the
+        composer, the remote <img> cannot reach the recipient at all, and a
+        cid: inline attachment is the only thing that would (untested here).
+        The cheap answer is to prefer the API send path, which is the
+        command's default and keeps both the mark and the twin intact.
       * Cadence strip (E) is a 3-cell table that stacks under 640px via the
         .stack-cell media query. Outlook holds three columns — accepted by the
         handoff.
