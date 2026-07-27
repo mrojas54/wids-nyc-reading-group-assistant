@@ -94,13 +94,25 @@
         URL verified 200 image/png. Remote images are subject to the
         recipient's image-loading settings; the headline and the eyebrow below
         it carry the branding on their own if it never loads.
-        DO NOT "fix" this into a cid: inline attachment because the mark looks
-        missing in a Gmail draft. The compose window does not render remote
-        images from an API-created draft — the reading pane does, through
-        Google's image proxy. availability-reminder.html uses the identical
-        technique (plain remote <img>, same host, mark-reader-192.png) and the
-        mark renders in every one of those messages once sent. Compose is not
-        the fidelity target for images; sent mail is.
+        Whether the mark reaches the recipient depends on WHICH SEND PATH is
+        used, and the two paths differ:
+          * Sent via the Gmail API (the composer never opens the draft) — the
+            stored HTML ships intact and the mark renders in the reading pane
+            through Google's image proxy. availability-reminder.html uses the
+            identical technique (plain remote <img>, same host,
+            mark-reader-192.png) and its mark renders in every message sent
+            that way. This is the verified-good path.
+          * Sent by pressing Send in the Gmail compose window — what ships is
+            the composer's DOM, and the composer appears to drop the <img>
+            outright rather than merely leave it unloaded (an API-created
+            draft opened in compose showed no mark AND no reserved 48x48 box,
+            and Gmail's auto-derived plain-text alternative carried no alt
+            text). Treat the mark as likely LOST on this path until someone
+            actually sends one to themselves and looks.
+        So: do not "fix" this into a cid: inline attachment merely because the
+        mark looks missing in a draft — that is expected in compose. Reach for
+        cid: only if a real send is confirmed to drop it, and note that cid:
+        would be the fix for the compose-send path specifically.
       * Cadence strip (E) is a 3-cell table that stacks under 640px via the
         .stack-cell media query. Outlook holds three columns — accepted by the
         handoff.
