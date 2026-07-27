@@ -15,33 +15,20 @@
 
     Source design: Claude Design handoff bundle "Vouched in group email /
     design_handoff_reading_group_email/" (README.md + ReadingGroupEmail.dc.html).
-    High-fidelity port of the "paper note" card to email-client-safe
-    table-based markup. The prototype's flexbox, gap, and multi-layer
-    background shorthand are preview-only; the VALUES here are literal from
-    the handoff README, the technique is table + inline style.
+    The VALUES here are literal from the handoff README; the technique is
+    table + inline style.
 
     BLOCK MARKERS — this template is NOT rendered by flat substitution alone.
     scripts/render_email_previews.render() has no conditionals, so the
     per-send content switches are resolved BEFORE substitution by
     scripts/welcome_availability.py, which strips each block delimited by a
-    pair of HTML comments reading `BEGIN-BLOCK: <name>` and
-    `END-BLOCK: <name>` (see any block below for the literal form — it is
-    deliberately not reproduced inside this comment, because a nested comment
-    close would terminate this one early and dump these notes into the top of
-    every sent email as visible text)
-    for every block toggled off. The same composer emits the .txt twin from
-    the same content object, so a block dropped here drops there too — the
-    handoff calls hand-syncing the two bodies the likeliest thing to drift.
+    pair of HTML comments reading `BEGIN-BLOCK: <name>` and `END-BLOCK: <name>`.
+    The same composer emits the .txt twin from the same content object, so a
+    block dropped here drops there too.
     Never mail this file through render() directly; go through the composer.
 
-    The header is unconditional — one voice, always block A. A second
-    "court" header (title-case, "A small room, and one open chair") was
-    carried here for a while and has been removed: it was not part of the
-    Claude design. It is NOT a toggle that defaults off, it is gone, so
-    there is no header block and no header switch. The court/queens voice
-    still belongs to new-paper-announcement, which is a different template
-    with its own locked voice decision — do not read this removal as
-    applying there.
+    The header is unconditional — one voice, always block A. There is no
+    header block and no header switch.
 
     Deliberate deviations from the WiDS NYC design system, both kept per
     the handoff:
@@ -52,128 +39,47 @@
 
     Port decisions where the handoff left the technique open:
       * Dotted grid ships as an inline `background-image: radial-gradient(...)`
-        over a `bgcolor="#fefcef"` solid. Apple Mail/iOS honor it; Gmail and
-        Outlook strip it and fall back to flat cream. Graceful, no image
-        request, no invented asset.
-      * Page backdrop is #fefcef, not the prototype's #1a160f — the handoff is
-        explicit that the dark backdrop is preview chrome and not part of the
-        email. The card border (#ddd4be) carries the edge.
-      * Card shadow dropped. The handoff says it reads only against the dark
-        preview backdrop and "can be dropped" in a real inbox.
-      * NO INLINE SVG ANYWHERE. Gmail strips <svg> outright — not "degrades",
-        removes — so the Lucide check/book/arrow glyphs the handoff specifies
-        rendered as nothing at all in a real Gmail draft. Outlook and Yahoo
-        strip it too; only Apple Mail is reliable. Every icon here is either a
-        hosted PNG or a Unicode character:
-          check (vouch avatar)   &#10003; in the sage circle
-          arrow (CTA, companion) &#8594;  — the CTA already used this and was
-                                 the one icon that survived, which is the tell
-          book (paper eyebrow)   dropped; it was decorative next to a label
-                                 that already reads "This cycle's paper"
-        Do not reintroduce SVG for these. If a future icon needs real artwork,
-        host a PNG under web/public/branding/ like the mark.
-      * EVERY PAINTED BACKGROUND CARRIES A `bgcolor` ATTRIBUTE, not just the
-        inline `background-color`. Gmail's *compose* sanitiser — the pass that
-        runs when an API-created draft is opened in the web composer, which is
-        how /wids-add-member hands this email to the operator — drops
-        `background-color` from inline styles while keeping HTML attributes.
-        Sending from that composer ships the sanitised DOM, so a colour that
-        lives only in CSS is lost to the recipient too, not merely to the
-        preview. Observed casualties before the attributes were added: the
-        sage vouch avatar (cream &#10003; on a circle whose fill vanished =
-        invisible check), both magenta rules, and the tint on every panel.
-        The CTA survived because it already had `bgcolor` — that is the tell,
-        the same way the CTA's arrow was the one icon to survive the SVG purge.
-        A colour bar therefore cannot be a bare styled `<div>`; it has to be a
-        one-cell table so there is an attribute to hang the colour on.
-        Rule: inline `background-color` for radius/gradient-aware clients,
-        `bgcolor` alongside it for the sanitiser. Never one without the other.
+        over a `bgcolor="#fefcef"` solid. Verified rendering in Gmail web.
+      * Page backdrop is #fefcef, not the prototype's #1a160f — the dark
+        backdrop is preview chrome. The card border (#ddd4be) carries the edge.
+      * Card shadow dropped, per the handoff.
+      * No inline SVG anywhere. Every icon is a hosted PNG or a Unicode
+        character: &#10003; for the vouch check, &#8594; for the CTA and
+        companion arrows. Do not reintroduce SVG.
+      * Every painted background carries a `bgcolor` attribute alongside the
+        inline `background-color`, never one without the other. A colour bar
+        therefore cannot be a bare styled `<div>`; it needs to be a one-cell
+        table so there is an attribute to hang the colour on.
       * The 48x48 mark ships as the already-hosted 2x PNG
-        (branding/mark-reader-96.png), which IS the Codex mark the handoff
-        describes — open book, circuit traces, magenta accent node at cx 44.
-        URL verified 200 image/png. Remote images are subject to the
-        recipient's image-loading settings; the headline and the eyebrow below
-        it carry the branding on their own if it never loads.
-        Whether the mark reaches the recipient depends on WHICH SEND PATH is
-        used, and the two paths differ:
-          * Sent via the Gmail API (the composer never opens the draft) — the
-            stored HTML ships intact and the mark renders in the reading pane
-            through Google's image proxy. availability-reminder.html uses the
-            identical technique (plain remote <img>, same host,
-            mark-reader-192.png) and its mark renders in every message sent
-            that way. This is the verified-good path.
-          * Sent by pressing Send in the Gmail compose window — the mark is
-            LOST. Verified by an actual send-to-self on 2026-07-26: the
-            received message rendered every background correctly (the bgcolor
-            attributes did their job) but carried no mark and no reserved
-            48x48 box. What ships on this path is the composer's DOM, and the
-            composer drops the remote <img> outright rather than merely
-            leaving it unloaded. Same send also proves the composer replaces
-            the hand-wrapped .txt twin with one auto-derived from the HTML.
-        So: do not "fix" this into a cid: inline attachment merely because the
-        mark looks missing in an unsent draft — that much is expected in
-        compose. But if the operator routinely sends by hand from the
-        composer, the remote <img> cannot reach the recipient at all, and a
-        cid: inline attachment is the only thing that would (untested here).
-        The cheap answer is to prefer the API send path, which is the
-        command's default and keeps both the mark and the twin intact.
+        (branding/mark-reader-96.png).
       * Cadence strip (E) is a 3-cell table that stacks under 640px via the
-        .stack-cell media query. Outlook holds three columns — accepted by the
-        handoff.
+        .stack-cell media query. Outlook holds three columns.
 
-    Merge tokens are Mustache, matching the rest of assets/emails/template/.
-    Full contract in docs/runbooks/transactional-emails.md.
+    Why those rules exist, and the open problem that the mark no longer
+    reaches recipients on recent sends (no `src` scheme fixes it), are in
+    docs/runbooks/email-client-behavior.md. Read it before changing the mark,
+    the icons, or any background colour. Client-behaviour claims go there.
 
-    Listed WITHOUT the mustache delimiters on purpose. render() substitutes
-    every delimited token it finds, comments included — a token written in
-    live syntax here would be replaced with the recipient's real values
-    (leaking them into a shipped HTML comment) and would also be counted as
-    required even when the block that actually uses it is toggled off. Keep
-    this list inert, and do not write a delimited example anywhere in this
-    comment: the composer's leftover-token check cannot tell prose about the
-    syntax from an unsubstituted token.
+    Merge tokens are Mustache; full contract in
+    docs/runbooks/transactional-emails.md. Listed below WITHOUT delimiters on
+    purpose — render() substitutes every delimited token it finds, comments
+    included. Never write a delimited example in this comment.
 
-      recipient.firstName   NOT USED by this template — the operator chose the
-                            "Hey Queen," register (handoff Open Question 5),
-                            which addresses the reader by the group's in-house
-                            term rather than by name. Kept in the contract
-                            because availability-reminder and rsvp-confirmation
-                            still use it, and because reinstating a
-                            personalised greeting here is a one-line change.
-                            Side effect worth keeping: no name in the body
-                            means no split_part(name,' ',1) mis-greeting for
-                            members who go by a middle name.
+      recipient.firstName   NOT USED here — the operator chose the "Hey Queen,"
+                            register (handoff Open Question 5).
       vouch.firstName       members.vouched_by -> members.name (migration 023),
-                            reduced to the FIRST NAME ONLY by the caller. The
-                            voucher is addressed the way the group speaks of
-                            her ("Michelle vouched you in"), not by full name.
-                            Used in all four spots — preheader, intro, vouch
-                            card, footer — so there is no full-name form left
-                            in this template to fall back on.
-                            Carries the same hazard the recipient greeting was
-                            designed to dodge: split_part(name,' ',1) on a
-                            voucher who goes by a middle name yields the wrong
-                            name ("Sai Priyanka Iragavarapu" -> "Sai"). Unlike
-                            the recipient case this one is bounded — vouchers
-                            are existing members the operator knows, and the
-                            command asks her to eyeball the value before the
-                            draft goes out. members.preferred_name remains the
-                            durable fix for both.
+                            reduced to FIRST NAME ONLY by the caller.
+                            Hazard: split_part(name,' ',1) mis-names a voucher
+                            who goes by a middle name ("Sai Priyanka
+                            Iragavarapu" -> "Sai"). members.preferred_name is
+                            the durable fix.
       vouch.blurb           block D's body line. A token because the right copy
-                            depends on who the voucher is relative to the
-                            sender, and the design was written for only one of
-                            the two cases:
-                              third-party voucher (the design's copy):
-                                "Grab her number before the first meeting —
-                                 she's your person for anything you want to
-                                 ask."
-                              voucher IS the sender (common — the operator
-                              often does the introducing):
-                                "I'm your person for anything you want to ask
-                                 before the first meeting."
-                            Shipping the third-party line when the host vouched
-                            reads as "grab her number" about the person signing
-                            the email.
+                            depends on whether the voucher is the sender:
+                              third-party: "Grab her number before the first
+                                meeting — she's your person for anything you
+                                want to ask."
+                              voucher IS sender: "I'm your person for anything
+                                you want to ask before the first meeting."
       answerBy              operator-supplied date, e.g. "Mon, Aug 3"
       links.availability    <portalBase>/availability?meeting=<id>
       links.companion       <portalBase>/papers/<id>

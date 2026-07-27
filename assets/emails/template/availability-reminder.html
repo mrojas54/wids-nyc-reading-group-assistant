@@ -14,37 +14,25 @@
 
     Source design: Claude Design handoff bundle "magic-reminders /
     design_handoff_availability_reminder_email / Availability Reminder v2.html".
-    High-fidelity port to email-client-safe table-based markup; modern CSS
-    variables in the prototype are inlined as literal hex.
 
-    v2 deltas vs v1 (also visible inline next to each affected block):
-      1. Citation line uses a single composed {{ paper.citation }} token
-         (HTML-safe) instead of hard-coded `arXiv <paper.arxivId>` —
-         see Step 5b composition rule in scheduled_tasks/availability-chase.md.
-         Tolerates papers that are not arXiv preprints (e.g. journal DOIs).
-      2. Location chip is CONDITIONAL — wrapped in BEGIN-OPTIONAL-CHIP /
-         END-OPTIONAL-CHIP markers; renderer strips the cell when
-         meetings.location is null. No "TBD" placeholder.
-      3. Duration + companion-drop-day chips have static fallbacks
-         ("~90 min", "Wed") when their source fields are null.
-      4. Secondary CTA href is {{ paper.url }} (generic — arXiv abstract,
-         DOI, or journal URL), not the v1 arXiv-only <paper.arxivUrl>.
+    Location chip is CONDITIONAL — wrapped in BEGIN-OPTIONAL-CHIP /
+    END-OPTIONAL-CHIP markers; the renderer strips the whole cell when
+    meetings.location is null. Match the marker as written here, not as the
+    chase spec quotes it — the spec's shorter form silently mails an empty chip.
 
-    Template tokens are Mustache-style ({{ recipient.firstName }}) — distinct
-    from magic-link.html's Supabase Go-template tokens, because this template
-    is rendered by the agent driving Gmail MCP, not by Supabase auth. The
-    full merge-field list is documented in
-    scheduled_tasks/availability-chase.md (Step 5: operator 'remind' flow).
+    Merge fields: scheduled_tasks/availability-chase.md (Step 5, operator
+    'remind'), including the Step 5b citation composition rule.
 
-    Documented design-system exception: primary CTA uses magenta-500 fill
-    with white text. The system reserves magenta for "voice, not decoration,
-    never primary CTA" — but for this invitation-toned email it reads as
-    a WiDS-family event invite. Scoped to outbound email only.
+    Design-system exception: primary CTA uses magenta-500 fill with white
+    text, against the system's "voice, not decoration, never primary CTA".
+    Scoped to outbound email only.
 
     Compatibility target: Gmail (web/iOS/Android), Apple Mail (macOS/iOS),
-    Outlook 2019+ (Windows) via VML button fallback, Outlook web. Outlook
-    desktop renders a slightly degraded but readable layout (per handoff
-    acceptance criterion #1).
+    Outlook 2019+ (Windows) via VML button fallback, Outlook web.
+
+    Client behaviour — including this template's 2026-05-25 send, the last
+    message in which the mark is known to have reached a recipient — is in
+    docs/runbooks/email-client-behavior.md.
   -->
 
   <!--[if mso]>
@@ -159,7 +147,7 @@
                       Authors + citation line.
 
                       v2 contract: citation is a single composed string from
-                      {{ paper.citation }}, not a hard-coded "arXiv <id>".
+                      paper.citation, not a hard-coded "arXiv <id>".
                       The renderer composes it per the rule in
                       scheduled_tasks/availability-chase.md Step 5b:
 

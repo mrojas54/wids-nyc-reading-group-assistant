@@ -13,24 +13,13 @@
     RSVP-confirmation email — WiDS NYC AI Reading Group Planner.
 
     Source design: Claude Design handoff bundle "design_handoff_rsvp_confirmation_email".
-    High-fidelity port to email-client-safe table-based markup; modern CSS
-    variables from the prototype are inlined as literal hex.
 
     Sent by: scheduled_tasks/pre-meeting-reminder.md — Step 4a branch
     (recipient is a member whose ma.rsvp_status='attending' for the meeting
     2 days out). No-response and tentative members get the plain reminder
     instead (Step 4b).
 
-    Template tokens are Mustache-style ({{ recipient.firstName }}), rendered
-    by the agent driving Gmail MCP. Required hydrated tokens; refuse to send
-    if any are unresolved:
-      recipient.firstName, links.calendar,
-      paper.title, paper.authorsShort, paper.companionUrl,
-      links.rsvpManage, links.portalBase
-
-    Optional / rotated tokens (fall back to haiku[0] + Grace Hopper quote):
-      haiku.line1, haiku.line2, haiku.line3,
-      quote.text, quote.by, quote.role
+    Merge fields: docs/runbooks/transactional-emails.md, Token contracts.
   -->
 
   <!--[if mso]>

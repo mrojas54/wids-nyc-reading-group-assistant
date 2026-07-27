@@ -4,39 +4,28 @@ Plain-text twin of welcome-availability.html — the multipart/alternative body.
 Reproduced from the handoff README's verbatim block, with its bracket
 placeholders swapped for this repo's Mustache tokens.
 
-WRAPPING. The handoff shows this body hard-wrapped at ~68 characters. That is
-a property of the OUTPUT, not of this file. Prose paragraphs are stored here
-as one long logical line each and are wrapped to 68 columns by
-scripts/welcome_availability._wrap_txt after substitution. Do not hand-wrap
-them back: the README's pre-wrapped copy was laid out around a short
-"[Member]" placeholder, and a real name ("Michelle Rojas") pushed the last
-word of a line onto its own line, because line-by-line wrapping cannot
-re-flow a paragraph that was already broken for a different token width.
+WRAPPING. Prose paragraphs are stored as one long logical line each and are
+wrapped to 68 columns by scripts/welcome_availability._wrap_txt after
+substitution. Do not hand-wrap them back — the README's pre-wrapped copy was
+laid out around a short "[Member]" placeholder, and line-by-line wrapping
+cannot re-flow a paragraph already broken for a different token width.
+Structural lines (section headers, the aligned Cadence/Evenings/Your hosts
+block, the bullets, the bare URLs) stay one per line; a line with no spaces
+is never wrapped, which is how the URLs survive intact.
 
-Structural lines — section headers, the aligned Cadence/Evenings/Your hosts
-block, the three bullets, the bare URLs — stay one per line and are short
-enough that the wrapper never touches them. A line with no spaces is never
-wrapped, which is how the URLs survive intact.
+BLOCK MARKERS. [[BEGIN:<name>]] / [[END:<name>]] are consumed by the
+composer, which drops a section here whenever the same block is toggled off
+in the HTML, so the two bodies cannot drift. They never survive composition —
+a marker in a sent email means the body was substituted, not composed.
 
-[[BEGIN:<name>]] / [[END:<name>]] lines are block markers consumed by the
-composer. It drops a section here whenever the same block is toggled off in
-the HTML, so the two bodies cannot drift. The markers never survive
-composition — if you see one in a sent email, the body was substituted
-directly instead of composed.
-
-The twin has no header of any kind; it opens at the greeting. The HTML's
-header is a single unconditional block — the second "court" header it used to
-carry was not part of the Claude design and has been removed.
-
-GREETING. Both bodies read "Hey Queen," — the operator's pick of register for
-handoff Open Question 5. The README's twin read "Hi [First name],"; that is
-resolved in favour of the group's in-house address, so neither body carries a
-first-name token. Keep the two greetings identical if either changes.
+GREETING. Both bodies read "Hey Queen," (handoff Open Question 5), so neither
+carries a first-name token. Keep them identical if either changes. The twin
+has no header at all; it opens at the greeting.
 
 One deviation from the handoff's verbatim block: the quote attribution sits
 on its own line rather than trailing the quote, so a long quote can never
-push the wrap into the author's name ("— Katherine / Johnson"). The HTML
-marks that attribution white-space:nowrap for the same reason.
+push the wrap into the author's name. The HTML marks that attribution
+white-space:nowrap for the same reason.
 [[END:_doc]]
 Hey Queen,
 

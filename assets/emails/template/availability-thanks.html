@@ -18,23 +18,10 @@
     the meeting at the moment the operator says `remind`. Non-responders
     keep getting the existing availability-reminder.
 
-    Same visual system as availability-reminder.html (card, brand bar,
-    paper card, footer). Differences: no primary CTA (action complete),
-    no progress block (their personal nudge is no longer relevant),
-    sign-off swaps the PS for a "what happens next" note.
+    Same visual system as availability-reminder.html, minus the primary CTA
+    and the progress block.
 
-    Required tokens — refuse to send if any unresolved:
-      recipient.firstName,
-      paper.title, paper.authorsShort, paper.citation, paper.url,
-      operator.displayName, links.portalBase
-
-    Optional / fallback tokens:
-      paper.location (omit chip if null),
-      paper.duration (fallback "~90 min"),
-      paper.companionDropDay (fallback "Wed"),
-      links.companionPreview (fallback to literal "Preview link coming soon"
-        — see Step 5b note in availability-chase.md),
-      quote.text / quote.by / quote.role (fallback to seed Grace Hopper quote)
+    Merge fields: docs/runbooks/transactional-emails.md, Token contracts.
   -->
 
   <!--[if mso]>
