@@ -139,7 +139,7 @@ one opens "It's been too long. We're getting the gang back together," written
 for a lapsed regular.
 
 **Render through the composer, never through `render()` directly.** The
-template carries nine per-send block toggles, and
+template carries per-send block toggles, and
 `scripts/render_email_previews.render` has no conditionals:
 
 ```sh
@@ -153,7 +153,7 @@ bodies = compose(Content(tokens=TOKENS, blocks=Blocks()))
 block toggled off drops from both bodies. It raises `CompositionError` rather
 than returning a body with an unresolved token or a surviving marker, so there
 is no separate "check unresolved" step — if it returns, both bodies are
-mailable. Preview either header voice with
+mailable. Preview with
 `uv run python -m scripts.welcome_availability`.
 
 Tokens to resolve (full list in the template's header comment):
@@ -161,7 +161,7 @@ Tokens to resolve (full list in the template's header comment):
 | Token | Source |
 |---|---|
 | `recipient.firstName` | `split_part(members.name, ' ', 1)` — but confirm, see below |
-| `vouch.name` | `SELECT v.name FROM members m JOIN members v ON v.id = m.vouched_by WHERE m.id = <member_id>` — NULL means no voucher, see Step 5a |
+| `vouch.firstName` | `SELECT split_part(v.name, ' ', 1) FROM members m JOIN members v ON v.id = m.vouched_by WHERE m.id = <member_id>` — **first name only**; the email says "Michelle vouched you in", never the full name. NULL means no voucher, see Step 5a. Same middle-name hazard as `recipient.firstName`: eyeball the value before drafting, and if the voucher goes by her middle name pass the right one by hand. |
 | `vouch.blurb` | Block D's body line. **Depends on whether the voucher is the sender.** Third party: "Grab her number before the first meeting — she's your person for anything you want to ask." Voucher is the sender (i.e. `vouched_by` = the operator, which is common): "I'm your person for anything you want to ask before the first meeting." Shipping the third-party line when the host vouched reads as "grab her number" about the person signing the email. |
 | `answerBy` | Operator-supplied date, default +7 days |
 | `links.availability` | `<portalBase>/availability?meeting=<meeting_id>` |
@@ -188,7 +188,7 @@ block off instead of shipping a plausible guess:
 
   Paper 40 (Meta-Harness) has a payload, so the companion link is live for the
   current cycle and this block stays on.
-- `Blocks(vouch=False)` when `members.vouched_by IS NULL`. Note the vouch name
+- `Blocks(vouch=False)` when `members.vouched_by IS NULL`. Note the voucher first name
   appears in **three** places — the intro sentence, the vouch card, and the
   footer — but only the card is inside the toggled block. With no voucher you
   must also drop the intro's "`<name>` vouched you in!" clause and the footer
@@ -198,7 +198,9 @@ block off instead of shipping a plausible guess:
   months", "6–9 PM ET", and the host names are operator-authored copy, not
   product truth — there is no meeting-format doc upstream.
 
-`Blocks(court_voice=True)` swaps in the ceremonial header. Off by default.
+There is no header switch. The template ships one header; the ceremonial
+"court" variant was removed as not part of the Claude design. (Don't confuse
+this with `new-paper-announcement`, which is court/queens voice by decision.)
 
 ### Step 5b — Two things differ from the chase
 
