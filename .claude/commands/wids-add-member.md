@@ -198,7 +198,9 @@ block off instead of shipping a plausible guess:
   months", "6–9 PM ET", and the host names are operator-authored copy, not
   product truth — there is no meeting-format doc upstream.
 
-`Blocks(court_voice=True)` swaps in the ceremonial header. Off by default.
+There is no header switch. The template ships one header; the ceremonial
+"court" variant was removed as not part of the Claude design. (Don't confuse
+this with `new-paper-announcement`, which is court/queens voice by decision.)
 
 ### Step 5b — Two things differ from the chase
 

@@ -13,6 +13,8 @@ def test_module_imports():
     assert callable(compose)
 
 
+import re
+
 import pytest
 
 from scripts.welcome_availability import (
@@ -70,6 +72,24 @@ def test_both_bodies_use_the_same_greeting():
     for body in bodies.values():
         assert "Hi Priyanka" not in body
         assert "Hi {{" not in body
+
+
+def test_both_bodies_use_the_same_lede():
+    """The sentence after the greeting drifted between the two bodies.
+
+    The HTML read "your desire to keep the mind sharp and steady" while the
+    twin read "you're keeping the mind sharp and steady" — same intent, two
+    different sentences, shipped in one email. Resolved in favour of the HTML
+    wording. Pinned here because nothing else compares the bodies word for
+    word, which is how it went unnoticed.
+    """
+    bodies = _compose()
+    lede = "so glad to see your desire to keep the mind sharp and steady"
+    assert lede in bodies["html"]
+    # The twin is hard-wrapped, so compare against collapsed whitespace.
+    assert lede in " ".join(bodies["txt"].split())
+    for body in bodies.values():
+        assert "you're keeping the mind sharp" not in body
 
 
 def test_greeting_carries_no_name_so_middle_name_members_are_safe():
@@ -202,20 +222,45 @@ def test_txt_doc_comment_never_ships():
     assert "block markers consumed by" not in txt
 
 
-def test_exactly_one_header_renders():
-    standard = _compose(court_voice=False)["html"]
-    assert "So glad you're here" in standard
-    assert "A Member Said Your Name" not in standard
-
-    court = _compose(court_voice=True)["html"]
-    assert "A Member Said Your Name" in court
-    assert "one open chair" in court
-    assert "So glad you're here" not in court
+def test_the_one_header_always_renders():
+    """There is a single header and no switch to turn it off."""
+    html_body = _compose()["html"]
+    assert "So glad you're here" in html_body
 
 
-def test_court_voice_does_not_change_the_twin():
-    """The twin opens at the greeting either way — HTML-only by design."""
-    assert _compose(court_voice=True)["txt"] == _compose(court_voice=False)["txt"]
+def test_the_court_header_is_gone_not_merely_defaulted_off():
+    """It was not part of the Claude design, so it is removed outright.
+
+    Three separate checks, because "no court copy in the default body" alone
+    would also pass if the block still existed and merely defaulted off:
+
+    1. No court copy in either composed body — what actually ships.
+    2. No `header_court` block machinery left in either template source.
+    3. `court_voice` is not a parameter at all, so it cannot be switched on.
+
+    The templates' own doc comments still *name* the removed headline so a
+    future reader can see what went and why; that prose is stripped before
+    send, which is why the copy check runs against the composed body rather
+    than the raw source.
+
+    Scoped to this template on purpose — new-paper-announcement keeps the
+    court/queens voice under its own locked decision.
+    """
+    from scripts.render_email_previews import TEMPLATES
+
+    for body in _compose().values():
+        assert "A Member Said Your Name" not in body
+        assert "one open chair" not in body
+        assert "admission rite" not in body
+
+    for ext in ("html", "txt"):
+        src = (TEMPLATES / f"welcome-availability.{ext}").read_text(
+            encoding="utf-8"
+        )
+        assert "header_court" not in src
+
+    with pytest.raises(TypeError):
+        Blocks(court_voice=True)
 
 
 @pytest.mark.parametrize(
@@ -457,3 +502,46 @@ def test_mark_is_a_hosted_png_not_svg():
     html_body = _compose()["html"]
     assert "branding/mark-reader-96.png" in html_body
     assert 'alt="WiDS NYC AI Reading Group"' in html_body
+
+
+def test_every_background_colour_is_paired_with_a_bgcolor_attribute():
+    """Gmail's compose sanitiser drops `background-color`, keeps attributes.
+
+    /wids-add-member hands this email over as a Gmail draft, and the operator
+    may send it straight from the web composer — which re-sanitises an
+    API-created draft and ships the result. A fill that lives only in CSS is
+    therefore lost to the recipient, not just to the preview: the observed
+    failure was the sage vouch avatar losing its circle, leaving a cream
+    check on cream, i.e. no icon at all. Both magenta rules and every panel
+    tint went the same way; the CTA survived because it already had `bgcolor`.
+
+    """
+    html_body = _compose()["html"]
+
+    unpaired = []
+    for tag in re.finditer(
+        r"<(\w+)\b[^>]*background-color:#([0-9a-fA-F]{6})[^>]*>", html_body
+    ):
+        css = re.search(r"background-color:#([0-9a-fA-F]{6})", tag.group(0))
+        attr = re.search(r'bgcolor="#([0-9a-fA-F]{6})"', tag.group(0))
+        if attr is None or attr.group(1).lower() != css.group(1).lower():
+            unpaired.append(tag.group(0)[:120])
+
+    assert not unpaired, (
+        "these elements declare a background-color with no matching bgcolor "
+        f"attribute and will render transparent in Gmail: {unpaired}"
+    )
+
+
+def test_the_vouch_check_is_never_cream_on_cream():
+    """The one case where a stripped fill erases an icon instead of dulling it.
+
+    The check is cream so it reads against the sage circle. Guard both halves:
+    the fill has to be on the td that actually paints the box, not only on the
+    wrapper table, or the sanitiser leaves an invisible glyph behind.
+    """
+    html_body = _compose()["html"]
+    circle_td = re.search(r"<td[^>]*>\s*&#10003;\s*</td>", html_body)
+    assert circle_td, "vouch check cell not found"
+    assert 'bgcolor="#467560"' in circle_td.group(0)
+    assert "color:#fefcef" in circle_td.group(0)

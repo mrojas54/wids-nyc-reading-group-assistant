@@ -18,13 +18,16 @@ name appears in ``welcome-availability.html`` as
 ``welcome-availability.txt`` as ``[[BEGIN:name]] … [[END:name]]``. One toggle
 governs both; there is no way to drop a section from one body only.
 
-Two invariants are enforced rather than documented:
+The header is not a block at all. A second "court" header once shipped
+alongside the standard one, selected by a ``court_voice`` toggle; it was not
+part of the Claude design and has been removed outright, so the template now
+has exactly one header and nothing to switch between. (The court/queens voice
+still belongs to ``new-paper-announcement`` — a different template with its
+own locked voice decision.)
 
-* Exactly one header renders. ``court_voice`` selects block B and block A is
-  its derived inverse, so neither "both" nor "neither" is reachable.
-* No marker and no ``{{ token }}`` survives composition. Either one means a
-  malformed body, and :class:`CompositionError` is raised instead of returning
-  something mailable.
+One invariant is enforced rather than documented: no marker and no
+``{{ token }}`` survives composition. Either one means a malformed body, and
+:class:`CompositionError` is raised instead of returning something mailable.
 
 Run tests via:
     uv run pytest -c tests/pytest.ini tests/welcome_availability_test.py -v
@@ -41,8 +44,8 @@ from scripts.render_email_previews import TEMPLATES, render
 
 STEM = "welcome-availability"
 
-# Blocks that are always on and therefore carry no markers: the greeting +
-# intro (C), the CTA (G), the sign-off (J), and the footer (L).
+# Blocks that are always on and therefore carry no markers: the header (A),
+# the greeting + intro (C), the CTA (G), the sign-off (J), and the footer (L).
 OPTIONAL_BLOCKS = (
     "vouch",
     "meet_strip",
@@ -51,7 +54,6 @@ OPTIONAL_BLOCKS = (
     "paper_card",
     "quote",
 )
-HEADER_BLOCKS = ("header_standard", "header_court")
 
 # `[[BEGIN:_doc]] … [[END:_doc]]` wraps the .txt file's own header comment. It
 # is a block like any other and is always stripped.
@@ -83,7 +85,6 @@ class CompositionError(RuntimeError):
 class Blocks:
     """The per-send content switches. Defaults match the handoff's table."""
 
-    court_voice: bool = False
     vouch: bool = True
     meet_strip: bool = True
     availability: bool = True
@@ -92,15 +93,8 @@ class Blocks:
     quote: bool = True
 
     def enabled(self) -> set[str]:
-        """Block names that should survive composition.
-
-        ``header_standard`` is derived as ``not court_voice`` rather than
-        being its own toggle, which is what makes "both headers" and "no
-        header" unrepresentable instead of merely discouraged.
-        """
-        keep = {name for name in OPTIONAL_BLOCKS if getattr(self, name)}
-        keep.add("header_court" if self.court_voice else "header_standard")
-        return keep
+        """Block names that should survive composition."""
+        return {name for name in OPTIONAL_BLOCKS if getattr(self, name)}
 
 
 @dataclass(frozen=True)
@@ -221,10 +215,9 @@ def _compose_one(
     pattern = _HTML_BLOCK if ext == "html" else _TXT_BLOCK
     keep = content.blocks.enabled()
 
-    names = HEADER_BLOCKS + OPTIONAL_BLOCKS
+    names = OPTIONAL_BLOCKS
     if ext == "txt":
-        # The .txt twin carries no header block (the court voice is HTML-only
-        # by design) but does carry its own doc comment, which never ships.
+        # The twin carries its own doc comment, which never ships.
         names = (_DOC_BLOCK,) + OPTIONAL_BLOCKS
 
     body = _strip_blocks(src, pattern, keep, names)
@@ -323,16 +316,11 @@ def main() -> int:
     tokens = {**PREVIEW_TOKENS, "quote.text": quote["quote.text"],
               "quote.by": quote["quote.by"]}
 
-    for label, blocks in (
-        ("standard", Blocks()),
-        ("court", Blocks(court_voice=True)),
-    ):
-        bodies = compose(Content(tokens=tokens, blocks=blocks))
-        suffix = "" if label == "standard" else "-court"
-        for ext, body in bodies.items():
-            dst = TEMPLATES / f"{STEM}{suffix}_rendered.{ext}"
-            dst.write_text(body, encoding="utf-8")
-            print(f"wrote {dst.relative_to(TEMPLATES.parents[2])}")
+    bodies = compose(Content(tokens=tokens, blocks=Blocks()))
+    for ext, body in bodies.items():
+        dst = TEMPLATES / f"{STEM}_rendered.{ext}"
+        dst.write_text(body, encoding="utf-8")
+        print(f"wrote {dst.relative_to(TEMPLATES.parents[2])}")
     return 0
 
 

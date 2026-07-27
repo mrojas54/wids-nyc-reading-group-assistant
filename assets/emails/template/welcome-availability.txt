@@ -24,8 +24,9 @@ the HTML, so the two bodies cannot drift. The markers never survive
 composition — if you see one in a sent email, the body was substituted
 directly instead of composed.
 
-The court-voice header (block B) has no twin analogue by design; the twin
-opens at the greeting either way.
+The twin has no header of any kind; it opens at the greeting. The HTML's
+header is a single unconditional block — the second "court" header it used to
+carry was not part of the Claude design and has been removed.
 
 GREETING. Both bodies read "Hey Queen," — the operator's pick of register for
 handoff Open Question 5. The README's twin read "Hi [First name],"; that is
@@ -39,7 +40,7 @@ marks that attribution white-space:nowrap for the same reason.
 [[END:_doc]]
 Hey Queen,
 
-We're so glad to see you're keeping the mind sharp and steady. {{ vouch.name }} vouched you in! We just need one thing from you: your availability.
+We're so glad to see your desire to keep the mind sharp and steady. {{ vouch.name }} vouched you in! We just need one thing from you: your availability.
 [[BEGIN:vouch]]
 
 VOUCHED IN BY
