@@ -94,6 +94,13 @@
         URL verified 200 image/png. Remote images are subject to the
         recipient's image-loading settings; the headline and the eyebrow below
         it carry the branding on their own if it never loads.
+        DO NOT "fix" this into a cid: inline attachment because the mark looks
+        missing in a Gmail draft. The compose window does not render remote
+        images from an API-created draft — the reading pane does, through
+        Google's image proxy. availability-reminder.html uses the identical
+        technique (plain remote <img>, same host, mark-reader-192.png) and the
+        mark renders in every one of those messages once sent. Compose is not
+        the fidelity target for images; sent mail is.
       * Cadence strip (E) is a 3-cell table that stacks under 640px via the
         .stack-cell media query. Outlook holds three columns — accepted by the
         handoff.
