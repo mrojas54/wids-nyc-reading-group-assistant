@@ -280,7 +280,7 @@ def compose(content: Content) -> dict[str, str]:
 
 PREVIEW_TOKENS = {
     "recipient.firstName": "Priyanka",
-    "vouch.name": "Michelle Rojas",
+    "vouch.firstName": "Michelle",
     "vouch.blurb": (
         "I'm your person for anything you want to ask before the first "
         "meeting."

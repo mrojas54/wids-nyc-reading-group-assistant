@@ -40,17 +40,17 @@ marks that attribution white-space:nowrap for the same reason.
 [[END:_doc]]
 Hey Queen,
 
-We're so glad to see your desire to keep the mind sharp and steady. {{ vouch.name }} vouched you in! We just need one thing from you: your availability.
+We're so glad to see your desire to keep the mind sharp and steady. {{ vouch.firstName }} vouched you in! We just need one thing from you: your availability.
 [[BEGIN:vouch]]
 
 VOUCHED IN BY
-{{ vouch.name }}
+{{ vouch.firstName }}
 {{ vouch.blurb }}
 [[END:vouch]]
 [[BEGIN:meet_strip]]
 
 THE GROUP
-Cadence:     every two months
+Cadence:     every other month
 Evenings:    6–9 PM ET
 Your hosts:  {{ signoff.names }}
 [[END:meet_strip]]
@@ -92,4 +92,4 @@ That's it — just the dates. See you in the room,
 [[END:quote]]
 
 —
-{{ vouch.name }} vouched you in. Reply to come off this list.
+{{ vouch.firstName }} vouched you in. Reply to come off this list.

@@ -35,7 +35,7 @@ TOKENS = {
     # in the fixture to prove an extra token is harmless: render() only
     # complains about tokens the template needs and the caller omitted.
     "recipient.firstName": "Priyanka",
-    "vouch.name": "Michelle Rojas",
+    "vouch.firstName": "Michelle",
     "vouch.blurb": "I'm your person for anything you want to ask before the first meeting.",
     "answerBy": "Mon, Aug 3",
     "links.availability": "https://example.test/availability?meeting=37",
@@ -267,7 +267,7 @@ def test_the_court_header_is_gone_not_merely_defaulted_off():
     ("block", "html_probe", "txt_probe"),
     [
         ("vouch", "Vouched in by", "VOUCHED IN BY"),
-        ("meet_strip", "Every two months", "THE GROUP"),
+        ("meet_strip", "Every other month", "THE GROUP"),
         ("availability", "What we need from you", "WHAT WE NEED FROM YOU"),
         ("note", "Signing in the first time", "SIGNING IN THE FIRST TIME"),
         ("paper_card", "This cycle's paper", "THIS CYCLE'S PAPER"),
@@ -355,10 +355,18 @@ def test_no_orphan_word_lines_in_prose():
     for i, line in enumerate(lines[1:-1], start=1):
         if len(line.split()) != 1:
             continue
+        # A one-word line directly under an ALL-CAPS section label is a card
+        # *field value*, not wrapped prose — the twin lays the vouch card out
+        # as "VOUCHED IN BY" / name / blurb. This stopped being hypothetical
+        # when the voucher went to first-name-only: "Michelle Rojas" was two
+        # words and slipped through, "Michelle" is one and does not.
+        previous = lines[i - 1].strip()
+        if previous and previous == previous.upper():
+            continue
         # An orphan is a one-word line *inside* a paragraph — i.e. with
         # non-blank text both above and below it. A lone word that starts or
         # ends a block (a heading, a URL, the footer's em-dash rule) is fine.
-        mid_paragraph = lines[i - 1].strip() != "" and lines[i + 1].strip() != ""
+        mid_paragraph = previous != "" and lines[i + 1].strip() != ""
         assert not mid_paragraph, (
             f"orphan word line at {i}: {line!r} "
             f"between {lines[i - 1]!r} and {lines[i + 1]!r}"
@@ -367,7 +375,7 @@ def test_no_orphan_word_lines_in_prose():
 
 def test_long_vouch_name_still_reflows_cleanly():
     long_name = "Alexandra Konstantinopoulos-Fitzgerald"
-    bodies = compose(Content(tokens={**TOKENS, "vouch.name": long_name}))
+    bodies = compose(Content(tokens={**TOKENS, "vouch.firstName": long_name}))
     txt = bodies["txt"]
     assert long_name in txt
     for line in txt.split("\n"):
@@ -402,10 +410,10 @@ def test_companion_link_is_a_token_not_a_hardcoded_url():
 
 
 def test_missing_token_raises_rather_than_mailing_braces():
-    thin = {k: v for k, v in TOKENS.items() if k != "vouch.name"}
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.firstName"}
     with pytest.raises(CompositionError) as excinfo:
         compose(Content(tokens=thin))
-    assert "vouch.name" in str(excinfo.value)
+    assert "vouch.firstName" in str(excinfo.value)
 
 
 def test_vouch_blurb_is_a_token_not_baked_copy():
@@ -442,17 +450,18 @@ def test_vouch_blurb_not_required_when_vouch_card_is_off():
 def test_vouch_off_still_requires_the_name_and_says_so_loudly():
     """Documented wart, not an oversight.
 
-    `vouch.name` appears in three places — the intro sentence, the vouch card,
-    and the footer — but only the card sits inside the toggled block, because
-    the other two are mid-sentence and the no-voucher copy is a decision the
-    operator has to make. So `Blocks(vouch=False)` without the token raises
-    instead of quietly shipping a sentence with a hole in it. If no-voucher
-    copy ever lands, wrap those two sites and delete this test.
+    `vouch.firstName` appears in four places — the preheader, the intro
+    sentence, the vouch card, and the footer — but only the card sits inside
+    the toggled block, because the others are mid-sentence and the no-voucher
+    copy is a decision the operator has to make. So `Blocks(vouch=False)`
+    without the token raises instead of quietly shipping a sentence with a
+    hole in it. If no-voucher copy ever lands, wrap those sites and delete
+    this test.
     """
-    thin = {k: v for k, v in TOKENS.items() if k != "vouch.name"}
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.firstName"}
     with pytest.raises(CompositionError) as excinfo:
         compose(Content(tokens=thin, blocks=Blocks(vouch=False)))
-    assert "vouch.name" in str(excinfo.value)
+    assert "vouch.firstName" in str(excinfo.value)
 
 
 def test_paper_tokens_not_required_when_paper_card_is_off():
@@ -477,7 +486,7 @@ def test_html_tokens_are_escaped_but_text_tokens_are_not():
 
 
 def test_markup_in_a_token_cannot_break_the_html():
-    hostile = {**TOKENS, "vouch.name": '<script>alert(1)</script> & "quoted"'}
+    hostile = {**TOKENS, "vouch.firstName": '<script>alert(1)</script> & "quoted"'}
     html_body = compose(Content(tokens=hostile))["html"]
     assert "<script>" not in html_body
     assert "&lt;script&gt;" in html_body
