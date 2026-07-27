@@ -187,3 +187,141 @@ def test_preview_main_resolves_new_paper_announcement(capsys):
     for fmt in ("html", "text"):
         assert "{{" not in body[fmt]
     assert "Recommended pre-requisites" in body["html"]
+
+
+# --- comment stripping -----------------------------------------------------
+#
+# Head comments are in the message source even when a client does not paint
+# them — "Show original" shows the lot. They also used to be *substituted*,
+# because render() replaces every delimited token it finds, comments included.
+
+_ALL_STEMS = (
+    "rsvp_confirmation",
+    "availability_thanks",
+    "availability_reminder",
+    "pre_meeting_reminder",
+    "new_paper_announcement",
+)
+
+
+def _payload(capsys):
+    import json as _json
+    from scripts.render_email_previews import main
+    assert main() == 0
+    return _json.loads(capsys.readouterr().out)
+
+
+def _non_conditional_residue(html: str) -> str:
+    """The body with the four Outlook conditional forms lifted out.
+
+    Whatever comment delimiter survives in the result is a doc comment that
+    should have been stripped.
+    """
+    from scripts.render_email_previews import CONDITIONALS
+    for token in CONDITIONALS:
+        html = html.replace(token, "")
+    return html
+
+
+def test_no_doc_comment_survives_in_any_rendered_html(capsys):
+    payload = _payload(capsys)
+    for stem in _ALL_STEMS:
+        residue = _non_conditional_residue(payload[stem]["html"])
+        assert "<!--" not in residue, f"doc comment shipped in {stem}"
+        # A stray close means a comment was opened somewhere too.
+        assert "-->" not in residue, f"stray comment close in {stem}"
+
+
+def test_head_comment_prose_never_ships(capsys):
+    """Concrete leaks, in case a future stripper passes the delimiter check."""
+    payload = _payload(capsys)
+    leaks = {
+        "rsvp_confirmation": ("Claude Design handoff", "Template tokens are Mustache-style"),
+        "availability_thanks": ("Acknowledgement counterpart", "availability-chase.md"),
+        "availability_reminder": ("v2 deltas vs v1", "availability-chase.md"),
+        "pre_meeting_reminder": ("Email-safety deltas", "browser prototype"),
+        "new_paper_announcement": ("court/queens voice branch", "ReadingGroupEmail.dc.html"),
+    }
+    for stem, prose in leaks.items():
+        for leak in prose:
+            assert leak not in payload[stem]["html"], f"{stem}: doc comment shipped: {leak!r}"
+
+
+def test_token_documented_inside_a_comment_never_leaks_a_real_value(capsys):
+    """Regression for the bug that motivated stripping.
+
+    `rsvp-confirmation.html`'s head comment reads "Template tokens are
+    Mustache-style ({{ recipient.firstName }})". Substituting the comment
+    turned that into "… Mustache-style (Maya)" — a real recipient's first name
+    shipped inside an HTML comment. Stripping first makes it unreachable, so
+    the de-delimiting convention in the templates is no longer load-bearing.
+    """
+    html = _payload(capsys)["rsvp_confirmation"]["html"]
+    assert "Mustache-style" not in html
+    assert "Mustache-style (Maya)" not in html
+
+
+def test_outlook_conditionals_survive_stripping(capsys):
+    """The MSO style block and the VML button are comments too — keep them."""
+    payload = _payload(capsys)
+    for stem in _ALL_STEMS:
+        html = payload[stem]["html"]
+        assert "<!--[if mso]>" in html, stem
+        assert "<![endif]-->" in html, stem
+    # availability-thanks has no VML button, so no downlevel-revealed pair.
+    for stem in (s for s in _ALL_STEMS if s != "availability_thanks"):
+        html = payload[stem]["html"]
+        assert "<!--[if !mso]><!-- -->" in html, stem
+        assert "<!--<![endif]-->" in html, stem
+        assert "v:roundrect" in html, stem
+
+
+def test_stripping_does_not_disturb_the_text_twins(capsys):
+    """The .txt bodies carry no HTML comments and must pass through intact."""
+    payload = _payload(capsys)
+    for stem in _ALL_STEMS:
+        assert "<!--" not in payload[stem]["text"], stem
+
+
+def test_strip_html_comments_removes_a_doc_comment():
+    from scripts.render_email_previews import strip_html_comments
+    assert strip_html_comments("a<!-- note -->b") == "ab"
+    assert strip_html_comments("a<!--\n multi\n line\n-->b") == "ab"
+
+
+def test_strip_html_comments_keeps_the_downlevel_revealed_pair():
+    """The nested `<!--` in the opener is the trap a naive scanner falls into.
+
+    Matching at the inner delimiter strips `<!-- -->` and leaves
+    `<!--[if !mso]>` unclosed, which swallows the CTA anchor in every
+    non-Outlook client.
+    """
+    from scripts.render_email_previews import strip_html_comments
+    src = '<!--[if !mso]><!-- --><a href="x">CTA</a><!--<![endif]-->'
+    assert strip_html_comments(src) == src
+
+
+def test_strip_html_comments_keeps_mso_conditionals_and_drops_neighbours():
+    from scripts.render_email_previews import strip_html_comments
+    src = "<!-- doc --><!--[if mso]><td>x</td><![endif]--><!-- more -->"
+    assert strip_html_comments(src) == "<!--[if mso]><td>x</td><![endif]-->"
+
+
+def test_strip_html_comments_is_idempotent():
+    from scripts.render_email_previews import strip_html_comments
+    src = '<!-- doc --><!--[if !mso]><!-- --><a>c</a><!--<![endif]-->'
+    once = strip_html_comments(src)
+    assert strip_html_comments(once) == once
+
+
+def test_strip_runs_before_substitution(capsys):
+    """Order matters: a token inside a comment must not count as unresolved.
+
+    Stripping after substitution would still ship the value; stripping before
+    also keeps comment-only token names out of the unresolved tally.
+    """
+    from scripts.render_email_previews import render, strip_html_comments
+    src = "<!-- documented: {{ never.defined }} --><p>{{ known }}</p>"
+    rendered, unresolved = render(strip_html_comments(src), {"known": "ok"})
+    assert rendered == "<p>ok</p>"
+    assert unresolved == []
