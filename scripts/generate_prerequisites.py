@@ -168,12 +168,16 @@ def build_tokens(
 
 def render_new_paper_email(tokens: dict[str, str]) -> dict[str, str]:
     """Render the .html + .txt pair; raise ValueError if any token is unresolved."""
-    from scripts.render_email_previews import TEMPLATES, render
+    from scripts.render_email_previews import TEMPLATES, render, strip_html_comments
 
     out: dict[str, str] = {}
     unresolved: list[str] = []
     for ext, key in (("html", "html"), ("txt", "text")):
         src = (TEMPLATES / f"new-paper-announcement.{ext}").read_text(encoding="utf-8")
+        if ext == "html":
+            # This is a send path, not a preview: the head comment must not
+            # reach the member's inbox. Strip before substitution.
+            src = strip_html_comments(src)
         rendered, missing = render(src, tokens)
         unresolved.extend(missing)
         out[key] = rendered

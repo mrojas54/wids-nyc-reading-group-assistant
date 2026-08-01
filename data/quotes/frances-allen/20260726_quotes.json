@@ -1,0 +1,18 @@
+[
+  {
+    "id": "allen-work-not-career",
+    "text": "Focus on your work, not your career — that will happen later.",
+    "year": null,
+    "source": "ACM-W \"Spotlight on Frances E. Allen\", interview by Bettina Bair for the ACM-W Connections newsletter. First clause of her advice to young women in computing; the full passage continues \"build professional networks; get multiple mentors and be a mentor ... have fun.\" En dash normalised from the source's hyphen.",
+    "sourceUrl": "https://women.acm.org/spotlight-on-frances-e-allen/",
+    "verified": true
+  },
+  {
+    "id": "allen-look-beyond-environment",
+    "text": "My advice to the young women of today is to look beyond their immediate environment and to find the courage to do what they think is important.",
+    "year": null,
+    "source": "UNSOURCED. Carried over from the Claude Design handoff \"Vouched in group email\" quote pool. Her documented advice to young women (ACM-W, above) reads differently, and this wording was not found in the ACM-W spotlight, the IBM history page, or the IEEE oral history. Held at verified:false until a primary source is found.",
+    "sourceUrl": null,
+    "verified": false
+  }
+]

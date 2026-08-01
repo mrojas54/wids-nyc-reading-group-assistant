@@ -11,28 +11,19 @@
 
   <!--
     Magic-link sign-in email — WiDS NYC AI Reading Group Planner.
-    Variant: C · Tight.
-    Subject:  Sign in and keep reading
-    Preheader: One-tap link. Works once, expires in 60 minutes.
+    Subject: Sign in and keep reading
 
-    History: the source HTML used four placeholder tokens
-    ({{EMAIL}}, {{MAGIC_URL}}, {{QUOTE_TEXT}}, {{QUOTE_BY}}) intended
-    for server-side replacement. The cleanup pass replaced them with:
-      - {{EMAIL}}      → {{ .Email }}              (Supabase Go-template)
-      - {{MAGIC_URL}}  → {{ .ConfirmationURL }}    (Supabase Go-template)
-      - {{QUOTE_TEXT}} → hardcoded Grace Hopper quote (manual monthly rotation
-                          per docs/email-quotes.md; see spec §6)
-      - {{QUOTE_BY}}   → hardcoded "Grace Hopper"
+    A static copy pasted into the Supabase Auth dashboard, not rendered by
+    render_email_previews.py. Tokens are Supabase Go-template
+    (.Email, .ConfirmationURL). The quote is hardcoded and rotated by hand;
+    see docs/email-quotes.md.
 
-    The <img src="https://YOUR-DEPLOY-URL/..."> placeholder is intentional;
-    the operator replaces it with the live Vercel deployment URL during
-    runbook step (e) — see docs/runbooks/smtp-auth-setup.md.
+    Compatibility target: Gmail (web/iOS/Android), Apple Mail (macOS/iOS),
+    Outlook for Mac, Outlook.com, and Outlook 2016+ on Windows via the VML
+    fallback for the button.
 
-    Compatibility: tested-shape for Gmail (web/iOS/Android), Apple Mail
-    (macOS/iOS), Outlook for Mac, Outlook.com, and Outlook 2016+ on Windows
-    via the VML fallback for the button. The <img> tag renders the mark in
-    every modern client including Outlook Windows (resolved the earlier
-    inline-SVG blank-space limitation).
+    An earlier claim here that the <img> mark "renders in every modern client"
+    is REFUTED — see docs/runbooks/email-client-behavior.md.
   -->
 
   <!--[if mso]>

@@ -13,32 +13,19 @@
     New-paper announcement email — WiDS NYC AI Reading Group Planner.
 
     Source design: ReadingGroupEmail.dc.html — Claude Design project
-    aa31a29a-7e2e-4e43-b93c-8535036e0ac4 (court/queens voice branch). High-
-    fidelity port to email-client-safe table markup; the design's CSS variables
-    are inlined as literal hex. Copy is plain voice by decision — the only
-    court/queens flourish kept is the "Women of Data Science NYC" eyebrow and
-    the "A New Queen Has Stepped Up to Reign This Month" hero headline; keep the
-    rest plain. Email-safe scaffolding mirrors
-    rsvp-confirmation.html / pre-meeting-reminder.html. The Geist font stacks
+    aa31a29a-7e2e-4e43-b93c-8535036e0ac4 (court/queens voice branch). Copy is
+    plain voice by decision — the only court/queens flourish kept is the
+    "Women of Data Science NYC" eyebrow and the "A New Queen Has Stepped Up to
+    Reign This Month" hero headline; keep the rest plain. The Geist font stacks
     match scripts/prerequisites.py so the injected prereqs.html rows blend.
-    (Token names below are written bare, without the double-brace syntax, so
-    this comment is not itself substituted or left half-rendered.)
 
     Sent by: scheduled_tasks/new-paper-announcement.md — one Gmail *draft* per
     active member (never auto-sent). The recommended-prerequisites block is
     AI-drafted per paper, persisted in papers.prerequisites, then composed into
     the prereqs.* tokens by scripts/prerequisites.py + generate_prerequisites.py.
 
-    Tokens are Mustache-style (recipient.firstName), resolved by
-    scripts/render_email_previews.py / generate_prerequisites.py. Render REFUSES
-    to emit if any token is unresolved. Required hydrated tokens:
-      recipient.firstName,
-      lead.name, lead.initial, lead.blurb,
-      paper.title, paper.shortTitle, paper.summary, paper.authorsShort, paper.url,
-      prereqs.lede, prereqs.html (.html) / prereqs.text (.txt),
-      signoff.names,
-      links.availability, links.rsvpManage
-    Rotated (shared pool, has fallback): quote.text, quote.by, quote.role
+    Render REFUSES to emit if any token is unresolved. Merge fields:
+    docs/runbooks/transactional-emails.md, Token contracts.
   -->
 
   <!--[if mso]>

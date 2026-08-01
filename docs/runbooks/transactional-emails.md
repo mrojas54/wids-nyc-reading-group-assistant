@@ -10,6 +10,31 @@ work does not get mistaken for production behavior.
 - `scripts/render_email_previews.py` performs flat Mustache-style substitution
   only (`{{ token.path }}`). It has no partials or conditionals; scheduled-task
   prompts and Python composers must resolve branching before substitution.
+  `scripts/welcome_availability.py` is the worked example of a composer:
+  block markers stripped first, then substitution, then a wrap pass on the
+  text body.
+- **HTML comments never ship.** Every path that turns a template into a body
+  — `render_pair()` in the preview renderer, `compose()` in
+  `welcome_availability.py`, `render_new_paper_email()` in
+  `generate_prerequisites.py` — runs
+  `render_email_previews.strip_html_comments()` on the HTML *before*
+  substitution. Head comments carry repo paths, migration numbers, and the
+  alternate wording of copy the recipient is reading; none of it belongs in an
+  inbox via "Show original", and it is several KB on every send. Outlook's
+  conditional comments (`<!--[if mso]>`, the downlevel-revealed
+  `<!--[if !mso]><!-- -->` pair) are lifted to sentinels and restored, so they
+  survive. Add a new send path and you must strip on it too — a `.txt` twin
+  needs no strip, since its doc header is a `[[BEGIN:_doc]]` block.
+- Because stripping runs first, documenting a token in live `{{ … }}` syntax
+  inside a comment is no longer a leak: the comment is gone before `render()`
+  sees it. (It used to substitute the recipient's real values into the shipped
+  comment — `rsvp-confirmation.html`'s header rendered as "Template tokens are
+  Mustache-style (Maya)".) Listing token names bare is still the clearer
+  house style, but nothing depends on it now.
+- **Never write a literal comment-close inside an HTML comment.** This one
+  still bites, and harder than before: `-->` ends the comment early, so the
+  stripper removes only up to that point and dumps the remaining notes into
+  the email as visible text.
 - Preview rendering writes `*_rendered.html` and `*_rendered.txt` next to the
   sources. Those files are ignored by git and should not be committed.
 - Member-facing scheduled-task sends use the operator Gmail MCP. Supabase Auth
@@ -20,17 +45,111 @@ work does not get mistaken for production behavior.
 - New-paper announcement drafts additionally require migration
   `022_papers_prerequisites.sql`, which adds the editable
   `papers.prerequisites` JSONB bundle.
+- Welcome-and-availability drafts use migration
+  `023_members_vouched_by.sql` to persist the optional member who vouched for
+  the recipient.
 
 ## Template matrix
 
 | Template | Current consumer | Status / constraints |
 |---|---|---|
 | `magic-link.{html,txt}` | Supabase Auth dashboard -> Email Templates -> Magic Link | Static copy. Rotate manually; see `docs/email-quotes.md`. Not rendered by `render_email_previews.py`. |
-| `availability-reminder.{html,txt}` | `scheduled_tasks/availability-chase.md` Step 5c | Live only after the operator replies `remind`. Sent one recipient at a time to active members without an `availability` row for the meeting. |
+| `availability-reminder.{html,txt}` | `scheduled_tasks/availability-chase.md` Step 5c | Live only after the operator replies `remind`. Sent one recipient at a time to active members without an `availability` row for the meeting. Lede ("It's been too long") is written for a lapsed regular — for a brand-new member use `welcome-availability` instead. Note the location-chip marker in the HTML is longer than the chase spec quotes it (`BEGIN-OPTIONAL-CHIP: location \| OMIT …`); a matcher built on the quoted form silently mails an empty chip. |
 | `rsvp-confirmation.{html,txt}` | `scheduled_tasks/pre-meeting-reminder.md` Step 4a and `scheduled_tasks/availability-chase.md` Step 5e | Live for attending RSVPs 2 days before a meeting, and for availability submitters during the operator-triggered chase follow-up. |
+| `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. **Not renderable by `render_email_previews.py`** — it carries per-send block toggles that must be resolved before substitution, so it goes through `compose()` instead. Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed/blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Required tokens: `recipient.firstName`, `lead.name`/`lead.initial`/`lead.blurb`, `paper.title`/`paper.shortTitle`/`paper.summary`/`paper.authorsShort`/`paper.url`, `prereqs.lede` + `prereqs.html` (`.txt` twin uses `prereqs.text`), `signoff.names`, `links.availability`, `links.rsvpManage`. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Full field list under Token contracts below. |
+
+## Token contracts
+
+Authoritative list of merge fields per template. **This is the only copy** — the
+template head comments used to duplicate it and were collapsed to pointers here,
+because two copies drift silently and the templates cannot be trusted to carry
+the current one.
+
+Token names are written bare throughout, for the reason given in Architecture
+above: a delimited token inside a comment gets substituted with real recipient
+values and counts as required even when its block is off.
+
+### `availability-thanks`
+
+Required — refuse to send if any is unresolved:
+
+    recipient.firstName
+    paper.title, paper.authorsShort, paper.citation, paper.url
+    operator.displayName
+    links.portalBase
+
+Optional, with fallbacks:
+
+    paper.location            omit the chip entirely if null
+    paper.duration            fallback "~90 min"
+    paper.companionDropDay    fallback "Wed"
+    links.companionPreview    fallback to the literal "Preview link coming soon"
+                              (see Step 5b note in availability-chase.md)
+    quote.text / quote.by / quote.role
+                              fallback to the seed Grace Hopper quote
+
+### `rsvp-confirmation`
+
+Required — refuse to send if any is unresolved:
+
+    recipient.firstName
+    links.calendar, links.rsvpManage, links.portalBase
+    paper.title, paper.authorsShort, paper.companionUrl
+
+Optional / rotated — fall back to `haiku[0]` plus the Grace Hopper quote:
+
+    haiku.line1, haiku.line2, haiku.line3
+    quote.text, quote.by, quote.role
+
+### `new-paper-announcement`
+
+Required hydrated tokens; `render()` refuses to emit if any is unresolved:
+
+    recipient.firstName
+    lead.name, lead.initial, lead.blurb
+    paper.title, paper.shortTitle, paper.summary, paper.authorsShort, paper.url
+    prereqs.lede, prereqs.html          (the .txt twin uses prereqs.text)
+    signoff.names
+    links.availability, links.rsvpManage
+
+Rotated from the shared pool, has a fallback:
+
+    quote.text, quote.by, quote.role
+
+### `availability-reminder`
+
+Merge fields live in `scheduled_tasks/availability-chase.md` (Step 5: operator
+`remind` flow), which is its operational spec. Not duplicated here.
+
+### `pre-meeting-reminder`
+
+Previously undocumented anywhere — recorded here 2026-07-27 after an audit found
+five tokens with no contract in any file. Preview-only today; verify against the
+live send path before wiring it into a workflow.
+
+    recipient.firstName
+    meeting.when, meeting.dayName, meeting.location, meeting.leader
+    paper.title, paper.subtitle, paper.companionUrl
+    questions.lede, questions.html      (the .txt twin uses questions.text)
+    links.calendar, links.rsvpManage
+    signoff.names
+    quote.text, quote.by, quote.role
+
+`questions.*` are emitted by `scripts/discussion_questions.py` so the template
+stays logic-free — see the Discussion-question workflow section below. `quote.*`
+comes from the shared pool with a fallback. The `.html` and `.txt` twins are
+otherwise identical in their field set.
+
+### `welcome-availability`
+
+Contract is enforced in code by `scripts/welcome_availability.py`, which raises
+rather than returning a body with an unresolved token or a surviving block
+marker. The per-token rationale — which tokens are deliberately unused, and the
+first-name hazards — stays in that template's head comment, since it is design
+reasoning rather than a field list.
 
 ## Preview and validation
 
@@ -53,11 +172,12 @@ uv run pytest -c tests/pytest.ini -v \
   tests/quotes_select_test.py \
   tests/build_quotes_test.py \
   tests/prerequisites_test.py \
-  tests/generate_prerequisites_test.py
+  tests/generate_prerequisites_test.py \
+  tests/welcome_availability_test.py
 ```
 
-CI collects the full `tests/` tree, including both prerequisite tests above,
-then also runs `uv run ruff check scripts tests` and `uv run ty check`.
+CI collects the full `tests/` tree, including all focused tests above, then also
+runs `uv run ruff check scripts tests` and `uv run ty check`.
 
 ## Quote workflow
 

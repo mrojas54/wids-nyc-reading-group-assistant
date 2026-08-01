@@ -1,0 +1,556 @@
+"""Tests for scripts/welcome_availability.py.
+
+The handoff's stated risk is the two bodies drifting apart, so most of these
+assert the HTML and .txt twin move together. Run via:
+    uv run pytest -c tests/pytest.ini tests/welcome_availability_test.py -v
+"""
+from __future__ import annotations
+
+
+def test_module_imports():
+    """Smoke test: the composer is importable."""
+    from scripts.welcome_availability import compose
+    assert callable(compose)
+
+
+import re
+
+import pytest
+
+from scripts.welcome_availability import (
+    LEFTOVER_MARKER,
+    OPTIONAL_BLOCKS,
+    Blocks,
+    CompositionError,
+    Content,
+    compose,
+)
+
+#: Operator's pick for handoff Open Question 5 — the group's in-house address,
+#: not a name slot. Both bodies must carry it identically.
+GREETING = "Hey Queen,"
+
+TOKENS = {
+    # Passed but unused by this template (the greeting carries no name). Kept
+    # in the fixture to prove an extra token is harmless: render() only
+    # complains about tokens the template needs and the caller omitted.
+    "recipient.firstName": "Priyanka",
+    "vouch.firstName": "Michelle",
+    "vouch.blurb": "I'm your person for anything you want to ask before the first meeting.",
+    "answerBy": "Mon, Aug 3",
+    "links.availability": "https://example.test/availability?meeting=37",
+    "links.companion": "https://example.test/papers/40",
+    "signoff.names": "Michelle & Claudia",
+    "operator.email": "ops@example.test",
+    "paper.title": "Meta-Harness: End-to-End Optimization of Model Harnesses",
+    "paper.byline": "Lee, Nair, Zhang et al.",
+    "paper.citation": "arXiv:2603.28052",
+    "paper.hook": "What if you stopped tuning the model?",
+    "quote.text": "Like what you do, and then you will do your best.",
+    "quote.by": "Katherine Johnson",
+}
+
+
+def _compose(**block_kwargs) -> dict[str, str]:
+    return compose(Content(tokens=TOKENS, blocks=Blocks(**block_kwargs)))
+
+
+def test_defaults_compose_both_bodies():
+    bodies = _compose()
+    assert set(bodies) == {"html", "txt"}
+    assert bodies["html"].lstrip().startswith("<!doctype html>")
+    assert bodies["txt"].startswith(GREETING)
+
+
+def test_both_bodies_use_the_same_greeting():
+    """The two greetings drifted in the handoff itself — HTML said "Hey Queen,"
+    while the twin said "Hi [First name],". Pin them together."""
+    bodies = _compose()
+    assert GREETING in bodies["html"]
+    assert bodies["txt"].startswith(GREETING)
+    # And no stale personalised greeting survives in either body.
+    for body in bodies.values():
+        assert "Hi Priyanka" not in body
+        assert "Hi {{" not in body
+
+
+def test_both_bodies_use_the_same_lede():
+    """The sentence after the greeting drifted between the two bodies.
+
+    The HTML read "your desire to keep the mind sharp and steady" while the
+    twin read "you're keeping the mind sharp and steady" — same intent, two
+    different sentences, shipped in one email. Resolved in favour of the HTML
+    wording. Pinned here because nothing else compares the bodies word for
+    word, which is how it went unnoticed.
+    """
+    bodies = _compose()
+    lede = "so glad to see your desire to keep the mind sharp and steady"
+    assert lede in bodies["html"]
+    # The twin is hard-wrapped, so compare against collapsed whitespace.
+    assert lede in " ".join(bodies["txt"].split())
+    for body in bodies.values():
+        assert "you're keeping the mind sharp" not in body
+
+
+def test_greeting_carries_no_name_so_middle_name_members_are_safe():
+    """A member who goes by her middle name is mis-greeted by
+    split_part(name,' ',1). This register sidesteps that entirely."""
+    bodies = compose(
+        Content(tokens={**TOKENS, "recipient.firstName": "Sai"})
+    )
+    for body in bodies.values():
+        assert "Sai" not in body
+
+
+def test_no_marker_or_literal_token_survives():
+    """compose() raises rather than returning either — assert it stays clean.
+
+    Uses the module's precise marker regex, not a substring check: both
+    templates document the marker syntax in their own header comments, so
+    `"BEGIN-BLOCK" in body` is true for a correctly composed body.
+    """
+    for body in _compose().values():
+        assert LEFTOVER_MARKER.search(body) is None
+        assert "{{" not in body
+
+
+def test_marker_regex_ignores_prose_about_markers():
+    """Regression guard for the substring-check trap described above."""
+    assert LEFTOVER_MARKER.search("<!-- BEGIN-BLOCK: <name> --> is the syntax") is None
+    assert LEFTOVER_MARKER.search("[[BEGIN:<name>]] / [[END:<name>]] lines") is None
+    assert LEFTOVER_MARKER.search("<!-- BEGIN-BLOCK: vouch -->") is not None
+    assert LEFTOVER_MARKER.search("[[END:vouch]]") is not None
+
+
+def _visible_text(html_body: str) -> str:
+    """Text a mail client would actually paint — comments and CSS excluded."""
+    from html.parser import HTMLParser
+
+    class Extract(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.chunks: list[str] = []
+            self._skip = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("style", "script", "title"):
+                self._skip += 1
+
+        def handle_endtag(self, tag):
+            if tag in ("style", "script", "title") and self._skip:
+                self._skip -= 1
+
+        def handle_data(self, data):
+            if not self._skip:
+                self.chunks.append(data)
+
+        # handle_comment is intentionally not overridden: comment bodies are
+        # dropped, which is the whole point of the check below.
+
+    parser = Extract()
+    parser.feed(html_body)
+    return " ".join(" ".join(parser.chunks).split())
+
+
+def test_doc_comments_are_stripped_from_the_shipped_html():
+    """Comments are in the message source even when not rendered.
+
+    The header comment carries repo paths, migration numbers, and the
+    *alternate* wording of copy the recipient is reading — none of which
+    belongs in a member's inbox via "Show original".
+    """
+    html = _compose()["html"]
+    for leak in (
+        "scripts/welcome_availability.py",
+        "migrations/023",
+        "Grab her number",          # the third-party blurb, documented in the comment
+        "Claude Design handoff",
+        "BLOCK MARKERS",
+        "Port decisions",
+    ):
+        assert leak not in html, f"doc comment shipped: {leak!r}"
+
+
+def test_outlook_conditionals_survive_comment_stripping():
+    """The MSO style block and the VML button are comments too — keep them."""
+    html = _compose()["html"]
+    assert "<!--[if mso]>" in html
+    assert "<![endif]-->" in html
+    assert "v:roundrect" in html
+    assert 'arcsize="22%"' in html
+    assert "<w:anchorlock/>" in html
+    # The downlevel-revealed pair that hides the VML from real browsers.
+    assert "<!--[if !mso]><!-- -->" in html
+    assert "<!--<![endif]-->" in html
+    # And the non-Outlook anchor is still the one carrying the href.
+    assert html.count("availability?meeting=37") >= 2
+
+
+def test_head_comment_never_leaks_into_visible_text():
+    """Regression: a nested comment close dumped the whole doc block on-screen.
+
+    The head comment used to reproduce the literal marker syntax, whose `-->`
+    terminated the comment early — every implementation note after it rendered
+    as body text at the top of the email. Nothing in the token or marker checks
+    catches that, because the markup is structurally fine; only the rendered
+    text is wrong.
+    """
+    visible = _visible_text(_compose()["html"])
+    for leak in (
+        "BLOCK MARKERS",
+        "scripts/welcome_availability.py",
+        "Port decisions",
+        "Compatibility target",
+        "operator-supplied, no schema column",
+    ):
+        assert leak not in visible, f"head comment leaked into the body: {leak!r}"
+
+
+def test_visible_text_starts_at_the_headline():
+    """Whatever precedes the mark is preheader or nothing — never prose."""
+    visible = _visible_text(_compose()["html"])
+    headline = "So glad you're here"
+    assert headline in visible
+    # Only the hidden preheader may precede it.
+    assert visible.index(headline) < 200, visible[:200]
+
+
+def test_txt_doc_comment_never_ships():
+    """The .txt file's own header comment is a block and must be stripped."""
+    txt = _compose()["txt"]
+    assert "Plain-text twin of welcome-availability.html" not in txt
+    assert "block markers consumed by" not in txt
+
+
+def test_the_one_header_always_renders():
+    """There is a single header and no switch to turn it off."""
+    html_body = _compose()["html"]
+    assert "So glad you're here" in html_body
+
+
+def test_the_court_header_is_gone_not_merely_defaulted_off():
+    """It was not part of the Claude design, so it is removed outright.
+
+    Three separate checks, because "no court copy in the default body" alone
+    would also pass if the block still existed and merely defaulted off:
+
+    1. No court copy in either composed body — what actually ships.
+    2. No `header_court` block machinery left in either template source.
+    3. `court_voice` is not a parameter at all, so it cannot be switched on.
+
+    The templates' own doc comments still *name* the removed headline so a
+    future reader can see what went and why; that prose is stripped before
+    send, which is why the copy check runs against the composed body rather
+    than the raw source.
+
+    Scoped to this template on purpose — new-paper-announcement keeps the
+    court/queens voice under its own locked decision.
+    """
+    from scripts.render_email_previews import TEMPLATES
+
+    for body in _compose().values():
+        assert "A Member Said Your Name" not in body
+        assert "one open chair" not in body
+        assert "admission rite" not in body
+
+    for ext in ("html", "txt"):
+        src = (TEMPLATES / f"welcome-availability.{ext}").read_text(
+            encoding="utf-8"
+        )
+        assert "header_court" not in src
+
+    with pytest.raises(TypeError):
+        Blocks(court_voice=True)
+
+
+@pytest.mark.parametrize(
+    ("block", "html_probe", "txt_probe"),
+    [
+        ("vouch", "Vouched in by", "VOUCHED IN BY"),
+        ("meet_strip", "Every other month", "THE GROUP"),
+        ("availability", "What we need from you", "WHAT WE NEED FROM YOU"),
+        ("note", "Signing in the first time", "SIGNING IN THE FIRST TIME"),
+        ("paper_card", "This cycle's paper", "THIS CYCLE'S PAPER"),
+        ("quote", "Katherine Johnson", "Katherine Johnson"),
+    ],
+)
+def test_block_drops_from_both_bodies_together(block, html_probe, txt_probe):
+    """The whole point of one content object: a toggle moves both bodies."""
+    on = _compose(**{block: True})
+    assert html_probe in on["html"]
+    assert txt_probe in on["txt"]
+
+    off = _compose(**{block: False})
+    assert html_probe not in off["html"]
+    assert txt_probe not in off["txt"]
+
+
+def test_every_optional_block_is_covered_by_the_drop_test():
+    """Guard against adding a block and forgetting to parametrize it."""
+    covered = {
+        "vouch",
+        "meet_strip",
+        "availability",
+        "note",
+        "paper_card",
+        "quote",
+    }
+    assert covered == set(OPTIONAL_BLOCKS)
+
+
+def test_always_on_blocks_survive_everything_off():
+    bodies = _compose(
+        vouch=False,
+        meet_strip=False,
+        availability=False,
+        note=False,
+        paper_card=False,
+        quote=False,
+    )
+    # Greeting (C), CTA (G), sign-off (J), footer (L) carry no markers.
+    assert GREETING in bodies["html"]
+    assert "Open availability" in bodies["html"]
+    assert "See you in the room" in bodies["html"]
+    assert "vouched you in. " in bodies["html"]
+
+    assert GREETING in bodies["txt"]
+    assert "Open availability:" in bodies["txt"]
+    assert "See you in the room," in bodies["txt"]
+    assert bodies["txt"].rstrip().endswith("Reply to come off this list.")
+
+
+def test_twin_is_hard_wrapped_except_urls():
+    """The handoff wraps the twin at ~68; per-cycle tokens must wrap too."""
+    from scripts.welcome_availability import TXT_WIDTH
+
+    for line in _compose()["txt"].split("\n"):
+        if len(line) <= TXT_WIDTH:
+            continue
+        # Only an unwrappable single token (a URL) may exceed the width.
+        assert " " not in line.strip(), f"unwrapped line: {line!r}"
+
+
+def test_wrapping_never_breaks_a_url():
+    txt = _compose()["txt"]
+    assert "https://example.test/availability?meeting=37" in txt
+    assert "https://example.test/papers/40" in txt
+
+
+def test_wrapping_preserves_bullet_indentation():
+    lines = _compose()["txt"].split("\n")
+    bullets = [ln for ln in lines if ln.lstrip().startswith("·")]
+    assert bullets, "the ask block should render three bullets"
+    assert all(ln.startswith("  ·") for ln in bullets), bullets
+
+
+def test_no_orphan_word_lines_in_prose():
+    """Regression: pre-wrapped copy + a longer real name produced an orphan.
+
+    The README's twin was laid out around a short "[Member]" placeholder. With
+    a real name substituted, line-by-line wrapping left "she's / your /
+    person" — a one-word line mid-paragraph. Prose is now stored unwrapped so
+    the whole paragraph re-flows.
+    """
+    lines = _compose()["txt"].split("\n")
+    for i, line in enumerate(lines[1:-1], start=1):
+        if len(line.split()) != 1:
+            continue
+        # A one-word line directly under an ALL-CAPS section label is a card
+        # *field value*, not wrapped prose — the twin lays the vouch card out
+        # as "VOUCHED IN BY" / name / blurb. This stopped being hypothetical
+        # when the voucher went to first-name-only: "Michelle Rojas" was two
+        # words and slipped through, "Michelle" is one and does not.
+        previous = lines[i - 1].strip()
+        if previous and previous == previous.upper():
+            continue
+        # An orphan is a one-word line *inside* a paragraph — i.e. with
+        # non-blank text both above and below it. A lone word that starts or
+        # ends a block (a heading, a URL, the footer's em-dash rule) is fine.
+        mid_paragraph = previous != "" and lines[i + 1].strip() != ""
+        assert not mid_paragraph, (
+            f"orphan word line at {i}: {line!r} "
+            f"between {lines[i - 1]!r} and {lines[i + 1]!r}"
+        )
+
+
+def test_long_vouch_name_still_reflows_cleanly():
+    long_name = "Alexandra Konstantinopoulos-Fitzgerald"
+    bodies = compose(Content(tokens={**TOKENS, "vouch.firstName": long_name}))
+    txt = bodies["txt"]
+    assert long_name in txt
+    for line in txt.split("\n"):
+        assert len(line) <= 68 or " " not in line.strip(), line
+
+
+def test_long_token_value_is_wrapped():
+    """A 140-column hook is what motivated the wrap step."""
+    long_hook = "word " * 60
+    bodies = compose(Content(tokens={**TOKENS, "paper.hook": long_hook.strip()}))
+    assert all(len(ln) <= 68 or " " not in ln.strip()
+               for ln in bodies["txt"].split("\n"))
+
+
+def test_cta_href_survives_in_both_bodies():
+    bodies = _compose()
+    assert "https://example.test/availability?meeting=37" in bodies["html"]
+    assert "https://example.test/availability?meeting=37" in bodies["txt"]
+
+
+def test_companion_link_is_a_token_not_a_hardcoded_url():
+    """The prototype hardcoded /papers/40 for click-through during review."""
+    src = (
+        __import__("pathlib")
+        .Path(__file__)
+        .resolve()
+        .parent.parent
+        / "assets/emails/template/welcome-availability.html"
+    ).read_text(encoding="utf-8")
+    assert "{{ links.companion }}" in src
+    assert "vercel.app/papers/40" not in src
+
+
+def test_missing_token_raises_rather_than_mailing_braces():
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.firstName"}
+    with pytest.raises(CompositionError) as excinfo:
+        compose(Content(tokens=thin))
+    assert "vouch.firstName" in str(excinfo.value)
+
+
+def test_vouch_blurb_is_a_token_not_baked_copy():
+    """The design's card copy only works when the voucher is a third party.
+
+    When the voucher is also the sender — the common case, since the operator
+    usually does the introducing — "Grab her number before the first meeting"
+    reads as being about the person signing the email. So the line is supplied
+    per send.
+    """
+    src = (
+        __import__("pathlib").Path(__file__).resolve().parent.parent
+        / "assets/emails/template/welcome-availability.html"
+    ).read_text(encoding="utf-8")
+    # The third-party wording must not be hard-coded into the card markup.
+    card = src[src.index("BEGIN-BLOCK: vouch") : src.index("END-BLOCK: vouch")]
+    assert "{{ vouch.blurb }}" in card
+    assert "Grab her number" not in card
+
+    bodies = _compose()
+    blurb = TOKENS["vouch.blurb"]
+    # The HTML body carries the escaped form (I&#x27;m); the twin is literal.
+    assert __import__("html").escape(blurb, quote=True) in bodies["html"]
+    # The twin wraps at 68 columns, so compare whitespace-normalised.
+    assert blurb in " ".join(bodies["txt"].split())
+
+
+def test_vouch_blurb_not_required_when_vouch_card_is_off():
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.blurb"}
+    bodies = compose(Content(tokens=thin, blocks=Blocks(vouch=False)))
+    assert "VOUCHED IN BY" not in bodies["txt"]
+
+
+def test_vouch_off_still_requires_the_name_and_says_so_loudly():
+    """Documented wart, not an oversight.
+
+    `vouch.firstName` appears in four places — the preheader, the intro
+    sentence, the vouch card, and the footer — but only the card sits inside
+    the toggled block, because the others are mid-sentence and the no-voucher
+    copy is a decision the operator has to make. So `Blocks(vouch=False)`
+    without the token raises instead of quietly shipping a sentence with a
+    hole in it. If no-voucher copy ever lands, wrap those sites and delete
+    this test.
+    """
+    thin = {k: v for k, v in TOKENS.items() if k != "vouch.firstName"}
+    with pytest.raises(CompositionError) as excinfo:
+        compose(Content(tokens=thin, blocks=Blocks(vouch=False)))
+    assert "vouch.firstName" in str(excinfo.value)
+
+
+def test_paper_tokens_not_required_when_paper_card_is_off():
+    """Toggling a block off should also drop its token requirements."""
+    thin = {k: v for k, v in TOKENS.items() if not k.startswith("paper.")}
+    bodies = compose(Content(tokens=thin, blocks=Blocks(paper_card=False)))
+    assert "THIS CYCLE'S PAPER" not in bodies["txt"]
+
+
+def test_html_tokens_are_escaped_but_text_tokens_are_not():
+    """render() does no escaping, so the composer must.
+
+    "Michelle & Claudia" shipped a bare ampersand — forgiven by browsers but
+    invalid; a name or title carrying < or > would break the document. The
+    plain-text twin must NOT be escaped, or the reader sees "&amp;".
+    """
+    bodies = _compose()
+    assert "Michelle &amp; Claudia" in bodies["html"]
+    assert "Michelle & Claudia" not in bodies["html"]
+    assert "Michelle & Claudia" in bodies["txt"]
+    assert "&amp;" not in bodies["txt"]
+
+
+def test_markup_in_a_token_cannot_break_the_html():
+    hostile = {**TOKENS, "vouch.firstName": '<script>alert(1)</script> & "quoted"'}
+    html_body = compose(Content(tokens=hostile))["html"]
+    assert "<script>" not in html_body
+    assert "&lt;script&gt;" in html_body
+
+
+def test_no_inline_svg_anywhere():
+    """Gmail strips <svg> outright — icons must be PNG or Unicode.
+
+    The handoff specified four inline Lucide glyphs. In a real Gmail draft all
+    of them rendered as nothing; the CTA arrow survived only because it was
+    already a text character. Regression guard so nobody reintroduces one.
+    """
+    html_body = _compose()["html"]
+    assert "<svg" not in html_body.lower()
+    assert "</svg>" not in html_body.lower()
+    # The replacements are present.
+    assert "&#10003;" in html_body        # check, vouch avatar
+    assert "&#8594;" in html_body         # arrow, CTA + companion link
+
+
+def test_mark_is_a_hosted_png_not_svg():
+    html_body = _compose()["html"]
+    assert "branding/mark-reader-96.png" in html_body
+    assert 'alt="WiDS NYC AI Reading Group"' in html_body
+
+
+def test_every_background_colour_is_paired_with_a_bgcolor_attribute():
+    """Gmail's compose sanitiser drops `background-color`, keeps attributes.
+
+    /wids-add-member hands this email over as a Gmail draft, and the operator
+    may send it straight from the web composer — which re-sanitises an
+    API-created draft and ships the result. A fill that lives only in CSS is
+    therefore lost to the recipient, not just to the preview: the observed
+    failure was the sage vouch avatar losing its circle, leaving a cream
+    check on cream, i.e. no icon at all. Both magenta rules and every panel
+    tint went the same way; the CTA survived because it already had `bgcolor`.
+
+    """
+    html_body = _compose()["html"]
+
+    unpaired = []
+    for tag in re.finditer(
+        r"<(\w+)\b[^>]*background-color:#([0-9a-fA-F]{6})[^>]*>", html_body
+    ):
+        css = re.search(r"background-color:#([0-9a-fA-F]{6})", tag.group(0))
+        attr = re.search(r'bgcolor="#([0-9a-fA-F]{6})"', tag.group(0))
+        if attr is None or attr.group(1).lower() != css.group(1).lower():
+            unpaired.append(tag.group(0)[:120])
+
+    assert not unpaired, (
+        "these elements declare a background-color with no matching bgcolor "
+        f"attribute and will render transparent in Gmail: {unpaired}"
+    )
+
+
+def test_the_vouch_check_is_never_cream_on_cream():
+    """The one case where a stripped fill erases an icon instead of dulling it.
+
+    The check is cream so it reads against the sage circle. Guard both halves:
+    the fill has to be on the td that actually paints the box, not only on the
+    wrapper table, or the sanitiser leaves an invisible glyph behind.
+    """
+    html_body = _compose()["html"]
+    circle_td = re.search(r"<td[^>]*>\s*&#10003;\s*</td>", html_body)
+    assert circle_td, "vouch check cell not found"
+    assert 'bgcolor="#467560"' in circle_td.group(0)
+    assert "color:#fefcef" in circle_td.group(0)

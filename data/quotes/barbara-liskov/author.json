@@ -1,0 +1,9 @@
+{
+  "id": "barbara-liskov",
+  "name": "Barbara Liskov",
+  "role": "Computer scientist · Turing Award 2008",
+  "birthdate": "1939-11-07",
+  "fields": ["programming languages", "distributed computing", "data abstraction"],
+  "notable_contributions": "Designed CLU, which introduced abstract data types to programming languages, and gave her name to the Liskov substitution principle.",
+  "wikipediaUrl": "https://en.wikipedia.org/wiki/Barbara_Liskov"
+}

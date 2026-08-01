@@ -138,6 +138,63 @@ PREVIEW_PREREQS = (
 MUSTACHE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
 
+class RenderError(RuntimeError):
+    """Raised when a template cannot be turned into a mailable body."""
+
+
+# Documentation comments must not ship. HTML comments are not rendered, but
+# they are in the message source — visible through "Show original" — and the
+# head comments carry repo file paths, migration numbers, design rationale,
+# and the *alternate* wording of copy the recipient is reading. None of that
+# belongs in a member's inbox, and it is several KB on every send.
+#
+# Stripping also closes a leak the templates could only dodge by convention:
+# render() substitutes every delimited token it finds, comments included, so a
+# token documented in live `{{ … }}` syntax inside a comment got replaced with
+# the recipient's real value and shipped it. rsvp-confirmation's head comment
+# rendered as "Template tokens are Mustache-style (Maya)" for exactly that
+# reason. The templates were de-delimited by hand on 2026-07-27 to work around
+# it; stripping first makes that convention no longer load-bearing.
+#
+# Outlook's conditional comments MUST survive, including the deliberately
+# malformed downlevel-revealed pair (`<!--[if !mso]><!-- -->` … `<!--<![endif]-->`).
+# A lookahead-based "skip anything starting with [if" is NOT sufficient, and
+# getting this wrong is expensive. The downlevel-revealed opener contains a
+# *nested* `<!--`; a scanner that declines to match at the outer delimiter
+# simply matches at the inner one, strips `<!-- -->`, and leaves
+# `<!--[if !mso]>` unclosed — which swallows the CTA anchor into an open
+# comment in every non-Outlook client. The button vanishes in Gmail and Apple
+# Mail while still looking perfect in Outlook.
+#
+# So the conditionals are lifted out to sentinels first, longest form before
+# shortest, and restored afterwards. Sentinels use NUL, which cannot occur in
+# the template.
+CONDITIONALS = (
+    "<!--[if !mso]><!-- -->",
+    "<!--<![endif]-->",
+    "<!--[if mso]>",
+    "<![endif]-->",
+)
+_ANY_COMMENT = re.compile(r"<!--[\s\S]*?-->")
+
+
+def strip_html_comments(html_text: str) -> str:
+    """Remove documentation comments, preserving MSO/VML conditionals.
+
+    Run this on the HTML body *before* substitution: the head comments list
+    token names, and stripping first keeps them out of the unresolved tally
+    entirely — and out of the substituted output.
+    """
+    for i, token in enumerate(CONDITIONALS):
+        html_text = html_text.replace(token, f"\x00c{i}\x00")
+    html_text = _ANY_COMMENT.sub("", html_text)
+    for i, token in enumerate(CONDITIONALS):
+        html_text = html_text.replace(f"\x00c{i}\x00", token)
+    if "\x00" in html_text:
+        raise RenderError("comment-stripping sentinel survived")
+    return html_text
+
+
 def render(template_text: str, tokens: dict[str, str]) -> tuple[str, list[str]]:
     """Substitute every {{ token }} with its value. Returns (rendered, unresolved)."""
     unresolved: list[str] = []
@@ -158,7 +215,13 @@ def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list
     unresolved_all: list[str] = []
     for ext in ("html", "txt"):
         src = TEMPLATES / f"{stem}.{ext}"
-        rendered, unresolved = render(src.read_text(encoding="utf-8"), tokens)
+        body = src.read_text(encoding="utf-8")
+        if ext == "html":
+            # Before substitution — see strip_html_comments. The .txt twins
+            # carry no HTML comments; their doc header is a [[BEGIN:_doc]]
+            # block, which is a composer's concern, not this one's.
+            body = strip_html_comments(body)
+        rendered, unresolved = render(body, tokens)
         unresolved_all.extend(unresolved)
         dst = TEMPLATES / f"{stem}_rendered.{ext}"
         dst.write_text(rendered, encoding="utf-8")
