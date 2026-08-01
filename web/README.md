@@ -7,13 +7,13 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | Route | What it does |
 | --- | --- |
 | `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
-| `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
-| `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the latest `meetings.status='prep'` row by `created_at DESC`. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting (delete existing rows, then insert selected 6–9 PM ET windows). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
+| `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `paper_companions` row; legacy papers can fall back to `papers.companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
+| `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting (delete existing rows, then insert selected 6–9 PM ET windows). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
 | `/papers` | Paper Pal inbox. Shows reading now, upcoming lead picks, member-proposed "want to lead" suggestions, and recently discussed papers. Signed-in roster members can propose catalog papers or volunteer for proposed meetings. See [../docs/paper-pal-portal.md](../docs/paper-pal-portal.md). |
 | `/new` | Paper Pal synthesis upload page (`/new?paperId=<id>`). Gated by the `can_synthesize_paper_pal` RPC — only operator/admin or the paper's meeting leader sees the upload form. `NewPaperForm` uploads the PDF to the `papers-pdfs` bucket and POSTs `/functions/v1/analyze-paper`, streaming a 5-stage SSE progress flow. |
 | `/papers/[id]` | Paper Pal reading page. If `paper_companions.payload` exists, renders the synthesized dashboard + assessment panel; else falls back to a static `web/content/papers/<id>.json` fixture; else shows a synthesize CTA (owner/leader) or read-only empty state; else 404s. No auth is required to read existing content — only synthesis is gated. |
 | `/papers/[id]/present` | Presenter mode. Requires `paper_companions.payload`; derives slides from the synthesized companion and 404s when no payload exists. |
-| `/admin/suggest` | Paper search/rank tool. Linked from the dashboard as "Find a paper" when the member's role is `operator` / `leader` / `admin`; the API enforces the same leader-role requirement. See [../docs/admin-suggest.md](../docs/admin-suggest.md). |
+| `/admin/suggest` | Paper search/rank tool. Direct access and the API require an `operator` / `leader` / `admin` role. The dashboard's "Find a paper" prompt has an additional condition: it disappears once the next meeting has a paper. See [../docs/admin-suggest.md](../docs/admin-suggest.md). |
 | `/admin/logs` | Operator event log over `command_log`. Requires the same leader-role gate as `/admin/suggest`, reads with the service-role client because the table is RLS-locked, and shows failures/warnings, filters, expandable context, and keyset "Load more" pagination. See [../docs/admin-logs.md](../docs/admin-logs.md). |
 
 ## UI conventions
@@ -28,13 +28,13 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
-2. Use Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
+2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
 3. `npm ci`
 4. `npm run dev` — opens http://localhost:3000
 
 ## Contributing checks
 
-CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits high-severity dependency issues, then runs the local gates below. Run the same commands before web changes:
+CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits high-severity dependency issues, then runs lint, type-checking, and unit tests. Run those same gates before web changes, and run the production build for deployment-sensitive changes:
 
 ```sh
 npm run lint
@@ -61,7 +61,6 @@ The portal is hosted on Vercel with the project's Root Directory set to `web/`. 
 | `SPECTER2_MODEL_BLOB_URL`         | Vercel Blob                     | Private Blob URL for `specter2_int8.onnx`. Required when `/admin/suggest` falls back to local WASM embeddings or runs cache warmup.          |
 | `BLOB_READ_WRITE_TOKEN`           | Vercel Blob                     | Secret token read by `@vercel/blob` for private model fetches. Required with `SPECTER2_MODEL_BLOB_URL`; mark Sensitive in Vercel.            |
 | `S2_API_KEY`                      | Semantic Scholar                | Optional. When unset, suggest calls S2 unauthenticated and falls back to WASM immediately on 429 rate limits.                                |
-| `PAPER_PAL_INPORTAL_SYNTHESIS`    | Operator choice                 | Optional feature flag for `/new`; defaults false when unset. Edge Function role gates remain the enforcement boundary.                       |
 
 For the full suggest/SPECTER2 workflow, cache warmup, and troubleshooting guide,
 see [../docs/admin-suggest.md](../docs/admin-suggest.md).

@@ -65,3 +65,4 @@ browser (anon/authenticated). `command_log` is the one accepted exception
 - `command_log` carries the enrichment columns `duration_ms`, `metadata`
   (JSONB, default `{}`), `idempotency_key`, and `actor`, plus the
   `command_log_idempotency_key_unique` partial unique index.
+- `blackout_periods` exists and remains service-role-only.

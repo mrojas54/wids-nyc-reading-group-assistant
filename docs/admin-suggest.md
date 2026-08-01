@@ -37,9 +37,11 @@ the timeout budget described below.
 ### What you'll see
 
 After logging in to the member site, operators, leaders, and admins see a "Find a
-paper" link in the dashboard. (If you don't see it, your account isn't
-flagged as `operator`, `leader`, or `admin` in the `members` table — ask the
-operator to bump your role.)
+paper" link in the dashboard while the next meeting does not have a paper. The
+prompt disappears once `nextMeeting().paper_id` is set because the selection
+work is complete. Direct access to `/admin/suggest` remains available to those
+roles. If the direct page returns 403, confirm the account is flagged as
+`operator`, `leader`, or `admin` in the `members` table.
 
 The page has a discovery helper followed by the ranking form:
 
