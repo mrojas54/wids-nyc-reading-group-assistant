@@ -53,7 +53,8 @@ COMMENT ON COLUMN members.vouched_by IS
   'The existing member who vouched this person in. Self-referencing FK, '
   'nullable: NULL means unknown or not applicable (all rows predating '
   'migration 023, plus operator-added members with no voucher). Source for '
-  'the {{ vouch.name }} token in welcome-availability; when NULL, render that '
-  'email with Blocks(vouch=False) rather than inventing a name.';
+  'the vouch.firstName token in welcome-availability (caller takes the first '
+  'name). Blocks(vouch=False) drops only the vouch card; the intro, preheader, '
+  'and footer still need vouch.firstName unless no-voucher copy is written.';
 
 COMMIT;
