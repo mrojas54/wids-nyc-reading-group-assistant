@@ -42,6 +42,12 @@ work does not get mistaken for production behavior.
 - At-most-once sends require migration
   `020_command_log_enrichment.sql`, which adds `command_log.idempotency_key`
   and the `command_log_idempotency_key_unique` partial unique index.
+- New-paper announcement drafts additionally require migration
+  `022_papers_prerequisites.sql`, which adds the editable
+  `papers.prerequisites` JSONB bundle.
+- Welcome-and-availability drafts use migration
+  `023_members_vouched_by.sql` to persist the optional member who vouched for
+  the recipient.
 
 ## Template matrix
 
@@ -53,7 +59,7 @@ work does not get mistaken for production behavior.
 | `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. Flow: [`docs/welcome-availability-flow.md`](../welcome-availability-flow.md). **Not renderable by `render_email_previews.py`** — it carries per-send block toggles that must be resolved before substitution, so it goes through `compose()` instead. Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotated from the shared pool. Full field list under Token contracts below. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Full field list under Token contracts below. |
 
 ## Token contracts
 
@@ -196,11 +202,14 @@ uv run pytest -c tests/pytest.ini -v \
   tests/welcome_availability_test.py \
   tests/discussion_questions_test.py \
   tests/quotes_select_test.py \
-  tests/build_quotes_test.py
+  tests/build_quotes_test.py \
+  tests/prerequisites_test.py \
+  tests/generate_prerequisites_test.py \
+  tests/welcome_availability_test.py
 ```
 
-CI runs the same Python checks, plus `uv run ruff check scripts tests` and
-`uv run ty check`.
+CI collects the full `tests/` tree, including all focused tests above, then also
+runs `uv run ruff check scripts tests` and `uv run ty check`.
 
 ## Quote workflow
 
@@ -244,11 +253,12 @@ After changing the question source or composer, run the preview command and
 
 ## Idempotency keys
 
-Apply migrations in numeric order through at least `020` (idempotency) before
-operating these workflows; welcome/add-member also needs `023`
-(`members.vouched_by`). Keyed sends should check the exact key first, insert
-the same key when logging success, and treat SQLSTATE `23505` from the unique
-index as "already sent."
+Apply every repository migration in numeric order before operating these
+workflows. Migration `020` provides idempotency; migration `022` is required by
+the new-paper announcement; welcome/add-member also needs `023`
+(`members.vouched_by`). Keyed scheduled-task sends should check the exact key
+first, insert the same key when logging success, and treat SQLSTATE `23505`
+from the unique index as "already sent."
 
 Current keys:
 
@@ -279,11 +289,13 @@ provides.
   unresolved block markers would ship. Use `compose()`.
 - `/wids-add-member` cannot send. Do not offer `reply send`; open the Gmail
   draft. Do not write the chase idempotency key for an unsent draft.
-- Paper Pal links should use the stored relative companion path:
-  `<portalBase><papers.companion_url>` (for example,
-  `https://.../papers/2`), not the old `/papers/<slug>/companion` shape. For
-  the welcome paper card, verify `paper_companions.payload` exists before
-  leaving `paper_card` on.
+- The portal treats a `paper_companions` row as the current source of truth and
+  derives `/papers/<paper_id>`. The existing reminder task specs still read
+  `papers.companion_url`; if that legacy field is null, those emails omit or
+  replace the preview link even when the portal companion exists. For the
+  welcome paper card, verify `paper_companions.payload` exists before leaving
+  `paper_card` on. In either path, do not use the retired
+  `/papers/<slug>/companion` shape.
 - Magic-link email rotation is manual in Supabase and separate from the
   structured quote pool used by the other templates.
 - Client-behaviour claims (mark loss, compose sanitiser) belong in

@@ -1,15 +1,18 @@
 # Scheduled tasks
 
-Each non-deprecated `.md` file in this directory is a standalone prompt to register with the scheduled-tasks MCP. Most run daily; `prune-paper-pdfs` runs weekly. They are independent — failures of one don't block others.
+Each `.md` file in this directory is a standalone task prompt. Its frontmatter
+declares whether it is `daily`, `weekly`, `manual`, or `deprecated`. Recurring
+tasks are independent — failures of one don't block others.
 
 ## Registration
 
-For each file:
+For each `daily` or `weekly` file:
 
 1. Open the scheduled-tasks MCP UI (or use its `create_scheduled_task` tool).
 2. Create a task with:
    - **Name:** the filename without `.md` (e.g. `cycle-keep-alive`)
-   - **Schedule:** daily at a time when API rate limits are calm (e.g., 09:00 ET)
+   - **Schedule:** match the file's frontmatter; use a calm API window for daily
+     tasks (for example, 09:00 ET)
    - **Prompt:** the contents of the .md file
    - **Environment:**
      - `SUPABASE_URL`
@@ -20,6 +23,13 @@ For each file:
 For `prune-paper-pdfs`, also set `PAPER_PAL_PRUNE_DRY_RUN=true` for the
 first scheduled runs. Flip it only after a clean dry-run, as described in
 [`prune-paper-pdfs.md`](prune-paper-pdfs.md).
+
+Do not put `new-paper-announcement` on a recurring schedule. Run it manually
+after the new cycle's paper and leader are locked. It also needs
+`SUPABASE_DB_URL` in addition to the Supabase and Gmail integrations, creates
+Gmail drafts rather than sending, and uses a per-paper idempotency key. Follow
+[`new-paper-announcement.md`](new-paper-announcement.md) for the complete
+operator workflow.
 
 ## Order of registration
 
