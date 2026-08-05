@@ -50,41 +50,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # `--omit=dev` is a deliberate, temporary narrowing — remove it as soon
-      # as the upstream fix below lands.
+      # Full-tree audit. The `--omit=dev` narrowing that lived here from
+      # 2026-07-27 (e80db7a) has been removed: its own REVERT WHEN condition is
+      # now satisfied. brace-expansion backported the GHSA-mh99-v99m-4gvg fix in
+      # 1.1.18, so the eslint-config-next -> minimatch@3 -> brace-expansion@1
+      # chain resolves clean, and `npm audit` reports 0 at every severity across
+      # the whole tree. The gate no longer needs an exemption.
       #
-      # GHSA-mh99-v99m-4gvg (brace-expansion, DoS via unbounded expansion) has
-      # no reachable fix for us. The chain is:
-      #
-      #   eslint-config-next 16.2.11
-      #     -> eslint-plugin-{import,react,jsx-a11y}  (latest published)
-      #        -> minimatch ^3.1.2
-      #           -> brace-expansion ^1.1.7 -> 1.1.16   (vulnerable)
-      #
-      # Every escape route was tried and each breaks the toolchain, because
-      # all three hops changed their export shape at the patched major:
-      #   * brace-expansion 1 -> 5: v1 exports a callable, v5 exports
-      #     { EXPANSION_MAX, expand }. minimatch/minimatch.js:271 calls it
-      #     directly -> "expand is not a function".
-      #   * minimatch 3 -> 10: v3 sets module.exports = minimatch, v9+ export
-      #     a named object. eslint-plugin-react calls minimatch(...) directly.
-      #   * eslint 9 -> 10: cuts 9 advisories to 6 but eslint-config-next's
-      #     bundled eslint-plugin-react calls context.getFilename(), removed in
-      #     eslint 10 -> lint dies outright.
-      # `npm audit fix` fixes none of them, and `npm audit fix --force`
-      # proposes eslint-config-next@0.2.4 — a downgrade that breaks Next 16.
-      #
-      # Nothing here reaches the deployed app: this is lint tooling only, and
-      # `--omit=dev` reports 0. That is what makes the narrowing acceptable
-      # rather than a shrug — the gate still fails on any high in a package we
-      # actually ship.
-      #
-      # REVERT WHEN: eslint-plugin-{import,react,jsx-a11y} move to minimatch@10
-      # (which depends on brace-expansion ^5.0.5), or brace-expansion backports
-      # a patched 1.1.x. Either arrives via a plain `npm install` — the caret
-      # ranges float — so just drop `--omit=dev` and see if it stays green.
-      - name: Audit dependencies (production only — see note above)
-        run: npm audit --audit-level=high --omit=dev
+      # Correction worth keeping: the old note said the fix "arrives via a plain
+      # `npm install` — the caret ranges float". It does not. `npm install`
+      # preserves any locked version that already satisfies its range, so the
+      # patched 1.1.18 was never picked up. `npm update` is what refreshes
+      # in-range and is what actually unblocked this. If a transitive advisory
+      # ever looks stuck again, check whether the lockfile is simply behind its
+      # own declared ranges before concluding there is no upstream fix.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Lint
         run: npm run lint
