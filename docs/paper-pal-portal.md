@@ -171,10 +171,10 @@ gate-check error instead of pretending the member is unauthorized.
 
 ### Required setup
 
-Apply migrations through `020_command_log_enrichment.sql`. Paper Pal itself
-uses the artifacts below, and migration `020` is still part of the supported
-go-live baseline because `/admin/logs` enrichment and scheduled-task
-idempotency depend on it.
+Apply every repository migration in numeric order. Paper Pal itself uses the
+artifacts below, and migration `020` is still part of the supported go-live
+baseline because `/admin/logs` enrichment and scheduled-task idempotency depend
+on it.
 Paper Pal depends on:
 
 - `paper_companions` and its RLS policies (`013`)
@@ -215,12 +215,23 @@ Register `scheduled_tasks/prune-paper-pdfs.md` as the weekly
 `name = 'wids-prune-paper-pdfs'`, starts in dry-run mode, and only deletes
 oldest PDFs when the bucket exceeds 500 MB, down to a 450 MB floor.
 
-### Dashboard caveat
+### Dashboard link resolution
 
-The dashboard's promoted Paper Pal card still reads `papers.companion_url`.
-The full reading page reads `paper_companions.payload` directly. If a
-newly synthesized paper appears at `/papers/<id>` but not on the dashboard,
-check whether the catalog row's `companion_url` is populated.
+`paper_companions` is the source of truth for current Paper Pal companions.
+When a row exists for the meeting's paper, the dashboard and history links use
+`/papers/<paper_id>`. The legacy `papers.companion_url` value is only a fallback
+for pre-Paper-Pal papers.
+
+The `analyze-paper` flow upserts `paper_companions`; it does not populate the
+legacy column. If `/papers/<id>` works but the dashboard card is missing, verify
+the meeting points to that paper and that the companion row exists:
+
+```sql
+SELECT m.id AS meeting_id, m.paper_id, pc.paper_id AS companion_paper_id
+FROM meetings m
+LEFT JOIN paper_companions pc ON pc.paper_id = m.paper_id
+WHERE m.id = <meeting_id>;
+```
 
 ### Troubleshooting
 
@@ -232,6 +243,7 @@ check whether the catalog row's `companion_url` is populated.
 | Synthesis fails mid-stream | The page shows the stream error; inspect the Supabase Edge Function logs for `analyze-paper`. |
 | Hint/Socratic returns 403 | Confirm the member has an `attending` RSVP for a meeting that uses the paper, or is operator/admin. |
 | `/papers/<id>/present` 404s | Presenter mode requires `paper_companions.payload`; legacy static fixtures are not enough. |
+| Companion page works but dashboard card is missing | Confirm the dashboard's next meeting has the expected `paper_id` and a matching `paper_companions` row. Do not backfill `papers.companion_url` for a current Paper Pal synthesis. |
 
 ---
 
@@ -315,8 +327,8 @@ npm run typecheck
 
 For ops documentation changes, also spot-check:
 
-1. `migrations/README.md` lists every migration file through `020`.
-2. `scheduled_tasks/README.md` includes every non-deprecated task that
-   should be registered.
+1. `migrations/README.md` lists every numbered migration file.
+2. `scheduled_tasks/README.md` distinguishes recurring, manual, and deprecated
+   task prompts.
 3. `supabase/functions/README.md` agrees with
    `migrations/018_papers_pdfs_bucket.sql` about the `papers-pdfs` bucket.

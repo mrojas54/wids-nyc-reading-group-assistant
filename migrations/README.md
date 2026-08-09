@@ -5,6 +5,13 @@ SQL migrations for the WiDS NYC reading-group Supabase project, applied
 into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool.
 There is no migration-tracking table; filenames define order only.
 
+Because of that, **do not edit a migration that has already been applied** —
+not even its comments. Changing a landed file updates the repository but not
+any database that already ran it, so the two silently disagree. Correct a
+landed migration with a new forward migration instead (see `025`, which
+re-applies a `COMMENT` that was edited in place on `023`). Editing an
+unapplied migration you have not yet run anywhere is fine.
+
 | File | What it does |
 |---|---|
 | `001_initial_schema.sql` | Base tables. |
@@ -29,7 +36,8 @@ There is no migration-tracking table; filenames define order only.
 | `020_command_log_enrichment.sql` | Adds `command_log.duration_ms`, `metadata` (JSONB, default `{}`), `idempotency_key` (nullable, partial-unique for at-most-once keyed runs), and `actor`. Writers: `web/lib/log.ts` (`logServerAction` 5th arg) and `scripts/zotero_push.py` (`record_failure` kwargs). |
 | `021_blackout_periods.sql` | Creates the `blackout_periods` table (half-open `[range_start, range_end)` windows) and seeds the two 2026 summer-break windows. Service-role-only (no RLS policies), read by the scheduler and the availability portal. |
 | `022_papers_prerequisites.sql` | Adds nullable `papers.prerequisites` JSONB — the AI-drafted announcement bundle (`{lede, items, summary, short_title, status, model, generated_at}`) consumed by the new-paper-announcement email via `scripts/generate_prerequisites.py`. Additive + nullable; papers RLS unaffected. |
-| `023_members_vouched_by.sql` | Adds nullable self-referencing `members.vouched_by INT REFERENCES members(id) ON DELETE SET NULL`, a `members_vouched_by_not_self` CHECK, and a partial index. Source for the `{{ vouch.name }}` token in `welcome-availability`. Nullable by design — every pre-existing row has no voucher, and a NULL is the signal to render that email with `Blocks(vouch=False)`. No GRANT change, so the column stays invisible to `authenticated` portal sessions (migration 002 restricted `members` reads to `id, name, role`). |
+| `023_members_vouched_by.sql` | Adds nullable self-referencing `members.vouched_by INT REFERENCES members(id) ON DELETE SET NULL`, a `members_vouched_by_not_self` CHECK, and a partial index. Source for the `vouch.firstName` token in `welcome-availability` (caller reduces `members.name` to a first name). Nullable by design — every pre-existing row has no voucher. Turning the vouch **card** off is `Blocks(vouch=False)`, but `vouch.firstName` is still required for the always-on intro/preheader/footer — see `docs/welcome-availability-flow.md`. No GRANT change, so the column stays invisible to `authenticated` portal sessions (migration 002 restricted `members` reads to `id, name, role`). |
+| `025_members_vouched_by_comment.sql` | Re-applies the `members.vouched_by` column comment. `023`'s `COMMENT` text was edited in place after `023` had been applied (`dc5ec0f`), so databases running the old wording never picked up the correction. Comment-only — no DDL, no data change, idempotent and safe to re-run. `024` is skipped: it was claimed by in-flight work when this was written, and a gap is harmless where a duplicate number would not be. |
 
 ## `ensure_rls` event trigger
 
@@ -65,3 +73,4 @@ browser (anon/authenticated). `command_log` is the one accepted exception
 - `command_log` carries the enrichment columns `duration_ms`, `metadata`
   (JSONB, default `{}`), `idempotency_key`, and `actor`, plus the
   `command_log_idempotency_key_unique` partial unique index.
+- `blackout_periods` exists and remains service-role-only.

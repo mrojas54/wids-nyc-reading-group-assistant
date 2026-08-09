@@ -180,7 +180,6 @@ export type Database = {
           id: number
           leader_id: number | null
           location: string | null
-          packets_sent_at: string | null
           paper_id: number | null
           planned_by_admin_id: number | null
           scheduled_at: string | null
@@ -194,7 +193,6 @@ export type Database = {
           id?: number
           leader_id?: number | null
           location?: string | null
-          packets_sent_at?: string | null
           paper_id?: number | null
           planned_by_admin_id?: number | null
           scheduled_at?: string | null
@@ -208,7 +206,6 @@ export type Database = {
           id?: number
           leader_id?: number | null
           location?: string | null
-          packets_sent_at?: string | null
           paper_id?: number | null
           planned_by_admin_id?: number | null
           scheduled_at?: string | null
@@ -510,6 +507,7 @@ export type Database = {
           companion_url: string | null
           id: number
           pdf_drive_url: string | null
+          prerequisites: Json | null
           s2_paper_id: string | null
           title: string
           url: string | null
@@ -524,6 +522,7 @@ export type Database = {
           companion_url?: string | null
           id?: number
           pdf_drive_url?: string | null
+          prerequisites?: Json | null
           s2_paper_id?: string | null
           title: string
           url?: string | null
@@ -538,6 +537,7 @@ export type Database = {
           companion_url?: string | null
           id?: number
           pdf_drive_url?: string | null
+          prerequisites?: Json | null
           s2_paper_id?: string | null
           title?: string
           url?: string | null

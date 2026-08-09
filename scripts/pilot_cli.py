@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.11"
+# requires-python = ">=3.13"
 # dependencies = ["psycopg[binary]>=3.2"]
 # ///
 """Pilot-test helpers for phase 9.2.

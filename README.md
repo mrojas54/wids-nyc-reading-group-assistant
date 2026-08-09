@@ -18,10 +18,13 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Paper Pal portal | [docs/paper-pal-portal.md](docs/paper-pal-portal.md) | [2026-05-17-paper-pal-design.md](docs/superpowers/specs/2026-05-17-paper-pal-design.md) | [2026-05-18-paper-pal-pr2-implementation.md](docs/superpowers/plans/2026-05-18-paper-pal-pr2-implementation.md) |
 | Find-a-paper / suggest | [docs/admin-suggest.md](docs/admin-suggest.md) | [2026-05-06-wids-find-paper-suggest-design.md](docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md), [2026-06-07-arxiv-taxonomy-design.md](docs/superpowers/specs/2026-06-07-arxiv-taxonomy-design.md) | [2026-05-06-wids-find-paper-suggest-implementation.md](docs/superpowers/plans/2026-05-06-wids-find-paper-suggest-implementation.md), [2026-06-07-arxiv-taxonomy.md](docs/superpowers/plans/2026-06-07-arxiv-taxonomy.md) |
 | Pre-meeting reminder email | [docs/pre-meeting-reminder-flow.md](docs/pre-meeting-reminder-flow.md) | [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| Welcome + add-member | [docs/welcome-availability-flow.md](docs/welcome-availability-flow.md) | — | — |
 | Zotero bibliography | [docs/runbooks/zotero-bibliography.md](docs/runbooks/zotero-bibliography.md) | [2026-05-05-wids-zotero-integration-design.md](docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md) | [2026-05-05-wids-zotero-integration.md](docs/superpowers/plans/2026-05-05-wids-zotero-integration.md) |
 | Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
-| Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md), [docs/runbooks/email-client-behavior.md](docs/runbooks/email-client-behavior.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| New-paper announcement | [scheduled_tasks/new-paper-announcement.md](scheduled_tasks/new-paper-announcement.md) | [2026-07-13-reading-group-email-and-prerequisites-design.md](docs/superpowers/specs/2026-07-13-reading-group-email-and-prerequisites-design.md) | [2026-07-13-reading-group-email-and-prerequisites.md](docs/superpowers/plans/2026-07-13-reading-group-email-and-prerequisites.md) |
 | Blackout periods | [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md) | [2026-07-12-blackout-dates-design.md](docs/superpowers/specs/2026-07-12-blackout-dates-design.md) | [2026-07-12-blackout-dates.md](docs/superpowers/plans/2026-07-12-blackout-dates.md) |
+| SPECTER2 fallback trade-offs | [docs/fallback-playground.html](docs/fallback-playground.html) — standalone interactive explorer; open it in a browser, no build step | — | — |
 
 ## Prerequisites (one-time operator setup)
 
@@ -63,7 +66,7 @@ The operator must have a `reading-group-guide` skill installed. The make-guide c
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
-Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. Keep `new-paper-announcement` available as an operator-triggered prompt, but do not put it on a recurring schedule. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
 
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.
@@ -103,27 +106,28 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
    - Periodically export Form 2 responses to `<drive_root>/cycles/<cycle_label>/rg-form-responses.csv`. (Same passive ingestion via `process-form`. Also retired once the portal cuts over.)
    - `/wids-schedule-reading-group` — picks the reading group date with venue.
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
-7. **Optional anytime**: `/wids-add-member <name> | <email> | [phone] | [whatsapp]` — someone asks to join between cycles. Inserts the member (email lowercased, phone normalized to E.164), then drafts the availability reminder for whatever meeting is in `prep` and waits for you to reply `send`. See [Adding a member mid-cycle](#adding-a-member-mid-cycle).
+7. **Optional anytime**: `/wids-add-member <name> | <email> | [phone] | [whatsapp] | [vouched-by]` — someone asks to join between cycles. Inserts the member (email lowercased, phone normalized to E.164, optional `vouched_by` FK), then creates a Gmail **draft** of the welcome-and-availability email for whatever meeting is in `prep`. You open that draft in Gmail and send it yourself — the command cannot send. See [Adding a member mid-cycle](#adding-a-member-mid-cycle) and [docs/welcome-availability-flow.md](docs/welcome-availability-flow.md).
 
-The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). Once the paper and leader are locked, the operator runs the manual [`new-paper-announcement`](scheduled_tasks/new-paper-announcement.md) prompt to create per-member Gmail drafts for review; it never auto-sends. `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
 
 ### Adding a member mid-cycle
 
-`/wids-add-member` covers the common case — someone meets you at an event and asks to join. It is the single-member counterpart to the bulk CSV import in `/wids-bootstrap` Step 5, plus the reminder half of `scheduled_tasks/availability-chase.md`.
+`/wids-add-member` covers the common case — someone meets you at an event and asks to join. It is the single-member counterpart to the bulk CSV import in `/wids-bootstrap` Step 5, plus the reminder half of `scheduled_tasks/availability-chase.md`. Full lifecycle, block toggles, and pitfalls: [docs/welcome-availability-flow.md](docs/welcome-availability-flow.md). Operational steps: [`.claude/commands/wids-add-member.md`](.claude/commands/wids-add-member.md).
 
 ```
-/wids-add-member Ada Lovelace | ada@example.com | (212) 555-0143
+/wids-add-member Ada Lovelace | ada@example.com | (212) 555-0143 | | Grace Hopper
 ```
 
-Three things it handles that are easy to get wrong by hand:
+Four things it handles that are easy to get wrong by hand:
 
 - **Email is lowercased before insert.** `web/app/auth/callback/route.ts` links a sign-in to its member row with `.eq("email", user.email.toLowerCase())`. A row stored with any uppercase still receives a magic link and still signs in — but `auth_user_id` never links, so the member lands on a dashboard with no record and their availability writes fail RLS. This failure looks like "the portal is broken for one person."
 - **Phone is normalized to E.164.** `members_phone_e164_check` rejects `(212) 555-0143` outright. Ten digits get `+1`; anything ambiguous halts and asks rather than guessing a country code. It also asks whether the number is on WhatsApp instead of assuming — the roster is split roughly half and half.
-- **The reminder claims the `availability-chase:meeting=<id>:member=<id>` idempotency key.** That is the same key the nightly chase dedupes on, so a member you just emailed personally doesn't get nudged again the next night.
+- **`vouched_by` is a member id, not a name string** (migration `023_members_vouched_by.sql`). The command resolves the optional voucher field to an existing `members.id` and stores the FK. That is what makes the vouch fact durable across re-sends.
+- **The send log claims the `availability-chase:meeting=<id>:member=<id>` idempotency key.** That is the same key the nightly chase dedupes on, so a member you just emailed personally doesn't get nudged again the next night. Write that row only after you confirm the draft actually left Gmail.
 
-The email is **drafted, never auto-sent** — same posture as `new-paper-announcement`. You reply `send`, or edit it in Gmail and send it yourself.
+The email is **drafted only**. The Gmail MCP has `create_draft` and no send tool — do not expect a `reply send` hand-off. Open the draft in Gmail, send (or edit) it yourself, then tell the command it went so it can log the idempotency key.
 
-It renders `assets/emails/template/welcome-availability`, the welcome-and-vouch design ported from the Claude Design handoff. Unlike `availability-reminder` (written for a lapsed regular), this one is written for exactly this moment. It carries nine per-send block toggles — turn a block off rather than inventing content for it, particularly the paper card when the companion link doesn't resolve and the vouch card when nobody actually vouched. To check whether a companion link resolves, query `paper_companions.payload` for that paper id — **not** `web/content/papers/<id>.json`, which is the deprecated static-fixture path and is absent for most live papers. Both bodies come from one content object via `scripts/welcome_availability.py`, so a block dropped from the HTML drops from the plain-text twin too. Preview with:
+It renders `assets/emails/template/welcome-availability`, the welcome-and-vouch design ported from the Claude Design handoff. Unlike `availability-reminder` (written for a lapsed regular), this one is written for exactly this moment. It carries **six** optional per-send blocks (`vouch`, `meet_strip`, `availability`, `note`, `paper_card`, `quote`) — turn a block off rather than inventing content for it, particularly the paper card when the companion link doesn't resolve. To check whether a companion link resolves, query `paper_companions.payload` for that paper id — **not** `web/content/papers/<id>.json`, which is the deprecated static-fixture path and is absent for most live papers. Both bodies come from one content object via `scripts/welcome_availability.py`, so a block dropped from the HTML drops from the plain-text twin too. Preview with:
 
 ```bash
 uv run python -m scripts.welcome_availability
@@ -173,7 +177,7 @@ See `docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md` for the
 ```sh
 cd web
 cp .env.example .env.local   # fill in values
-nvm use                      # Node 22.22.3 from web/.nvmrc
+nvm install && nvm use       # install/select Node 22.22.3 from web/.nvmrc
 npm ci
 npm run dev
 ```
@@ -187,6 +191,10 @@ push, arXiv taxonomy, email preview rendering) are managed with
 [uv](https://docs.astral.sh/uv/). Dependencies and tool config live in a single
 [pyproject.toml](pyproject.toml); the resolved set is pinned in the committed
 `uv.lock`.
+
+Install `uv` first if `uv --version` is unavailable; use the
+[official installer](https://docs.astral.sh/uv/getting-started/installation/)
+and restart the shell so its install directory is on `PATH`.
 
 ```sh
 uv sync                  # install the locked dependency set (creates .venv/)
