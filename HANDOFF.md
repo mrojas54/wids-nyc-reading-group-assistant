@@ -262,9 +262,15 @@ date, the message ID it was verified against, and how it was verified.**
 
 ## Out of scope
 
-Design standardization. The suite has measurable drift — `availability-reminder`
-alone uses a magenta `#c8226d` CTA, a 40px mark and no dot grid, while five
-others use green `#467560` at 48px — but reconciling that is a separate piece of
-work and must not be bundled into this investigation. Reinstating
-`pre-meeting-reminder`'s dot grid now that its stated reason is refuted belongs
-to that same separate effort.
+Design standardization beyond the mark-rendering investigation. As of PR #135
+the wordmark (48×48 mark + lockup) and CTA *skeleton* are shared fragments —
+see `docs/runbooks/transactional-emails.md` § Shared fragments. What remains
+out of scope for *this* investigation:
+
+- `availability-reminder`'s magenta `#c8226d` CTA color (deliberate
+  design-system exception; still per-template via `cta.bg` /
+  `cta.borderColor`).
+- Reinstating `pre-meeting-reminder`'s dotted grid now that its stated reason
+  is refuted.
+- Broader CTA-label / footer-link reconciliation (functional per-template
+  differences, not drift).

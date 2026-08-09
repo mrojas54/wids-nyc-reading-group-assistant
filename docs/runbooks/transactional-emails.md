@@ -64,12 +64,23 @@ placeholder would be corrupted by `welcome_availability.py`'s blanket
 `scripts.render_email_previews.splice_shared_blocks()` does all three
 replacements in one pass; `find_surviving_placeholders()` reports which (if
 any) didn't get spliced. Both `render_pair()` and `welcome_availability.py`'s
-`_compose_one()` call `splice_shared_blocks()` first — before comment
-stripping, before any token dict is touched — and both raise
-(`RenderError` / `CompositionError`) if a placeholder survives to the end of
-rendering, the same "nothing unresolved ships" invariant
-`welcome_availability.py` already enforces for `{{ }}` tokens and block
-markers.
+`_compose_one()` call `splice_shared_blocks()` before comment stripping and
+before any token dict is touched, and both raise (`RenderError` /
+`CompositionError`) if a placeholder survives to the end of rendering — the
+same "nothing unresolved ships" invariant `welcome_availability.py` already
+enforces for `{{ }}` tokens and block markers.
+
+**Pitfall — announcement send path does not splice yet.**
+`scripts.generate_prerequisites.render_new_paper_email()` strips HTML comments
+and substitutes tokens, but it does **not** call `splice_shared_blocks()`.
+`new-paper-announcement.html` hosts `__WORDMARK_BLOCK__` and `__CTA_BLOCK__`,
+so `--mode render` currently emits those literal placeholders into the HTML
+body. Verified against source after PR #135. Until that path is updated to
+splice (and fail on survivors) like `render_pair()`, do **not** draft member
+mail from `generate_prerequisites --mode render` alone — preview via
+`uv run python -m scripts.render_email_previews` (which uses `render_pair`)
+and treat the missing splice as a blocker for the live Gmail draft step in
+`scheduled_tasks/new-paper-announcement.md`.
 
 `magic-link.html` cannot consume the splice mechanism at all — it is
 hand-pasted into the Supabase Auth dashboard and uses Go template syntax, not
@@ -154,7 +165,7 @@ link; unsubscribe is a human reply, documented inline).
 | `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. Flow: [`docs/welcome-availability-flow.md`](../welcome-availability-flow.md). **Not renderable by `render_email_previews.py`** — it carries per-send block toggles that must be resolved before substitution, so it goes through `compose()` instead. Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Full field list under Token contracts below. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. **Known gap:** `render_new_paper_email()` does not splice shared fragments yet — see Shared fragments pitfall above. Full field list under Token contracts below. |
 
 ## Token contracts
 
@@ -393,6 +404,10 @@ provides.
 - Do not commit `*_rendered.*` preview artifacts.
 - Do not drive `welcome-availability` through `render()` / `render_pair()` —
   unresolved block markers would ship. Use `compose()`.
+- Do not draft `new-paper-announcement` from `generate_prerequisites --mode
+  render` while `render_new_paper_email()` still skips `splice_shared_blocks()`
+  — literal `__WORDMARK_BLOCK__` / `__CTA_BLOCK__` will ship. See Shared
+  fragments above.
 - `/wids-add-member` cannot send. Do not offer `reply send`; open the Gmail
   draft. Do not write the chase idempotency key for an unsent draft.
 - The portal treats a `paper_companions` row as the current source of truth and
