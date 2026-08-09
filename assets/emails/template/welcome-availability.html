@@ -50,8 +50,9 @@
         inline `background-color`, never one without the other. A colour bar
         therefore cannot be a bare styled `<div>`; it needs to be a one-cell
         table so there is an attribute to hang the colour on.
-      * The 48x48 mark ships as the already-hosted 2x PNG
-        (branding/mark-reader-96.png).
+      * Block A's mark is the canonical shared wordmark (mark-reader-192.png),
+        not this template's own asset — see
+        docs/runbooks/transactional-emails.md, "Wordmark component".
       * Cadence strip (E) is a 3-cell table that stacks under 640px via the
         .stack-cell media query. Outlook holds three columns.
 
@@ -95,7 +96,7 @@
   <!--[if mso]>
   <style type="text/css">
     table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
-    .serif, .paper-title, .signoff-name, .quote-text, .ask-lede, .host-value { font-family: Georgia, "Times New Roman", serif !important; }
+    .serif, .paper-title, .signoff-name, .quote-text, .ask-lede, .host-value, .wordmark-name { font-family: Georgia, "Times New Roman", serif !important; }
     .mono { font-family: Consolas, "Courier New", monospace !important; }
   </style>
   <![endif]-->
@@ -113,6 +114,7 @@
       .pad-x-footer { padding-left: 24px !important; padding-right: 24px !important; }
       .headline { font-size: 20px !important; }
       .paper-title { font-size: 18px !important; }
+      .btn-cell a { padding: 13px 18px !important; font-size: 15px !important; }
       /* Cadence strip (E): three cells stack. Outlook ignores this and holds
          three columns, which the handoff explicitly accepts. */
       .stack-cell { display: block !important; width: 100% !important; border-right: 0 !important; border-bottom: 1px solid #ddd4be !important; }
@@ -147,19 +149,18 @@
             <td class="pad-x" style="padding:44px 52px 28px;">
 
               <!-- ══════ BLOCK A — Header, standard mark (always on) ══════ -->
+              <!-- Brand bar: canonical wordmark, see assets/emails/template/_wordmark_shared.html -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:0 0 20px;">
+                    __WORDMARK_BLOCK__
+                  </td>
+                </tr>
+              </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="center" style="padding:0 0 28px;">
-                    <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-96.png"
-                         width="48" height="48" alt="WiDS NYC AI Reading Group"
-                         style="display:block;margin:0 auto 10px;border:0;width:48px;height:48px;">
                     <div class="headline" style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:600;letter-spacing:-0.02em;color:#152a23;line-height:1.25;max-width:24ch;margin:0 auto;">So glad you're here — let us know when you can join us</div>
-                    <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin:10px auto;">
-                      <tr>
-                        <td width="24" height="2" bgcolor="#c8226d" style="width:24px;height:2px;line-height:2px;font-size:0;background-color:#c8226d;">&nbsp;</td>
-                      </tr>
-                    </table>
-                    <div style="font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7e6f55;line-height:1.4;">WiDS NYC AI Reading Group</div>
                   </td>
                 </tr>
               </table>
@@ -248,23 +249,11 @@
               <!-- END-BLOCK: availability -->
 
               <!-- ══════ BLOCK G — Primary CTA (always on) ══════
-                   Bulletproof: VML roundrect for Outlook, table-cell anchor
-                   elsewhere. arcsize 22% ≈ the 10px radius at 46px height. -->
+                   Canonical CTA — see assets/emails/template/_cta_shared.html -->
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 28px;">
                 <tr>
-                  <td align="center" bgcolor="#467560" style="background-color:#467560;border-radius:10px;">
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.availability }}" style="height:48px;v-text-anchor:middle;width:210px;" arcsize="22%" stroke="f" fillcolor="#467560">
-                      <w:anchorlock/>
-                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:500;">Open availability &#8594;</center>
-                    </v:roundrect>
-                    <![endif]-->
-                    <!--[if !mso]><!-- -->
-                    <a href="{{ links.availability }}"
-                       style="display:inline-block;padding:14px 22px;font-family:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:500;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;border:1px solid transparent;border-radius:10px;">
-                      Open availability&nbsp;&nbsp;<span style="font-size:15px;">&#8594;</span>
-                    </a>
-                    <!--<![endif]-->
+                  <td>
+                    __CTA_BLOCK__
                   </td>
                 </tr>
               </table>

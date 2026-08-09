@@ -25,7 +25,7 @@
   <!--[if mso]>
   <style type="text/css">
     table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
-    .serif, .paper-title, .haiku-body, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+    .serif, .paper-title, .haiku-body, .signoff-name, .quote-text, .wordmark-name { font-family: Georgia, "Times New Roman", serif !important; }
   </style>
   <![endif]-->
 
@@ -68,19 +68,10 @@
         <!-- ===== Email card ===== -->
         <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#fefcef;background-image:radial-gradient(circle, #ddd4be 1px, transparent 1px);background-size:16px 16px;border:1px solid #ddd4be;border-radius:14px;">
 
-          <!-- ── Lockup (PNG mark + wordmark + magenta rule + eyebrow) ── -->
+          <!-- ── Brand bar (canonical wordmark — see assets/emails/template/_wordmark_shared.html) ── -->
           <tr>
-            <td class="pad-x" align="center" style="padding:32px 32px 8px 32px;">
-              <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-192.png"
-                   width="48" height="48" alt="WiDS NYC"
-                   style="display:block;border:0;border-radius:10px;width:48px;height:48px;margin:0 auto;">
-              <div class="serif" style="margin-top:12px;font-family:Georgia,'Times New Roman',serif;font-weight:600;font-size:22px;letter-spacing:-0.02em;color:#152a23;line-height:1.2;">
-                Reading Group Planner
-              </div>
-              <div style="margin:10px auto 0;width:24px;height:2px;background-color:#c8226d;line-height:0;font-size:0;">&nbsp;</div>
-              <div style="margin-top:10px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#7e6f55;font-weight:500;line-height:1.4;">
-                WiDS &middot; NYC AI Reading Group
-              </div>
+            <td class="pad-x" style="padding:32px 32px 8px 32px;">
+              __WORDMARK_BLOCK__
             </td>
           </tr>
 
@@ -102,24 +93,13 @@
             </td>
           </tr>
 
-          <!-- ── Primary CTA: Add to calendar ── -->
+          <!-- ── Primary CTA: Add to calendar (canonical CTA — see assets/emails/template/_cta_shared.html) ── -->
           <tr>
             <td class="pad-x" align="center" style="padding:22px 32px 0 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
                 <tr>
-                  <td class="btn-cell" align="center" bgcolor="#467560" style="border-radius:10px;background-color:#467560;">
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.calendar }}" style="height:46px;v-text-anchor:middle;width:200px;" arcsize="22%" strokecolor="#355c4b" strokeweight="0px" fillcolor="#467560">
-                      <w:anchorlock/>
-                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;">Add to calendar &rarr;</center>
-                    </v:roundrect>
-                    <![endif]-->
-                    <!--[if !mso]><!-- -->
-                    <a href="{{ links.calendar }}"
-                       style="display:inline-block;padding:14px 22px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;">
-                      Add to calendar &rarr;
-                    </a>
-                    <!--<![endif]-->
+                  <td>
+                    __CTA_BLOCK__
                   </td>
                 </tr>
               </table>
@@ -257,7 +237,7 @@
                 You're getting this because you RSVP'd to a WiDS NYC reading group event. <a href="{{ links.rsvpManage }}" style="color:#355c4b;text-decoration:underline;text-underline-offset:2px;">Manage your RSVPs</a>.
               </p>
               <p style="margin:8px 0 0 0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:11px;color:#7e6f55;line-height:1.55;">
-                WiDS NYC AI Reading Group <span style="color:#ddd4be;">&nbsp;&middot;&nbsp;</span> <a href="{{ links.portalBase }}/dashboard" style="color:#7e6f55;text-decoration:none;">Member portal</a>
+                __FOOTER_BRAND_BLOCK__ <span style="color:#ddd4be;">&nbsp;&middot;&nbsp;</span> <a href="{{ links.portalBase }}/dashboard" style="color:#7e6f55;text-decoration:none;">Member portal</a>
               </p>
             </td>
           </tr>

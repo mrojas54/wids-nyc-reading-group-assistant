@@ -27,7 +27,7 @@
   <!--[if mso]>
   <style type="text/css">
     table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
-    .serif, .paper-title, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+    .serif, .paper-title, .signoff-name, .quote-text, .wordmark-name { font-family: Georgia, "Times New Roman", serif !important; }
   </style>
   <![endif]-->
 
@@ -64,26 +64,10 @@
         <!-- ===== Email card ===== -->
         <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:640px;background-color:#ffffff;background-image:radial-gradient(circle, #e6dfd1 1px, transparent 1px);background-size:16px 16px;border:1px solid #e6dfd1;border-radius:14px;">
 
-          <!-- ── Brand bar ── -->
+          <!-- ── Brand bar (canonical wordmark — see assets/emails/template/_wordmark_shared.html) ── -->
           <tr>
             <td class="pad-x" style="padding:28px 32px 8px 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td width="40" valign="middle" style="width:40px;padding-right:12px;">
-                    <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-192.png"
-                         width="40" height="40" alt="WiDS NYC"
-                         style="display:block;border:0;border-radius:10px;width:40px;height:40px;">
-                  </td>
-                  <td valign="middle">
-                    <div class="serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-weight:600;font-size:17px;color:#16205e;letter-spacing:-0.01em;line-height:1.15;">
-                      WiDS NYC
-                    </div>
-                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#6d6757;line-height:1.4;margin-top:1px;">
-                      AI Reading Group
-                    </div>
-                  </td>
-                </tr>
-              </table>
+              __WORDMARK_BLOCK__
             </td>
           </tr>
 
@@ -255,7 +239,7 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#8e8674;line-height:1.55;">
-                    WiDS NYC AI Reading Group
+                    __FOOTER_BRAND_BLOCK__
                     <span style="color:#d2c8b4;">&nbsp;&middot;&nbsp;</span>
                     <a href="{{ links.portalBase }}/dashboard" style="color:#6d6757;text-decoration:none;">Member portal</a>
                   </td>

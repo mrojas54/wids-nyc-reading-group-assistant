@@ -48,6 +48,11 @@ TOKENS = {
     "paper.hook": "What if you stopped tuning the model?",
     "quote.text": "Like what you do, and then you will do your best.",
     "quote.by": "Katherine Johnson",
+    "cta.bg": "#467560",
+    "cta.borderColor": "#355c4b",
+    "cta.width": "210",
+    "cta.href": "https://example.test/availability?meeting=37",
+    "cta.label": "Open availability →",
 }
 
 
@@ -508,9 +513,45 @@ def test_no_inline_svg_anywhere():
 
 
 def test_mark_is_a_hosted_png_not_svg():
+    """Block A now sources the canonical shared wordmark (mark-reader-192.png),
+    not this template's own former mark-reader-96.png asset — see
+    docs/runbooks/transactional-emails.md, "Wordmark component"."""
     html_body = _compose()["html"]
-    assert "branding/mark-reader-96.png" in html_body
-    assert 'alt="WiDS NYC AI Reading Group"' in html_body
+    assert "branding/mark-reader-192.png" in html_body
+    assert 'alt="WiDS NYC"' in html_body
+
+
+def test_shared_fragment_placeholders_are_fully_resolved():
+    """No caller supplies a shared-fragment value directly, so the only way
+    any of these can survive is the splice itself not running — compose()
+    must never ship one."""
+    from scripts.render_email_previews import find_surviving_placeholders
+    bodies = _compose()
+    assert find_surviving_placeholders(bodies["html"]) == []
+    assert find_surviving_placeholders(bodies["txt"]) == []
+
+
+def test_compose_raises_if_a_shared_fragment_placeholder_survives(monkeypatch):
+    """Defense-in-depth mirror of render_email_previews' equivalent guard."""
+    import scripts.render_email_previews as rep
+    monkeypatch.setattr(
+        rep,
+        "SPLICE_BLOCKS",
+        ((rep.WORDMARK_PLACEHOLDER, rep.WORDMARK_PLACEHOLDER),),
+    )
+    with pytest.raises(CompositionError, match=rep.WORDMARK_PLACEHOLDER):
+        _compose()
+
+
+def test_primary_cta_matches_canonical_shared_skeleton():
+    """Block G now sources the canonical shared CTA skeleton — see
+    docs/runbooks/transactional-emails.md, "Shared fragments"."""
+    html_body = _compose()["html"]
+    assert "__CTA_BLOCK__" not in html_body
+    assert TOKENS["cta.label"] in html_body
+    assert f'bgcolor="{TOKENS["cta.bg"]}"' in html_body
+    assert "height:46px" in html_body
+    assert 'arcsize="22%"' in html_body
 
 
 def test_every_background_colour_is_paired_with_a_bgcolor_attribute():
