@@ -1,0 +1,18 @@
+<table role="presentation" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td class="btn-cell" align="center" bgcolor="{{ cta.bg }}" style="border-radius:10px;background-color:{{ cta.bg }};border:1.5px solid {{ cta.borderColor }};">
+      <!--[if mso]>
+      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ cta.href }}" style="height:46px;v-text-anchor:middle;width:{{ cta.width }}px;" arcsize="22%" strokecolor="{{ cta.borderColor }}" strokeweight="1.5px" fillcolor="{{ cta.bg }}">
+        <w:anchorlock/>
+        <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:600;">{{ cta.label }}</center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-- -->
+      <a href="{{ cta.href }}"
+         style="display:inline-block;padding:14px 22px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;letter-spacing:-0.005em;color:#ffffff;text-decoration:none;line-height:1;">
+        {{ cta.label }}
+      </a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>

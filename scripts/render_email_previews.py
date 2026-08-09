@@ -27,6 +27,60 @@ TEMPLATES = ROOT / "assets" / "emails" / "template"
 # Fixed so previews are byte-reproducible regardless of the calendar date.
 PREVIEW_DATE_KEY = 20617
 
+# The canonical WiDS NYC wordmark (mark + "WiDS NYC" + rule + "AI Reading
+# Group") — see docs/runbooks/transactional-emails.md, "Wordmark component".
+# Spliced via a literal, non-Mustache placeholder rather than an HTML comment
+# or a {{ }} token: an HTML comment would be deleted by strip_html_comments()
+# below, and a {{ }} token would be corrupted by welcome_availability.py's
+# blanket html.escape() over every token value. Read once at import time so
+# no caller ever supplies (or goes stale on) the wordmark value itself.
+WORDMARK_PLACEHOLDER = "__WORDMARK_BLOCK__"
+WORDMARK_BLOCK = (TEMPLATES / "_wordmark_shared.html").read_text(encoding="utf-8").strip()
+
+# The canonical primary-CTA button skeleton (height, arcsize, font, padding,
+# border treatment) — see docs/runbooks/transactional-emails.md, "Shared
+# fragments". Unlike the wordmark this fragment still carries {{ cta.* }}
+# Mustache tokens after splicing: label/href/color/width genuinely vary per
+# send (a different label per template, and availability-reminder's magenta
+# "primary ask" exception vs every other template's sage), so those resolve
+# through the normal per-template token dict in the render() pass that
+# follows the splice. Only the literal skeleton placeholder is non-Mustache,
+# for the same comment-stripping/escaping reasons as the wordmark.
+CTA_PLACEHOLDER = "__CTA_BLOCK__"
+CTA_BLOCK = (TEMPLATES / "_cta_shared.html").read_text(encoding="utf-8").strip()
+
+# The canonical "WiDS NYC AI Reading Group" footer brand line. Only the
+# literal branding text is shared — the functional link next to it (Member
+# portal / RSVP management / mailto unsubscribe / none) differs per template
+# on purpose and stays hand-written in each template's own footer.
+FOOTER_BRAND_PLACEHOLDER = "__FOOTER_BRAND_BLOCK__"
+FOOTER_BRAND_BLOCK = (TEMPLATES / "_footer_brand_shared.html").read_text(encoding="utf-8").strip()
+
+# Every non-Mustache splice placeholder, applied in this order before
+# strip_html_comments()/render(). Order doesn't matter today (the fragments
+# don't nest inside one another), but is fixed for reproducibility.
+SPLICE_BLOCKS = (
+    (WORDMARK_PLACEHOLDER, WORDMARK_BLOCK),
+    (CTA_PLACEHOLDER, CTA_BLOCK),
+    (FOOTER_BRAND_PLACEHOLDER, FOOTER_BRAND_BLOCK),
+)
+
+
+def splice_shared_blocks(html_text: str) -> str:
+    """Replace every shared-fragment placeholder with its canonical markup.
+
+    Must run before strip_html_comments() and before any token dict is built
+    — see the placeholder constants above for why.
+    """
+    for placeholder, block in SPLICE_BLOCKS:
+        html_text = html_text.replace(placeholder, block)
+    return html_text
+
+
+def find_surviving_placeholders(html_text: str) -> list[str]:
+    """Which splice placeholders (if any) are still literally present."""
+    return [placeholder for placeholder, _ in SPLICE_BLOCKS if placeholder in html_text]
+
 RSVP_TOKENS = {
     "recipient.firstName": "Maya",
     # event.dateLine removed from the template — the lede no longer
@@ -40,6 +94,13 @@ RSVP_TOKENS = {
     "haiku.line3": "you, too. Welcome in.",
     "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+    # Canonical CTA skeleton (assets/emails/template/_cta_shared.html) — sage,
+    # the default color; only availability-reminder gets the magenta exception.
+    "cta.bg": "#467560",
+    "cta.borderColor": "#355c4b",
+    "cta.width": "200",
+    "cta.href": "https://wids-nyc-reading-group-assistant.vercel.app/events/6/cal.ics",
+    "cta.label": "Add to calendar →",
 }
 
 AVAIL_TOKENS = {
@@ -86,6 +147,13 @@ REMINDER_TOKENS = {
     "links.companionPreview": "https://wids-nyc-reading-group-assistant.vercel.app/papers/2",
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
     "operator.displayName": "Michelle Rojas",
+    # Magenta is availability-reminder's documented design-system exception —
+    # every other template's CTA is the sage default.
+    "cta.bg": "#c8226d",
+    "cta.borderColor": "#a51858",
+    "cta.width": "200",
+    "cta.href": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
+    "cta.label": "Open availability →",
 }
 
 PRE_MEETING_TOKENS = {
@@ -101,6 +169,11 @@ PRE_MEETING_TOKENS = {
     "signoff.names": "Michelle & Claudia",
     "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
     "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+    "cta.bg": "#467560",
+    "cta.borderColor": "#355c4b",
+    "cta.width": "236",
+    "cta.href": "https://wids-nyc-reading-group-assistant.vercel.app/events/6/cal.ics",
+    "cta.label": "Join / add to calendar →",
 }
 
 NEW_PAPER_TOKENS = {
@@ -119,6 +192,11 @@ NEW_PAPER_TOKENS = {
     "signoff.names": "Michelle & Claudia",
     "links.availability": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
     "links.rsvpManage": "https://wids-nyc-reading-group-assistant.vercel.app/me/rsvps",
+    "cta.bg": "#467560",
+    "cta.borderColor": "#355c4b",
+    "cta.width": "236",
+    "cta.href": "https://wids-nyc-reading-group-assistant.vercel.app/availability",
+    "cta.label": "Share your availability →",
 }
 
 # Illustrative prerequisites for the preview (production values come from
@@ -217,11 +295,24 @@ def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list
         src = TEMPLATES / f"{stem}.{ext}"
         body = src.read_text(encoding="utf-8")
         if ext == "html":
+            # Splice shared fragments before anything else: strip_html_comments
+            # only removes real HTML comments and would never touch these
+            # placeholders, but ordering it first keeps the fragments' own
+            # markup subject to the same comment-stripping pass as the rest
+            # of the body, in case a future edit reintroduces a doc comment.
+            body = splice_shared_blocks(body)
             # Before substitution — see strip_html_comments. The .txt twins
             # carry no HTML comments; their doc header is a [[BEGIN:_doc]]
             # block, which is a composer's concern, not this one's.
             body = strip_html_comments(body)
         rendered, unresolved = render(body, tokens)
+        if ext == "html":
+            surviving = find_surviving_placeholders(rendered)
+            if surviving:
+                raise RenderError(
+                    f"{stem}.html: {surviving} survived rendering — "
+                    "a shared-fragment splice did not run or was reintroduced after it"
+                )
         unresolved_all.extend(unresolved)
         dst = TEMPLATES / f"{stem}_rendered.{ext}"
         dst.write_text(rendered, encoding="utf-8")

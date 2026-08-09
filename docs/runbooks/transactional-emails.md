@@ -43,6 +43,101 @@ work does not get mistaken for production behavior.
   `020_command_log_enrichment.sql`, which adds `command_log.idempotency_key`
   and the `command_log_idempotency_key_unique` partial unique index.
 
+## Shared fragments
+
+Three pieces of markup are shared across templates instead of duplicated:
+the wordmark, the primary CTA button's skeleton, and the footer's brand
+line. Each lives in its own `assets/emails/template/_*_shared.html` file and
+is spliced into host templates via a literal, non-Mustache placeholder —
+`__WORDMARK_BLOCK__`, `__CTA_BLOCK__`, `__FOOTER_BRAND_BLOCK__` — never an
+HTML comment (would be deleted by `strip_html_comments()`, which runs before
+substitution) and never wrapped in `{{ }}` itself (a bare `{{ }}` fragment
+placeholder would be corrupted by `welcome_availability.py`'s blanket
+`html.escape()` over every token value).
+
+`scripts.render_email_previews.splice_shared_blocks()` does all three
+replacements in one pass; `find_surviving_placeholders()` reports which (if
+any) didn't get spliced. Both `render_pair()` and `welcome_availability.py`'s
+`_compose_one()` call `splice_shared_blocks()` first — before comment
+stripping, before any token dict is touched — and both raise
+(`RenderError` / `CompositionError`) if a placeholder survives to the end of
+rendering, the same "nothing unresolved ships" invariant
+`welcome_availability.py` already enforces for `{{ }}` tokens and block
+markers.
+
+`magic-link.html` cannot consume the splice mechanism at all — it is
+hand-pasted into the Supabase Auth dashboard and uses Go template syntax, not
+Python. Each fragment it contains is hand-synced instead, wrapped in its own
+sentinel comments (`<!-- WORDMARK:BEGIN -->`, `<!-- CTA:BEGIN -->`,
+`<!-- FOOTER_BRAND:BEGIN -->`, each with a matching `:END`) and checked by
+tests in `tests/render_email_previews_test.py`. Edit the shared source file
+first, then hand-port the change into `magic-link.html`'s copy — never the
+other direction.
+
+### Wordmark
+
+`_wordmark_shared.html` (48x48 mark + "WiDS NYC" + magenta rule + "AI
+Reading Group") replaced four previously-divergent per-template treatments,
+one of which — `welcome-availability`'s last real send — shipped with no
+wordmark at all (see `docs/runbooks/email-client-behavior.md` for that
+investigation; it is unrelated to and unresolved by this change).
+
+- 100% inline-styled, depends on zero per-template `<head>` classes except
+  one: `.wordmark-name`, which carries no styling itself and exists purely
+  as an MSO conditional-comment selector hook. Every host template's
+  `<!--[if mso]>` block must list `.wordmark-name` in its serif-forcing
+  selectors, or the name line renders in Arial under Outlook/Windows.
+- magic-link.html's copy is checked against the shared source by a
+  whitespace-normalized parity test, plus a smoke check that fails CI if the
+  literal string `YOUR-DEPLOY-URL` is ever present again (it shipped there
+  once, unnoticed, before this fragment existed).
+- "WiDS NYC" and "AI Reading Group" are always live HTML text, never baked
+  into the mark image, with `alt="WiDS NYC"` on the `<img>` — a dead/blocked
+  image degrades to visible text, never to a blank brand bar.
+
+### Primary CTA
+
+`_cta_shared.html` standardizes the button *skeleton* only — height (46px),
+arcsize (22%), font stack, padding, and border width, which had drifted
+inconsistently across templates (200–260px width, 46/48px height, 20/22%
+arcsize, three different font families). It still carries `{{ cta.* }}`
+Mustache tokens after splicing, because — unlike the wordmark — label, href,
+color, and width genuinely vary per send:
+
+    cta.bg           #467560 (sage, the default) or #c8226d (magenta,
+                     availability-reminder's documented design-system
+                     exception — never use magenta elsewhere)
+    cta.borderColor  #355c4b (sage) or #a51858 (magenta)
+    cta.width        VML needs a fixed pixel width; keep it close to the
+                     label's rendered length so Outlook doesn't clip or
+                     crowd the text
+    cta.href         the button's destination
+    cta.label        the button's visible text
+
+These resolve through each template's normal token dict in the `render()`
+pass that follows the splice — plain text/URLs, so `welcome_availability.py`'s
+token-escaping pass is harmless here, unlike the wordmark's raw markup.
+`availability-thanks.html` has no primary CTA and needs no `cta.*` tokens.
+magic-link.html's hand-synced copy uses Go template syntax
+(`{{ .ConfirmationURL }}`) for `href`/`label` instead of Mustache, so its
+parity check compares only the fixed structural properties against
+`_cta_shared.html`, not a full-body diff.
+
+### Footer brand line
+
+`_footer_brand_shared.html` is only the literal "WiDS NYC AI Reading Group"
+text and its typography — nothing else in the footer. The five templates'
+footers differ in real, intentional ways (Member portal link vs RSVP
+management vs mailto-unsubscribe vs none), so only the one piece of text
+genuinely common to some of them is shared; the functional links around it
+stay hand-written per template. Applied to availability-reminder,
+availability-thanks, rsvp-confirmation, and magic-link.html (all of which
+already had this exact phrase). Deliberately **not** applied to
+pre-meeting-reminder or new-paper-announcement (their footers never had this
+phrase — adding it would be new content, not consolidation) or to
+welcome-availability (its footer intentionally has no preference-center
+link; unsubscribe is a human reply, documented inline).
+
 ## Template matrix
 
 | Template | Current consumer | Status / constraints |
@@ -92,6 +187,8 @@ Required — refuse to send if any is unresolved:
     recipient.firstName
     links.calendar, links.rsvpManage, links.portalBase
     paper.title, paper.authorsShort, paper.companionUrl
+    cta.bg, cta.borderColor, cta.width, cta.href, cta.label
+                              see "Shared fragments" above — sage by default
 
 Optional / rotated — fall back to `haiku[0]` plus the Grace Hopper quote:
 
@@ -108,6 +205,8 @@ Required hydrated tokens; `render()` refuses to emit if any is unresolved:
     prereqs.lede, prereqs.html          (the .txt twin uses prereqs.text)
     signoff.names
     links.availability, links.rsvpManage
+    cta.bg, cta.borderColor, cta.width, cta.href, cta.label
+                              see "Shared fragments" above — sage by default
 
 Rotated from the shared pool, has a fallback:
 
@@ -116,7 +215,10 @@ Rotated from the shared pool, has a fallback:
 ### `availability-reminder`
 
 Merge fields live in `scheduled_tasks/availability-chase.md` (Step 5: operator
-`remind` flow), which is its operational spec. Not duplicated here.
+`remind` flow), which is its operational spec. Not duplicated here. One
+exception: `cta.bg`/`cta.borderColor` must be the magenta pair
+(`#c8226d`/`#a51858`) — this is the one template using the design-system
+exception, not the sage default — see "Shared fragments" above.
 
 ### `pre-meeting-reminder`
 
@@ -131,6 +233,8 @@ live send path before wiring it into a workflow.
     links.calendar, links.rsvpManage
     signoff.names
     quote.text, quote.by, quote.role
+    cta.bg, cta.borderColor, cta.width, cta.href, cta.label
+                              see "Shared fragments" above — sage by default
 
 `questions.*` are emitted by `scripts/discussion_questions.py` so the template
 stays logic-free — see the Discussion-question workflow section below. `quote.*`
@@ -143,7 +247,9 @@ Contract is enforced in code by `scripts/welcome_availability.py`, which raises
 rather than returning a body with an unresolved token or a surviving block
 marker. The per-token rationale — which tokens are deliberately unused, and the
 first-name hazards — stays in that template's head comment, since it is design
-reasoning rather than a field list.
+reasoning rather than a field list. Also required: `cta.bg`, `cta.borderColor`,
+`cta.width`, `cta.href`, `cta.label` (sage default) — see "Shared fragments"
+above.
 
 ## Preview and validation
 
