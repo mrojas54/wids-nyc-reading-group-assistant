@@ -325,3 +325,222 @@ def test_strip_runs_before_substitution(capsys):
     rendered, unresolved = render(strip_html_comments(src), {"known": "ok"})
     assert rendered == "<p>ok</p>"
     assert unresolved == []
+
+
+# ---------------------------------------------------------------------------
+# Wordmark component — assets/emails/template/_wordmark_shared.html
+# See docs/runbooks/transactional-emails.md, "Wordmark component".
+# ---------------------------------------------------------------------------
+
+WORDMARK_TEMPLATE_STEMS = (
+    "availability-reminder",
+    "availability-thanks",
+    "pre-meeting-reminder",
+    "rsvp-confirmation",
+    "new-paper-announcement",
+)
+
+
+@pytest.mark.parametrize("stem", WORDMARK_TEMPLATE_STEMS)
+def test_render_pair_splices_canonical_wordmark(stem):
+    """Every render_pair-driven template gets the shared wordmark, with no
+    leftover placeholder and no dependency on the caller's token dict."""
+    from scripts.render_email_previews import WORDMARK_PLACEHOLDER, render_pair
+    rendered, _ = render_pair(stem, {})
+    html = rendered["html"]
+    assert WORDMARK_PLACEHOLDER not in html
+    assert "mark-reader-192.png" in html
+    assert "WiDS NYC</div>" in html
+    assert "AI Reading Group</div>" in html
+
+
+def test_render_pair_raises_if_wordmark_placeholder_survives(tmp_path, monkeypatch):
+    """Defense-in-depth: if a shared source ever collapses to the literal
+    placeholder itself, render_pair must fail loudly rather than ship it."""
+    import scripts.render_email_previews as rep
+    monkeypatch.setattr(rep, "TEMPLATES", tmp_path)
+    # SPLICE_BLOCKS is a tuple built once at import time, so patching
+    # WORDMARK_BLOCK alone wouldn't change what splice_shared_blocks()
+    # actually reads — patch the tuple entry it resolves through instead.
+    monkeypatch.setattr(
+        rep,
+        "SPLICE_BLOCKS",
+        ((rep.WORDMARK_PLACEHOLDER, rep.WORDMARK_PLACEHOLDER),),
+    )
+    (tmp_path / "fake.html").write_text(
+        f"<p>{rep.WORDMARK_PLACEHOLDER}</p>", encoding="utf-8"
+    )
+    (tmp_path / "fake.txt").write_text("hi", encoding="utf-8")
+    with pytest.raises(rep.RenderError, match=rep.WORDMARK_PLACEHOLDER):
+        rep.render_pair("fake", {})
+
+
+def test_magic_link_wordmark_matches_shared_source():
+    """magic-link.html can't consume the splice mechanism (hand-pasted into
+    Supabase), so its hand-synced copy must stay whitespace-identical to the
+    shared source, checked between sentinel comments."""
+    import re
+
+    from scripts.render_email_previews import TEMPLATES, WORDMARK_BLOCK
+    magic_link = (TEMPLATES / "magic-link.html").read_text(encoding="utf-8")
+    match = re.search(
+        r"<!-- WORDMARK:BEGIN -->(.*?)<!-- WORDMARK:END -->", magic_link, re.S
+    )
+    assert match is not None, "magic-link.html is missing WORDMARK:BEGIN/END sentinels"
+    assert match.group(1).strip() == WORDMARK_BLOCK
+
+
+def test_magic_link_has_no_placeholder_deploy_url():
+    """Smoke check for the exact failure that already shipped once,
+    unnoticed: a literal, unfilled YOUR-DEPLOY-URL placeholder."""
+    from scripts.render_email_previews import TEMPLATES
+    magic_link = (TEMPLATES / "magic-link.html").read_text(encoding="utf-8")
+    assert "YOUR-DEPLOY-URL" not in magic_link
+
+
+# ---------------------------------------------------------------------------
+# CTA fragment — assets/emails/template/_cta_shared.html
+# ---------------------------------------------------------------------------
+
+from scripts.render_email_previews import (  # noqa: E402
+    AVAIL_TOKENS,
+    NEW_PAPER_TOKENS,
+    PRE_MEETING_TOKENS,
+    REMINDER_TOKENS,
+    RSVP_TOKENS,
+)
+
+#: stem -> the cta.* token dict already defined for it in this module.
+CTA_TEMPLATE_TOKENS = {
+    "availability-reminder": REMINDER_TOKENS,
+    "rsvp-confirmation": RSVP_TOKENS,
+    "pre-meeting-reminder": PRE_MEETING_TOKENS,
+    "new-paper-announcement": NEW_PAPER_TOKENS,
+}
+
+
+@pytest.mark.parametrize("stem", sorted(CTA_TEMPLATE_TOKENS))
+def test_render_pair_splices_canonical_cta(stem):
+    # These minimal per-template dicts don't include quote/question/prereq
+    # tokens main() normally merges in — irrelevant to the CTA, so only
+    # assert none of the cta.* tokens specifically are unresolved.
+    from scripts.render_email_previews import render_pair
+    tokens = CTA_TEMPLATE_TOKENS[stem]
+    rendered, unresolved = render_pair(stem, tokens)
+    assert not [u for u in unresolved if u.startswith("cta.")]
+    html = rendered["html"]
+    assert "__CTA_BLOCK__" not in html
+    assert tokens["cta.label"] in html
+    assert f'bgcolor="{tokens["cta.bg"]}"' in html
+    assert 'height:46px' in html
+    assert 'arcsize="22%"' in html
+
+
+def test_availability_thanks_has_no_cta_block_or_tokens():
+    """availability-thanks is the one template with no primary CTA — the
+    splice must be a no-op there, not a missing-token failure."""
+    from scripts.render_email_previews import render_pair
+    rendered, unresolved = render_pair("availability-thanks", AVAIL_TOKENS)
+    assert not [u for u in unresolved if u.startswith("cta.")]
+    assert "__CTA_BLOCK__" not in rendered["html"]
+    assert "cta.bg" not in rendered["html"]
+
+
+def test_availability_reminder_cta_uses_the_magenta_exception():
+    """The one documented design-system exception: magenta, not sage."""
+    from scripts.render_email_previews import render_pair
+    rendered, _ = render_pair("availability-reminder", REMINDER_TOKENS)
+    assert 'bgcolor="#c8226d"' in rendered["html"]
+    assert "#467560" not in rendered["html"]
+
+
+def test_magic_link_cta_matches_shared_structural_properties():
+    """magic-link.html's CTA uses Go template syntax for href/label, so a
+    full-body parity check against _cta_shared.html (which still carries
+    unresolved {{ cta.* }} Mustache tokens) can't apply directly. Instead
+    check that the fixed structural properties — the ones that had actually
+    drifted (height, arcsize, font stack, padding, border width) — match."""
+    import re
+
+    from scripts.render_email_previews import TEMPLATES
+    shared = (TEMPLATES / "_cta_shared.html").read_text(encoding="utf-8")
+    magic_link = (TEMPLATES / "magic-link.html").read_text(encoding="utf-8")
+    match = re.search(r"<!-- CTA:BEGIN -->(.*?)<!-- CTA:END -->", magic_link, re.S)
+    assert match is not None, "magic-link.html is missing CTA:BEGIN/END sentinels"
+    cta_block = match.group(1)
+
+    fixed_properties = (
+        "height:46px",
+        'arcsize="22%"',
+        "font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif",
+        "font-weight:600",
+        "padding:14px 22px",
+        "letter-spacing:-0.005em",
+        "border-radius:10px",
+    )
+    for prop in fixed_properties:
+        assert prop in shared, f"{prop!r} missing from _cta_shared.html itself"
+        assert prop in cta_block, f"magic-link.html's CTA has drifted on {prop!r}"
+
+
+def test_magic_link_cta_has_no_leftover_deploy_placeholder():
+    from scripts.render_email_previews import TEMPLATES
+    magic_link = (TEMPLATES / "magic-link.html").read_text(encoding="utf-8")
+    assert "cta.href" not in magic_link
+    assert "cta.label" not in magic_link
+
+
+# ---------------------------------------------------------------------------
+# Footer brand line — assets/emails/template/_footer_brand_shared.html
+# ---------------------------------------------------------------------------
+
+FOOTER_BRAND_TEMPLATE_STEMS = (
+    "availability-reminder",
+    "availability-thanks",
+    "rsvp-confirmation",
+)
+
+
+@pytest.mark.parametrize("stem", FOOTER_BRAND_TEMPLATE_STEMS)
+def test_render_pair_splices_canonical_footer_brand(stem):
+    from scripts.render_email_previews import (
+        FOOTER_BRAND_PLACEHOLDER,
+        FOOTER_BRAND_BLOCK,
+        render_pair,
+    )
+    tokens = CTA_TEMPLATE_TOKENS.get(stem, AVAIL_TOKENS)
+    rendered, _ = render_pair(stem, tokens)
+    html = rendered["html"]
+    assert FOOTER_BRAND_PLACEHOLDER not in html
+    assert FOOTER_BRAND_BLOCK in html
+
+
+def test_footer_brand_not_present_where_it_was_never_authored():
+    """pre-meeting-reminder and new-paper-announcement never had the shared
+    brand-line fragment as a standalone label — consolidating an *existing*
+    line is not license to add new footer content to templates that lack it.
+    (new-paper-announcement's own RSVP-management prose happens to contain
+    the same words in a sentence — "...part of the WiDS NYC AI Reading
+    Group." — which is fine; only the shared fragment's own markup must be
+    absent.)"""
+    from scripts.render_email_previews import FOOTER_BRAND_BLOCK, render_pair
+    for stem, tokens in (
+        ("pre-meeting-reminder", PRE_MEETING_TOKENS),
+        ("new-paper-announcement", NEW_PAPER_TOKENS),
+    ):
+        rendered, _ = render_pair(stem, tokens)
+        assert FOOTER_BRAND_BLOCK not in rendered["html"], stem
+
+
+def test_magic_link_footer_brand_matches_shared_source():
+    import re
+
+    from scripts.render_email_previews import TEMPLATES, FOOTER_BRAND_BLOCK
+    magic_link = (TEMPLATES / "magic-link.html").read_text(encoding="utf-8")
+    match = re.search(
+        r"<!-- FOOTER_BRAND:BEGIN -->(.*?)<!-- FOOTER_BRAND:END -->",
+        magic_link,
+        re.S,
+    )
+    assert match is not None, "magic-link.html is missing FOOTER_BRAND:BEGIN/END sentinels"
+    assert match.group(1).strip() == FOOTER_BRAND_BLOCK

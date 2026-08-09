@@ -2,7 +2,19 @@
 name = "wids-nyc-reading-group-assistant"
 version = "0.0.0"
 description = "Python helper scripts for the WiDS NYC reading-group assistant."
-requires-python = ">=3.11"
+# 3.13 is both the floor and the only version CI exercises (ci.yml runs
+# `uv sync --frozen --python 3.13`). Keeping the two in lockstep is deliberate:
+# a floor lower than the tested version declares support that no gate verifies.
+# Raise both together, or not at all.
+#
+# Exception, and do NOT "fix" it: the three SPECTER2 scripts and
+# .github/workflows/export-specter2.yml stay pinned to `--python 3.11`. On 3.13
+# uv's resolver silently falls back to an unrelated 2018 namesake package
+# ('optimum 0.1.0') instead of HuggingFace optimum — a wrong-package failure, not
+# a version error. Those scripts run standalone from their inline PEP 723 blocks
+# with the optional `ml` deps, never from this lock, so the floor here does not
+# apply to them. See docs/admin-suggest.md § "Python and the ML stack".
+requires-python = ">=3.13"
 
 # Runtime dependencies of the maintained, CI-tested scripts. These were
 # previously declared only as inline PEP 723 `# /// script` blocks and as
@@ -51,7 +63,7 @@ dev = [
 package = false
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 # Demo teaching notebooks under web/public are published artifacts, not
 # maintained source — their literate style (inline semicolons, re-imports)
 # is deliberate. Excluding them keeps whole-repo `ruff check .` green.
@@ -64,7 +76,9 @@ extend-exclude = ["web/public/notebooks"]
 "tests/*" = ["E402"]
 
 [tool.ty.environment]
-python-version = "3.11"
+# Tracks `requires-python` above — ty resolves version-gated stdlib and typing
+# behaviour against this, so a stale value type-checks the wrong language.
+python-version = "3.13"
 
 [tool.ty.src]
 # Match the old mypy `files = ["scripts"]` scope. The three heavy SPECTER2

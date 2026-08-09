@@ -38,7 +38,7 @@
   <!--[if mso]>
   <style type="text/css">
     table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
-    .serif, .paper-title, .count, .signoff-name, .quote-text { font-family: Georgia, "Times New Roman", serif !important; }
+    .serif, .paper-title, .count, .signoff-name, .quote-text, .wordmark-name { font-family: Georgia, "Times New Roman", serif !important; }
   </style>
   <![endif]-->
 
@@ -79,26 +79,10 @@
         <!-- ===== Email card ===== -->
         <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="width:640px;max-width:640px;background-color:#ffffff;border:1px solid #e6dfd1;border-radius:14px;">
 
-          <!-- ── Brand bar (hosted PNG mark + wordmark) ── -->
+          <!-- ── Brand bar (canonical wordmark — see assets/emails/template/_wordmark_shared.html) ── -->
           <tr>
             <td class="pad-x" style="padding:28px 32px 8px 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td width="40" valign="middle" style="width:40px;padding-right:12px;">
-                    <img src="https://wids-nyc-reading-group-assistant.vercel.app/branding/mark-reader-192.png"
-                         width="40" height="40" alt="WiDS NYC"
-                         style="display:block;border:0;border-radius:10px;width:40px;height:40px;">
-                  </td>
-                  <td valign="middle">
-                    <div class="serif" style="font-family:Charter,'Iowan Old Style',Georgia,serif;font-weight:600;font-size:17px;color:#16205e;letter-spacing:-0.01em;line-height:1.15;">
-                      WiDS NYC
-                    </div>
-                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#6d6757;line-height:1.4;margin-top:1px;">
-                      AI Reading Group
-                    </div>
-                  </td>
-                </tr>
-              </table>
+              __WORDMARK_BLOCK__
             </td>
           </tr>
 
@@ -286,25 +270,13 @@
             </td>
           </tr>
 
-          <!-- ── CTA row (magenta primary + sage ghost) ── -->
+          <!-- ── CTA row (canonical CTA — see assets/emails/template/_cta_shared.html — + sage ghost) ── -->
           <tr>
             <td class="pad-x" style="padding:18px 32px 0 32px;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <!-- Primary CTA: magenta-500 fill, white text, magenta-600 border, bulletproof -->
-                  <td class="btn-cell" align="center" bgcolor="#c8226d" style="border-radius:10px;background-color:#c8226d;border:1.5px solid #a51858;">
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ links.availability }}" style="height:46px;v-text-anchor:middle;width:200px;" arcsize="22%" strokecolor="#a51858" strokeweight="1.5px" fillcolor="#c8226d">
-                      <w:anchorlock/>
-                      <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15.5px;font-weight:600;">Open availability →</center>
-                    </v:roundrect>
-                    <![endif]-->
-                    <!--[if !mso]><!-- -->
-                    <a href="{{ links.availability }}"
-                       style="display:inline-block;padding:13px 20px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;font-weight:600;letter-spacing:0.005em;color:#ffffff;text-decoration:none;line-height:1;">
-                      Open availability →
-                    </a>
-                    <!--<![endif]-->
+                  <td>
+                    __CTA_BLOCK__
                   </td>
                   <!--
                     Secondary ghost link.
@@ -401,7 +373,7 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#8e8674;line-height:1.55;">
-                    WiDS NYC AI Reading Group
+                    __FOOTER_BRAND_BLOCK__
                     <span style="color:#d2c8b4;">&nbsp;&middot;&nbsp;</span>
                     <a href="{{ links.portalBase }}/dashboard" style="color:#6d6757;text-decoration:none;">Member portal</a>
                   </td>

@@ -24,6 +24,7 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md), [docs/runbooks/email-client-behavior.md](docs/runbooks/email-client-behavior.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
 | New-paper announcement | [scheduled_tasks/new-paper-announcement.md](scheduled_tasks/new-paper-announcement.md) | [2026-07-13-reading-group-email-and-prerequisites-design.md](docs/superpowers/specs/2026-07-13-reading-group-email-and-prerequisites-design.md) | [2026-07-13-reading-group-email-and-prerequisites.md](docs/superpowers/plans/2026-07-13-reading-group-email-and-prerequisites.md) |
 | Blackout periods | [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md) | [2026-07-12-blackout-dates-design.md](docs/superpowers/specs/2026-07-12-blackout-dates-design.md) | [2026-07-12-blackout-dates.md](docs/superpowers/plans/2026-07-12-blackout-dates.md) |
+| SPECTER2 fallback trade-offs | [docs/fallback-playground.html](docs/fallback-playground.html) — standalone interactive explorer; open it in a browser, no build step | — | — |
 
 ## Prerequisites (one-time operator setup)
 

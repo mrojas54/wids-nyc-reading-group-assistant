@@ -43,7 +43,9 @@ from typing import Literal
 from scripts.render_email_previews import (
     TEMPLATES,
     RenderError,
+    find_surviving_placeholders,
     render,
+    splice_shared_blocks,
     strip_html_comments,
 )
 
@@ -205,6 +207,15 @@ def _compose_one(
     body = _strip_blocks(src, pattern, keep, names)
     tokens = content.tokens
     if ext == "html":
+        # Splice shared fragments (wordmark, CTA skeleton, footer brand line)
+        # before comment-stripping and before the blanket html.escape() below
+        # — see render_email_previews.SPLICE_BLOCKS for why these can't be
+        # {{ }} tokens (escape() would corrupt the wordmark's raw markup) or
+        # HTML comments (strip_html_comments() would delete them). The {{
+        # cta.* }} tokens embedded inside the spliced CTA skeleton are plain
+        # text/URLs, so they resolve normally through the escaped tokens dict
+        # below along with everything else.
+        body = splice_shared_blocks(body)
         # Before substitution: the header comment lists token names, and
         # stripping first keeps them out of the unresolved tally entirely.
         body = _strip_html_comments(body)
@@ -247,6 +258,12 @@ def compose(content: Content) -> dict[str, str]:
         if _LEFTOVER_TOKEN.search(body):
             leftover = sorted(set(_LEFTOVER_TOKEN.findall(body)))
             raise CompositionError(f"literal braces left in .{ext}: {leftover}")
+        surviving = find_surviving_placeholders(body)
+        if surviving:
+            raise CompositionError(
+                f"{surviving} survived composition in .{ext} — "
+                "a shared-fragment splice did not run"
+            )
 
     return bodies
 
@@ -284,6 +301,11 @@ PREVIEW_TOKENS = {
         "code around it instead — the retrieval, the memory, the prompt "
         "assembly?"
     ),
+    "cta.bg": "#467560",
+    "cta.borderColor": "#355c4b",
+    "cta.width": "210",
+    "cta.href": "https://wids-nyc-reading-group-assistant.vercel.app/availability?meeting=37",
+    "cta.label": "Open availability →",
 }
 
 # Fixed date_key so preview output is deterministic in CI.
