@@ -156,7 +156,17 @@ echo '{"recipient.firstName":"<first>","lead.name":"<lead>","lead.initial":"<X>"
 
 It emits `{"paper_id", "html", "text"}` with every `{{ token }}` resolved, and
 **errors (exit 1) if any token is unresolved** — never create a draft from a
-partial render. Create a Gmail **draft** (never auto-send) to that member:
+partial render.
+
+**Blocker before drafting (post–PR #135):** `render_new_paper_email()` does not
+yet call `splice_shared_blocks()`, so the HTML can still contain literal
+`__WORDMARK_BLOCK__` / `__CTA_BLOCK__` placeholders even when every `{{ token }}`
+is resolved. Refuse to create a Gmail draft unless those strings are absent
+from `html` (preview path `scripts.render_email_previews.render_pair` splices
+correctly; the announcement CLI path does not). See
+`docs/runbooks/transactional-emails.md` § Shared fragments.
+
+Create a Gmail **draft** (never auto-send) to that member:
 
 - **Subject:** `WiDS NYC AI Reading Group - <Month Year>` (e.g. `WiDS NYC AI Reading Group - August 2026`), where the month is the reading-group meeting's month
 - **HTML body:** the `html` field
