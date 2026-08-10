@@ -40,12 +40,15 @@ Doesn't matter — they're independent. But a sensible order is:
 3. `pre-meeting-reminder`
 4. `cycle-keep-alive`
 5. `availability-chase`
-6. `post-meeting-thanks`
+6. `post-meeting-thanks` (reading_group path is two-run; see that file's
+   `leader-draft` vs send idempotency keys)
 7. `prune-paper-pdfs` (weekly Sunday 02:00 UTC; starts dry-run)
 
 Do **not** register `leader-nudge`. It is deprecated and superseded by the
 Paper Pal companion flow; leaving it unregistered matches the root
-[README](../README.md#5-scheduled-tasks-mcp).
+[README](../README.md#5-scheduled-tasks-mcp). After migration `024`, any
+remaining `packets_sent_at` references in deprecated prompts are historical
+only — the column no longer exists.
 
 ## Observability
 
