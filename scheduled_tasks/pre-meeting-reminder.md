@@ -27,6 +27,75 @@ WHERE m.status='scheduled'
   AND m.scheduled_at <  now() + interval '3 days';
 ```
 
+## Step 1b — Venue freshness gate
+
+`meeting.location` is rendered straight into the reminder subject and body
+(Step 4b below, and `{{ meeting.location }}` in
+`assets/emails/template/pre-meeting-reminder.{html,txt}`). If the row is stale,
+this task is what puts the wrong address in a member's inbox — that is exactly
+what nearly happened on 2026-08-11 for meeting 37. `calendar-rsvp-sync` Step 4b
+detects venue drift daily, but detection alone does not stop a send, so
+re-check here, live, immediately before building any recipient list.
+
+Skip this step for admin meetings (no venue) and for meetings with
+`location IS NULL` on both sides.
+
+Find the meeting's Calendar event the same way `calendar-rsvp-sync` Step 2
+does (`list_events`, date range + `WiDS NYC%` title prefix), then run the same
+comparison `calendar-rsvp-sync` Step 4b runs. Do not normalize the strings by
+hand — both tasks must reach the same verdict, or a venue one calls in-sync and
+the other calls drift holds every reminder forever:
+
+```python
+from scripts.venue_keys import classify
+
+result = classify(meeting_location, calendar_location)
+```
+
+`result.classification` of `in_sync` or `cosmetic` → proceed. Google rewrites
+the venue *name* whenever the operator edits the event, so a name-only
+difference on an unchanged street address is expected and is not a reason to
+hold a send.
+
+**`material` or `material_db_newer`, or no matching Calendar event was found →
+do not send for this meeting.** Do not write to `meetings` either; resolving
+the disagreement is the operator's call. Log and move on to the next meeting —
+other meetings in this run are unaffected:
+
+```sql
+INSERT INTO command_log (source, name, status, summary, metadata)
+VALUES ('scheduled_task', 'pre-meeting-reminder', 'failure',
+        'meeting=<id>: reminder held — venue mismatch, DB "<db_location>" vs Calendar "<calendar_location>"',
+        jsonb_build_object(
+          'event',             'venue_drift',
+          'classification',    '<result.classification or "event_not_found">',
+          'meeting_id',        <id>,
+          'calendar_event_id', '<event_id or null>',
+          'db_location',       '<db_location>',
+          'calendar_location', '<calendar_location or null>',
+          'send_held',         true,
+          'recipients_held',   <count that would have been emailed>
+        ));
+```
+
+`material_db_newer` holds the send too, even though it means the database is
+the newer write. `calendar-rsvp-sync` suppresses its *alert* in that case,
+having assumed the operator resolved it — but the invite the attendees are
+holding still says something else, and emailing a venue that contradicts it is the
+confusion this gate exists to prevent. Holding here is the backstop for
+exactly the case the sync decided to stay quiet about.
+
+Write **no** `idempotency_key` on this row, and do not write the Step 5 row for
+this meeting — the reminder has not been sent, so the meeting must stay
+eligible for the next run once the venue is resolved.
+
+Then email the operator (`SELECT email, name FROM members WHERE
+role='operator'`) with subject `WiDS NYC: reminder held for meeting <id> —
+venue mismatch`, quoting both values, the `<count>` of members waiting, the
+meeting date, and the note that the reminder re-sends automatically on the next
+daily run once the two sides agree. Resolution steps are in
+[`docs/venue-drift.md`](../docs/venue-drift.md).
+
 ## Step 2 — Check idempotency
 
 For each meeting, check if the reminder was already sent — keyed on the exact

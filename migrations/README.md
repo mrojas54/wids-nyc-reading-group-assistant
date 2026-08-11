@@ -38,6 +38,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `022_papers_prerequisites.sql` | Adds nullable `papers.prerequisites` JSONB — the AI-drafted announcement bundle (`{lede, items, summary, short_title, status, model, generated_at}`) consumed by the new-paper-announcement email via `scripts/generate_prerequisites.py`. Additive + nullable; papers RLS unaffected. |
 | `023_members_vouched_by.sql` | Adds nullable self-referencing `members.vouched_by INT REFERENCES members(id) ON DELETE SET NULL`, a `members_vouched_by_not_self` CHECK, and a partial index. Source for the `vouch.firstName` token in `welcome-availability` (caller reduces `members.name` to a first name). Nullable by design — every pre-existing row has no voucher. Turning the vouch **card** off is `Blocks(vouch=False)`, but `vouch.firstName` is still required for the always-on intro/preheader/footer — see `docs/welcome-availability-flow.md`. No GRANT change, so the column stays invisible to `authenticated` portal sessions (migration 002 restricted `members` reads to `id, name, role`). |
 | `025_members_vouched_by_comment.sql` | Re-applies the `members.vouched_by` column comment. `023`'s `COMMENT` text was edited in place after `023` had been applied (`dc5ec0f`), so databases running the old wording never picked up the correction. Comment-only — no DDL, no data change, idempotent and safe to re-run. `024` is skipped: it was claimed by in-flight work when this was written, and a gap is harmless where a duplicate number would not be. |
+| `026_meetings_updated_at.sql` | Adds `meetings.updated_at` (backfilled from `created_at`, then `NOT NULL DEFAULT now()`) plus `public.set_updated_at()` and the `meetings_set_updated_at` BEFORE UPDATE trigger. Lets `calendar-rsvp-sync` tell which side of a Calendar-vs-database disagreement was written last — see [`docs/venue-drift.md`](../docs/venue-drift.md). The trigger's `WHEN (OLD.* IS DISTINCT FROM NEW.*)` guard keeps a no-op re-sync from advancing the timestamp and falsely suppressing a drift alert. **Contains a multi-row `UPDATE meetings`** (the backfill) — CLAUDE.md requires operator confirmation before applying. First `updated_at` in this schema; no other table has one. Regenerate `web/lib/database.types.ts` after applying. |
 
 ## `ensure_rls` event trigger
 
@@ -74,3 +75,6 @@ browser (anon/authenticated). `command_log` is the one accepted exception
   (JSONB, default `{}`), `idempotency_key`, and `actor`, plus the
   `command_log_idempotency_key_unique` partial unique index.
 - `blackout_periods` exists and remains service-role-only.
+- `meetings.updated_at` exists, is `NOT NULL`, and equals `created_at` on every
+  row that has not been edited since migration 026; the
+  `meetings_set_updated_at` trigger is attached to `meetings`.
