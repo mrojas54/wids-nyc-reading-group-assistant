@@ -167,6 +167,23 @@ Token names are written bare throughout, for the reason given in Architecture
 above: a delimited token inside a comment gets substituted with real recipient
 values and counts as required even when its block is off.
 
+### Portal link tokens
+
+The `links.*` tokens that resolve to portal routes, and the route each one must
+land on. Every one of these is a real route in `web/app/` — check before adding
+a new token, because a 404 in a footer is invisible at send time and only shows
+up when a member clicks it.
+
+    links.portalBase         <portalBase>              sign-in / magic link
+    links.availability       <portalBase>/availability?meeting=<id>
+    links.rsvpManage         <portalBase>/me/rsvps     all upcoming meetings
+
+`/me/rsvps` shipped 2026-08-11; before that the token pointed at a route that
+did not exist and every "Manage your RSVPs" footer link 404'd. It is member-
+scoped by RLS (`attendance_select_own` / `_insert_own` / `_update_own`) and sits
+behind the middleware auth gate, so a signed-out click lands on the sign-in form
+rather than an empty page.
+
 ### `availability-thanks`
 
 Required — refuse to send if any is unresolved:

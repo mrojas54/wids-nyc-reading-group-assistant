@@ -1664,3 +1664,94 @@
   color: var(--color-paper-900);
   font-weight: 600;
 }
+
+/* ============================================================
+   Manage RSVPs (/me/rsvps)
+   Landing page for the links.rsvpManage token in the transactional
+   email footers. Reuses .rsvp-picker / .rsvp-collapsed from the
+   dashboard hero — only the surrounding list chrome is new.
+   ============================================================ */
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-paper-900);
+  margin-bottom: 4px;
+}
+.page-sub {
+  font-size: 14px;
+  color: var(--color-paper-600);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.rsvp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rsvp-meeting {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rsvp-meeting-when {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  color: var(--color-paper-500);
+}
+.rsvp-meeting-badge {
+  font-size: 10.5px;
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-sage-700);
+  background: var(--color-sage-50);
+  border: 1px solid var(--color-sage-200);
+  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+}
+.rsvp-meeting-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-paper-900);
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.rsvp-meeting-meta {
+  font-size: 13px;
+  color: var(--color-paper-600);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.rsvp-meeting-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rsvp-meeting-meta .rsvp-meeting-meta-soft {
+  color: var(--color-paper-500);
+}
+/* The picker sits below a divider so the answer reads as its own row. */
+.rsvp-meeting .rsvp-picker,
+.rsvp-meeting .rsvp-collapsed {
+  border-top: 1px solid var(--border-1);
+  padding-top: 12px;
+  margin-top: 4px;
+}
