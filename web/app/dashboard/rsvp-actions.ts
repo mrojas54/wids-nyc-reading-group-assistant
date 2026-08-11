@@ -44,5 +44,8 @@ export async function setRsvp(meetingId: number, status: RsvpChoice): Promise<vo
     "success",
     `meeting ${meetingId}: ${status}`,
   );
+  // Both surfaces render the same row: the dashboard hero for the next meeting,
+  // /me/rsvps for every upcoming one. Answering on either has to invalidate both.
   revalidatePath("/dashboard");
+  revalidatePath("/me/rsvps");
 }

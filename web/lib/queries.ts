@@ -157,6 +157,77 @@ export async function myRsvp(
   return (data?.rsvp_status as RsvpStatus | undefined) ?? null;
 }
 
+export type UpcomingRsvp = {
+  meeting_id: number;
+  type: NextMeeting["type"];
+  scheduled_at: string | null;
+  location: string | null;
+  leader_name: string | null;
+  paper_title: string | null;
+  rsvp_status: RsvpStatus | null;
+};
+
+/**
+ * Every upcoming scheduled meeting, each carrying the caller's own RSVP.
+ * Backs /me/rsvps — the "Manage your RSVPs" link in the transactional email
+ * footers, which lands members on the full list rather than the single next
+ * meeting the dashboard hero shows.
+ *
+ * Two round trips instead of an embed on purpose: PostgREST would emit
+ * `meeting_attendance` as a nested array per meeting, and the RLS-scoped embed
+ * silently returns [] for a member with no rows — indistinguishable from a
+ * dropped join. Fetching the attendance rows separately keeps "no RSVP yet"
+ * an explicit null.
+ *
+ * `memberId` is filtered on in addition to `attendance_select_own` for the
+ * same defense-in-depth reason as myAvailabilitySubmitted: if RLS ever loosens
+ * or a service-role client is passed in, the missing filter would show one
+ * member another member's RSVPs.
+ */
+export async function upcomingRsvps(
+  sb: SupabaseClient,
+  memberId: number | null,
+): Promise<UpcomingRsvp[]> {
+  const nowIso = new Date().toISOString();
+
+  const { data: meetings } = await sb
+    .from("meetings")
+    .select(
+      "id, type, scheduled_at, location, members:leader_id(name), papers:paper_id(title)",
+    )
+    .eq("status", "scheduled")
+    .gte("scheduled_at", nowIso)
+    .order("scheduled_at", { ascending: true });
+
+  const rows = (meetings ?? []) as any[];
+  if (rows.length === 0) return [];
+
+  const byMeeting = new Map<number, RsvpStatus>();
+  if (memberId != null) {
+    const { data: attendance } = await sb
+      .from("meeting_attendance")
+      .select("meeting_id, rsvp_status")
+      .eq("member_id", memberId)
+      .in(
+        "meeting_id",
+        rows.map((m) => m.id),
+      );
+    for (const a of (attendance ?? []) as any[]) {
+      byMeeting.set(a.meeting_id, a.rsvp_status as RsvpStatus);
+    }
+  }
+
+  return rows.map((m) => ({
+    meeting_id: m.id,
+    type: m.type,
+    scheduled_at: m.scheduled_at,
+    location: m.location,
+    leader_name: m.members?.name ?? null,
+    paper_title: m.papers?.title ?? null,
+    rsvp_status: byMeeting.get(m.id) ?? null,
+  }));
+}
+
 export type Stats = {
   meetingsAttended: number;
   papersLed: number;

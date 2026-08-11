@@ -26,8 +26,12 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { session } } = await supabase.auth.getSession();
+  // /me/* is reached straight from an email footer, so an expired session is
+  // the common case, not the edge case — bounce to the magic-link form rather
+  // than rendering an empty roster-less page.
   const protectedPath = request.nextUrl.pathname.startsWith("/dashboard")
     || request.nextUrl.pathname.startsWith("/availability")
+    || request.nextUrl.pathname.startsWith("/me")
     || request.nextUrl.pathname.startsWith("/admin");
 
   if (protectedPath && !session) {
