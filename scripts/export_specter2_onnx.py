@@ -8,7 +8,7 @@ Run — pick the right command for your platform:
 
   Apple Silicon Mac, Linux x86_64, Linux aarch64, Windows:
 
-    uv run --python 3.11 \\
+    uv run --no-project --python 3.11 \\
            --with 'optimum[onnxruntime]' \\
            --with adapters \\
            --with 'torch>=2.6' \\
@@ -20,7 +20,7 @@ Run — pick the right command for your platform:
   CVE-2025-32434 path doesn't apply (we have to stay on older torch),
   and we pin transformers<4.51 to skip the check it added in 4.51:
 
-    uv run --python 3.11 \\
+    uv run --no-project --python 3.11 \\
            --with 'optimum[onnxruntime]' \\
            --with adapters \\
            --with 'torch<2.6' \\
