@@ -35,7 +35,7 @@ Usage:
 Run -- pick the right command for your platform (same as the verifier):
 
   Apple Silicon Mac, Linux x86_64, Linux aarch64, Windows:
-    uv run --python 3.11 \\
+    uv run --no-project --python 3.11 \\
            --with adapters \\
            --with 'torch>=2.6' \\
            --with transformers \\
@@ -43,7 +43,7 @@ Run -- pick the right command for your platform (same as the verifier):
            python scripts/embed_specter2_fp32.py --title "..." --abstract "..."
 
   Intel Mac (macOS x86_64) OR Apple Silicon reusing a torch<2.6 cache:
-    uv run --python 3.11 \\
+    uv run --no-project --python 3.11 \\
            --with adapters \\
            --with 'torch<2.6' \\
            --with 'transformers<4.51' \\
