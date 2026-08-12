@@ -37,8 +37,19 @@ work does not get mistaken for production behavior.
   the email as visible text.
 - Preview rendering writes `*_rendered.html` and `*_rendered.txt` next to the
   sources. Those files are ignored by git and should not be committed.
-- Member-facing scheduled-task sends use the operator Gmail MCP. Supabase Auth
-  magic-link emails are separate: Supabase stores static template copies.
+- **Nothing in this repo may send email as the operator. This is policy, not a
+  tooling limit.** Every member-facing message is drafted; a human presses
+  send. Do not wire a sender to "fix" it — not Gmail send scope, not Composio's
+  `GMAIL_SEND_EMAIL`, not Resend, not SMTP. Those are technically reachable,
+  which is why this is written down. The Gmail MCP's missing send tool is a
+  guardrail that happens to agree with the policy; if it ever lifts, the policy
+  still stands, and availability is not permission. Only the operator can
+  change this, in their own words.
+- Member-facing scheduled tasks draft through the operator Gmail MCP. Supabase
+  Auth magic-link emails are the one exception and are separate: they are sent
+  by Supabase itself from static templates it stores, not composed here and not
+  sent as the operator. That is the boundary — transactional auth mail from the
+  platform, everything person-to-person drafted for review.
 - At-most-once sends require migration
   `020_command_log_enrichment.sql`, which adds `command_log.idempotency_key`
   and the `command_log_idempotency_key_unique` partial unique index.

@@ -247,7 +247,7 @@ any message was sent programmatically.
 |---|---|
 | Raw RFC822 via Gmail MCP | Unavailable. `get_message` offers `MINIMAL` / `FULL_CONTENT` / `METADATA_ONLY`. No `raw`. |
 | Raw RFC822 via Composio | `GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID` with `format:"raw"` denied at the permission prompt; separately the gmail toolkit is **not linked** (`composio connections list` returns only `eventbrite`, `discord`, `firecrawl`, `supabase`, `github`). |
-| Sending anything programmatically | Gmail MCP has no send tool. Composio has `GMAIL_SEND_EMAIL` / `GMAIL_SEND_DRAFT` in catalogue but the account is unlinked. |
+| Sending anything programmatically | **Not permitted, independent of tooling.** The operator has ruled that nothing here sends email as them; everything member-facing is drafted for a human to send. Gmail MCP also has no send tool, and Composio catalogues `GMAIL_SEND_EMAIL` / `GMAIL_SEND_DRAFT` on an unlinked account — but treat those as incidental. Linking the account would not make sending allowed. See [`transactional-emails.md`](transactional-emails.md). |
 | `get_thread` on the staged draft's thread | `The caller does not have permission`. |
 
 Because raw MIME is unreachable, everything above is read through the MCP's
