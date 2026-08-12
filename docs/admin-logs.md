@@ -21,8 +21,8 @@ This guide is written for:
    table is RLS-locked with no browser policies.
 3. It shows the newest 50 events, then keyset-paginates older rows with
    "Load more."
-4. It derives severity from `status`: `failure` -> error,
-   `no_action` -> warn, and `success` -> info.
+4. It derives severity from `status`: `failure` -> error, `no_action` and
+   `needs_action` -> warn, and `success` -> info.
 5. Enriched fields from migration `020_command_log_enrichment.sql`
    (`actor`, `duration_ms`, `metadata`, `idempotency_key`) appear in the
    table or expandable JSON context when present.
@@ -54,10 +54,10 @@ The sticky status header summarizes the last 24 hours:
 
 | Header state | Meaning |
 |---|---|
-| All clear | No `failure` or `no_action` rows in the last 24 hours. |
+| All clear | No `failure`, `no_action`, or `needs_action` rows in the last 24 hours. |
 | Last error | One `failure` row in the last 24 hours. |
 | N errors | Multiple `failure` rows in the last 24 hours. |
-| No errors, N warnings | No failures, but at least one `no_action` row. |
+| No errors, N warnings | No failures, but at least one `no_action` or `needs_action` row. |
 | Couldn't load status | The service-role query failed. Retry, then check env vars/logs. |
 
 Clicking the header applies the relevant filter so you land on the affected
@@ -169,7 +169,15 @@ already represented by the first row.
   `slash_command` in the database. The UI also has an `edge_function` filter
   vocabulary for design parity and future rows, but no current migration adds
   that value to the database check constraint.
-- `command_log.status` must be `success`, `failure`, or `no_action`.
+- `command_log.status` must be `success`, `failure`, `no_action`, or
+  `needs_action` (the fourth added in `029_command_log_needs_action_status.sql`).
+  `needs_action` means the run finished its own work and a **human must now act**
+  for the outcome to be real — distinct from `no_action`, which means there was
+  nothing to do. Both derive to warn; only `needs_action` is waiting on a person,
+  and it renders amber rather than the neutral grey `no_action` gets.
+  The canonical producer is any member-facing scheduled task: the Gmail MCP has
+  no send tool, so those tasks terminate in a draft the operator sends. Filter
+  `metadata.operator_action_required` to list what is pending.
 - `command_log.metadata` defaults to `{}` and is omitted from the expanded
   context when empty.
 - `idempotency_key` is nullable. Many nulls are allowed; only non-null keys are

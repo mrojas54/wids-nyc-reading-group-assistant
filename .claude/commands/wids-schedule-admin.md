@@ -90,7 +90,9 @@ Use Calendar MCP to create event:
 - Attendees: all active members' emails
 - Send invitations: yes
 
-Capture the event ID and Meet link.
+Capture the event `id`, its `htmlLink`, and the Meet link. The first two are
+persisted in Step 5 — `calendar-rsvp-sync` and `pre-meeting-reminder` both read
+them instead of re-finding this event by title search (migration `028`).
 
 ## Step 5 — Update DB
 
@@ -98,7 +100,9 @@ Capture the event ID and Meet link.
 UPDATE meetings
 SET scheduled_at = <slot_start>,
     location = 'Online (Meet link in calendar invite)',
-    status = 'scheduled'
+    status = 'scheduled',
+    calendar_event_id = '<event_id>',
+    calendar_html_link = '<event_htmlLink>'
 WHERE id = <admin_id>;
 
 INSERT INTO meeting_attendance (meeting_id, member_id, rsvp_status)

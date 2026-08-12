@@ -1,4 +1,4 @@
--- migrations/028_meetings_grants.sql
+-- migrations/030_meetings_grants.sql
 -- Revoke the default full-DML grant on meetings from anon/authenticated and
 -- pin it down to what the meetings_select policy actually intends: read-only
 -- for signed-in members, nothing for anon.
