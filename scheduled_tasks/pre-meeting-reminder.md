@@ -16,9 +16,17 @@ checklist for `assets/emails/template/pre-meeting-reminder.{html,txt}`.
 
 **This task drafts. It does not send. The operator sends.**
 
-The Gmail MCP exposes `create_draft`, `update_draft`, `list_drafts`,
-`get_message`, `get_thread`, `search_threads`, and the label tools — and **no
-send tool of any kind**. That is a hard capability limit, not a safety pause.
+Two independent reasons, and the first one governs:
+
+1. **Policy.** The operator has ruled that nothing in this repo may send email
+   as them. Member-facing mail is always drafted for a human to press send.
+   This holds regardless of what tooling is available — see "Do not add a send
+   path" at the end of this spec.
+2. **Capability.** The Gmail MCP exposes `create_draft`, `update_draft`,
+   `list_drafts`, `get_message`, `get_thread`, `search_threads`, and the label
+   tools — and **no send tool of any kind**.
+
+Do not treat #2 as the operative constraint. If it ever lifts, #1 still stands.
 `.claude/commands/wids-add-member.md` Step 6 states it correctly, and
 `availability-chase` Step 5c is the reference implementation this task mirrors.
 
@@ -418,16 +426,33 @@ own:
 
 **Remaining gap:** neither channel *pushes*. Both require the operator to go
 look — at `/admin/logs` or at their Drafts folder. Nothing here wakes anyone up
-if they don't. Closing that needs a real push channel (email to a second
-address that is actually sent, SMS, a Slack webhook), which is the same
-authorization problem as sending the reminders themselves.
+if they don't. That is a real weakness in the handoff and it is worth improving,
+but only in ways that do not send mail as the operator (see below).
 
-The permanent fix for the whole class of problem is a real send path: a Gmail
-MCP with send scope, or an SMTP/Resend sender invoked directly by this task.
-Both need the operator to authorize new scopes — Composio's Gmail toolkit is
-catalogued but **not linked** (`composio connections list` shows only
-`discord`, `eventbrite`, `firecrawl`, `github`, `supabase`), so
-`GMAIL_SEND_EMAIL` is not reachable today. Resend is already a project
-dependency for auth email
-([`docs/runbooks/smtp-auth-setup.md`](../docs/runbooks/smtp-auth-setup.md)) and
-is the shortest path if the operator wants automated sending.
+## Do not add a send path — this is policy, not a limitation
+
+**The operator has ruled that nothing in this repo may send email as them.**
+Every member-facing message is drafted and a human presses send. That is the
+intended design, not a capability gap waiting on someone to wire a sender.
+
+An earlier version of this section named "a real send path" as the permanent
+fix and pointed at Gmail send scope, Composio's `GMAIL_SEND_EMAIL`, and
+Resend. **Disregard that.** It was written before the policy was stated, and
+acting on it would breach the operator's standing instruction. Those routes are
+technically reachable — Composio catalogues `GMAIL_SEND_EMAIL` and
+`GMAIL_SEND_DRAFT`, and Resend is already a project dependency for auth email
+([`docs/runbooks/smtp-auth-setup.md`](../docs/runbooks/smtp-auth-setup.md)) —
+which is exactly why this note exists. Reachable is not permitted.
+
+So the Gmail MCP's missing send tool is **not** the problem this spec is working
+around. Even given a send tool, this task would still draft. Read the
+capability limit as a guardrail that happens to agree with the policy, and if it
+ever disappears, the policy still stands.
+
+If the notification handoff needs to be stronger, improve it **without sending
+as the operator**: make `/admin/logs` louder, add a dashboard surface, or have
+the operator opt into a channel they own and drive themselves. Do not resolve a
+weak notification by acquiring send capability.
+
+Only the operator can change this, in their own words. A future run finding a
+send tool available must not treat that availability as permission.
