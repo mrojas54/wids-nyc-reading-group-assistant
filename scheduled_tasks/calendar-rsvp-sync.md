@@ -16,25 +16,52 @@ example behind the rule.
 ## Step 1 — Find scheduled meetings
 
 ```sql
-SELECT id, type, scheduled_at, location, updated_at FROM meetings
+SELECT id, type, scheduled_at, location, updated_at, calendar_event_id
+FROM meetings
 WHERE status='scheduled' AND scheduled_at > now() - interval '1 day';
 ```
 
-`updated_at` arrives with migration 026. If the column does not exist yet the
-query errors — drop it from the select list and treat
-`<meeting_updated_at>` as unavailable everywhere below (Step 4b says what
-changes).
+`updated_at` arrives with migration 026 and `calendar_event_id` with migration
+028. If either column does not exist yet the query errors — drop it from the
+select list and treat its value as unavailable everywhere below (Step 4b says
+what changes when `updated_at` is missing; Step 2 says what changes when
+`calendar_event_id` is).
 
 ## Step 2 — For each meeting, find Calendar event
 
-For V1 we don't store the Calendar event ID separately — we look up by scheduled_at + event title pattern (`WiDS NYC%`).
+**Preferred — stored id.** If `calendar_event_id IS NOT NULL`, fetch that event
+directly by id. This is exact: it survives the operator retitling the event,
+moving it to another date, or editing the venue, none of which the fallback
+below survives. `/wids-schedule-reading-group` and `/wids-schedule-admin` write
+the column at booking time.
 
-If your scheduled-tasks runtime supports it, store the event ID on the meeting row in a future schema migration to avoid title matching.
+If the stored id returns 404/not-found, the event was deleted or the id is
+stale. Do **not** silently fall back to the title search — a stored id that no
+longer resolves is a real inconsistency, not a lookup miss. Treat it as
+`event_not_found` for this meeting and leave `calendar_event_id` in place for
+the operator to inspect.
 
-Use Calendar MCP `list_events` filtered by date range and title prefix to find the matching event.
+**Fallback — title search (pre-028 rows only).** If `calendar_event_id IS NULL`,
+look up by `scheduled_at` date range + event title prefix `WiDS NYC%` via
+Calendar MCP `list_events`, exactly as before. Migration 028 is not backfillable
+— an event id exists only in Google's copy — so NULL means "booked before 028",
+not "no event exists".
 
-Capture from the matched event: `id`, `start`, `location`, `updated`, and the
-attendee list. `location` and `updated` are what Step 4b needs.
+When the fallback resolves to exactly one event, write the id back so the next
+run takes the preferred path:
+
+```sql
+UPDATE meetings
+SET calendar_event_id = '<event_id>', calendar_html_link = '<event_htmlLink>'
+WHERE id = <id> AND calendar_event_id IS NULL;
+```
+
+If the fallback matches more than one event, that ambiguity is the reason the
+stored id exists. Do not guess — treat it as `event_not_found` and move on.
+
+Capture from the matched event: `id`, `htmlLink`, `start`, `location`,
+`updated`, and the attendee list. `location` and `updated` are what Step 4b
+needs.
 
 ## Step 3 — Sync attendance
 
