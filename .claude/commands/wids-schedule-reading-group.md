@@ -56,13 +56,20 @@ Use Calendar MCP:
 - Attendees: all active members' emails
 - Send invitations: yes
 
+Capture the created event's `id` and `htmlLink`. Step 6 persists both —
+`calendar-rsvp-sync` and `pre-meeting-reminder` read them instead of re-finding
+this event by title search (migration `028`), and `htmlLink` is the source for
+the `links.calendar` token in the RSVP thank-you email.
+
 ## Step 6 — Update DB
 
 ```sql
 UPDATE meetings
 SET scheduled_at = <slot_start>,
     location = '<venue>',
-    status = 'scheduled'
+    status = 'scheduled',
+    calendar_event_id = '<event_id>',
+    calendar_html_link = '<event_htmlLink>'
 WHERE id = <rg_id>;
 
 INSERT INTO meeting_attendance (meeting_id, member_id, rsvp_status)
