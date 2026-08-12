@@ -34,8 +34,18 @@ instruction was unfollowable, and the cost was not theoretical:
 > sat unsent in the operator's mailbox.
 
 So: **a created draft is a successful outcome for this task**, logged
-`status='success'` with `delivery_mode='draft'`. The run is not finished when
-the drafts exist — it is finished after Step 6 tells a human to send them.
+`status='needs_action'` with `delivery_mode='draft'`. The run is not finished
+when the drafts exist — it is finished after Step 6 tells a human to send them.
+
+`needs_action` arrives with migration `029`. It means "the run did its own work
+and a human must now act for the outcome to be real", and `/admin/logs` renders
+it **warn/amber**. That distinction is the point: under `success` these rows
+rendered `info`/green, so a run that left 8 unsent drafts looked identical to a
+clean one on the one page an operator actually checks. `no_action` would have
+gone amber but is untrue — drafts *were* created — and it would have collided
+with the genuine "nothing to do today" case. **If migration 029 is not applied
+yet, the CHECK constraint rejects the insert** — apply it, or fall back to
+`success` and accept that the row reads as all-clear.
 
 Three rules follow, and they are what keep the failure above from repeating:
 
@@ -324,8 +334,8 @@ created**, carrying that recipient's bucket key:
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-VALUES ('scheduled_task', 'pre-meeting-reminder', 'success',
-        'Drafted <bucket> meeting=<id> member=<member_id> to=<email>',
+VALUES ('scheduled_task', 'pre-meeting-reminder', 'needs_action',
+        'Drafted <bucket> meeting=<id> member=<member_id> to=<email> — UNSENT, operator must send',
         '<the bucket key from Step 2>',
         jsonb_build_object('kind', '<reminder|thanks>', 'meeting_id', <id>,
                            'member_id', <member_id>, 'email', '<email>',
@@ -334,11 +344,17 @@ VALUES ('scheduled_task', 'pre-meeting-reminder', 'success',
                            'operator_action_required', true));
 ```
 
-`delivery_mode='draft'` is the field that makes this row honest: it records that
-a message was composed and queued for a human, not delivered.
+`status='needs_action'` (migration `029`) is what makes this visible: it derives
+to **warn** in `/admin/logs`, so a run holding unsent drafts shows amber instead
+of the green it used to show under `success`. `delivery_mode='draft'` records
+that the message was composed and queued for a human, not delivered.
 `operator_action_required` is greppable — `/admin/logs` filters on `metadata`
 (see [`docs/admin-logs.md`](../docs/admin-logs.md)) — so pending sends can be
 listed without opening Gmail.
+
+Once the operator confirms a draft was actually sent, that row can be updated to
+`status='success'`; the idempotency key is already claimed either way, so the
+recipient is never re-drafted.
 
 If `create_draft` errors for a recipient, write a **keyless** `failure` row for
 that recipient and continue with the rest. No key means tomorrow's run retries
@@ -389,14 +405,22 @@ Then state the same thing in the run's own output, so an operator reading the
 task log rather than their mailbox sees it too: the count, the meeting, the
 deadline, and that the drafts are unsent.
 
-**Known limitation, worth fixing next:** this notification is itself a draft in
-the operator's own mailbox, which is a weak channel for "you must act" — and
-because these rows log `status='success'`, `/admin/logs` renders them as `info`
-(green), not as something demanding attention. The clean fix is a migration
-widening the `command_log.status` CHECK — today `('success','failure',
-'no_action')` from `001_initial_schema.sql:101` — to add `needs_action`, mapped
-to `warn` in the logs UI's severity derivation. Until then,
-`metadata.operator_action_required` is the filterable signal.
+Two channels carry this, deliberately, because the draft-to-self is weak on its
+own:
+
+1. **`/admin/logs`** — every pending draft is a `needs_action` row, which
+   derives to warn, so the status header reports "No errors · N warnings in last
+   24h" and the rows render amber. Filter `metadata.operator_action_required`
+   to list exactly what is waiting. This is the channel that works when nobody
+   reads the digest draft.
+2. **The digest draft itself**, in the operator's own mailbox, next to the
+   drafts it is asking them to send.
+
+**Remaining gap:** neither channel *pushes*. Both require the operator to go
+look — at `/admin/logs` or at their Drafts folder. Nothing here wakes anyone up
+if they don't. Closing that needs a real push channel (email to a second
+address that is actually sent, SMS, a Slack webhook), which is the same
+authorization problem as sending the reminders themselves.
 
 The permanent fix for the whole class of problem is a real send path: a Gmail
 MCP with send scope, or an SMTP/Resend sender invoked directly by this task.

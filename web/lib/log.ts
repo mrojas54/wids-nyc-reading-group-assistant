@@ -16,7 +16,7 @@ export type LogExtra = {
 
 export async function logServerAction(
   name: string,
-  status: "success" | "failure" | "no_action",
+  status: "success" | "failure" | "no_action" | "needs_action",
   summary?: string,
   error?: string,
   extra?: LogExtra,

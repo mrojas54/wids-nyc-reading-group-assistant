@@ -35,7 +35,7 @@ flowchart TD
     plain --> gmail
   end
 
-  gmail --> log["◇ Step 5<br/>INSERT command_log success row PER RECIPIENT<br/>delivery_mode='draft', key claimed only<br/>after that draft is confirmed"]
+  gmail --> log["◇ Step 5<br/>INSERT command_log needs_action row PER RECIPIENT<br/>delivery_mode='draft' — renders amber on /admin/logs<br/>key claimed only after that draft is confirmed"]
   log --> handoff["◇ Step 6<br/>summary draft to operator<br/>listing every unsent draft id"]
   handoff --> human(["👤 OPERATOR SENDS<br/>the task cannot"])
 
@@ -68,8 +68,10 @@ flowchart TD
 
 The Gmail MCP has no send tool — `create_draft` / `update_draft` only. This task
 composes each email and leaves it in the operator's Drafts folder; **the
-operator sends**. A created draft is logged `status='success'` with
-`metadata.delivery_mode='draft'`.
+operator sends**. A created draft is logged `status='needs_action'` (migration
+`029`) with `metadata.delivery_mode='draft'`, which derives to **warn** on
+`/admin/logs` — so a run holding unsent drafts shows amber rather than the green
+it showed under `success`, where it was indistinguishable from a clean run.
 
 Until 2026-08-12 the spec said "Send via Gmail MCP", which was unfollowable. The
 2026-08-11 run for meeting 37 rendered all 8 emails, could only draft them,
