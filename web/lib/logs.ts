@@ -7,7 +7,8 @@
 // The design (Claude Design handoff "Status Dashboard") asks for richer fields
 // than the table stores — `severity`, `who`, and a JSON `context`. We DERIVE
 // `severity` from `status`, and read the rest from real columns:
-//   - severity   ← status            (failure→error, no_action→warn, success→info)
+//   - severity   ← status            (failure→error, no_action/needs_action→warn,
+//                                     success→info)
 //   - who        ← actor             (migration 020; renders "—" when null)
 //   - durMs      ← duration_ms       (migration 020; drives the duration sort)
 //   - context    ← {source, name, status, ran_at} plus the migration-020
@@ -23,7 +24,12 @@ export type LogSource =
   | "edge_function"
   | "scheduled_task"
   | "slash_command";
-export type LogStatus = "success" | "failure" | "no_action";
+// `needs_action` (migration 029) means the run did its own work and a human must
+// now act for the outcome to be real — the canonical case is a scheduled task
+// that can only create a Gmail draft, because the Gmail MCP exposes no send
+// tool. It is deliberately distinct from `no_action` ("there was nothing to
+// do"): both are warn, but only one is waiting on a person.
+export type LogStatus = "success" | "failure" | "no_action" | "needs_action";
 export type LogSeverity = "info" | "warn" | "error";
 
 // Shape of a raw command_log row as returned by Supabase.
@@ -92,7 +98,7 @@ const RANGE_MS: Record<TimeRange, number> = {
 
 export function deriveSeverity(status: LogStatus): LogSeverity {
   if (status === "failure") return "error";
-  if (status === "no_action") return "warn";
+  if (status === "no_action" || status === "needs_action") return "warn";
   return "info";
 }
 

@@ -45,9 +45,18 @@ jobs:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-py311-specter2-v1
 
+      # --no-project is load-bearing, not decoration. This runs from the repo
+      # root, so without it uv resolves in project context and refuses the
+      # interpreter: `requires-python` is >=3.13 (see pyproject.toml) and the
+      # error is "The requested interpreter resolved to Python 3.11.x, which is
+      # incompatible with the project's Python requirement: >=3.13". The 3.11
+      # pin itself is required — on 3.13 uv's resolver silently installs an
+      # unrelated 2018 'optimum 0.1.0' instead of HuggingFace optimum.
+      # `--isolated` is NOT a substitute: it bypasses caches and config but
+      # still reads project.requires-python.
       - name: Run export script
         run: |
-          uv run --python 3.11 \
+          uv run --no-project --python 3.11 \
                  --with 'optimum[onnxruntime]' \
                  --with adapters \
                  --with 'torch>=2.6' \

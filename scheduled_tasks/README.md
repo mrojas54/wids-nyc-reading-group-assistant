@@ -20,6 +20,13 @@ For each `daily` or `weekly` file:
      - Gmail and Calendar MCPs configured at runtime level
 3. Test by running once manually; verify a row appears in `command_log`.
 
+`calendar-rsvp-sync` and `pre-meeting-reminder` both import
+`scripts/venue_keys.py` (venue-drift comparison — see
+[`docs/venue-drift.md`](../docs/venue-drift.md)), and `pre-meeting-reminder`
+and `availability-chase` both import `scripts/quotes.py`. Those runtimes need
+the repository checked out and importable from its root, not just the four
+environment values above.
+
 For `prune-paper-pdfs`, also set `PAPER_PAL_PRUNE_DRY_RUN=true` for the
 first scheduled runs. Flip it only after a clean dry-run, as described in
 [`prune-paper-pdfs.md`](prune-paper-pdfs.md).

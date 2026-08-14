@@ -7,7 +7,10 @@ import type { LogEvent, LogStatus, LogSeverity } from "@/lib/logs";
 import { SOURCE_META, IconChevRight, IconCopy } from "./icons";
 
 function StatusPill({ status }: { status: LogStatus }) {
-  const label = status === "no_action" ? "no action" : status;
+  const label =
+    status === "no_action" ? "no action"
+    : status === "needs_action" ? "needs action"
+    : status;
   return <span className={"statuspill " + status}>{label}</span>;
 }
 
