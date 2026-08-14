@@ -7,7 +7,9 @@ import type { LogEvent, LogStatus, LogSeverity } from "@/lib/logs";
 import { SOURCE_META, IconChevRight, IconCopy } from "./icons";
 
 function StatusPill({ status }: { status: LogStatus }) {
-  const label = status === "no_action" ? "no action" : status;
+  // "no_action" → "no action", "needs_action" → "needs action"; the two
+  // single-word statuses are unaffected.
+  const label = status.replace("_", " ");
   return <span className={"statuspill " + status}>{label}</span>;
 }
 

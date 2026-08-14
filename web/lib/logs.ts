@@ -7,7 +7,8 @@
 // The design (Claude Design handoff "Status Dashboard") asks for richer fields
 // than the table stores — `severity`, `who`, and a JSON `context`. We DERIVE
 // `severity` from `status`, and read the rest from real columns:
-//   - severity   ← status            (failure→error, no_action→warn, success→info)
+//   - severity   ← status            (failure→error, no_action/needs_action→warn,
+//                                     success→info)
 //   - who        ← actor             (migration 020; renders "—" when null)
 //   - durMs      ← duration_ms       (migration 020; drives the duration sort)
 //   - context    ← {source, name, status, ran_at} plus the migration-020
@@ -23,7 +24,10 @@ export type LogSource =
   | "edge_function"
   | "scheduled_task"
   | "slash_command";
-export type LogStatus = "success" | "failure" | "no_action";
+// `needs_action` (migration 029) means the run did its own work correctly but a
+// human must act for the outcome to be real — a drafted-but-unsent email. It is
+// distinct from `no_action`, which means there was genuinely nothing to do.
+export type LogStatus = "success" | "failure" | "no_action" | "needs_action";
 export type LogSeverity = "info" | "warn" | "error";
 
 // Shape of a raw command_log row as returned by Supabase.
@@ -92,7 +96,11 @@ const RANGE_MS: Record<TimeRange, number> = {
 
 export function deriveSeverity(status: LogStatus): LogSeverity {
   if (status === "failure") return "error";
-  if (status === "no_action") return "warn";
+  // Both amber, for different reasons: no_action = nothing to do, needs_action =
+  // work is done but parked on a human. Neither may fall through to the `info`
+  // default below — a pending draft rendering green is what let meeting 37 go
+  // out with nobody reminded (see migrations/029_command_log_needs_action.sql).
+  if (status === "no_action" || status === "needs_action") return "warn";
   return "info";
 }
 

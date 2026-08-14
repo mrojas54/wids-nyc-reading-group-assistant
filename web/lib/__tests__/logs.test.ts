@@ -40,6 +40,13 @@ describe("deriveSeverity", () => {
     expect(deriveSeverity("no_action")).toBe("warn");
     expect(deriveSeverity("success")).toBe("info");
   });
+
+  // Regression guard for migration 029: needs_action must not fall through to
+  // the `info` default. A drafted-but-unsent email rendering green is the exact
+  // failure this status was added to prevent.
+  it("maps needs_action to warn, not the info default", () => {
+    expect(deriveSeverity("needs_action")).toBe("warn");
+  });
 });
 
 describe("relativeTime", () => {

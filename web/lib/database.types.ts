@@ -174,6 +174,8 @@ export type Database = {
       }
       meetings: {
         Row: {
+          calendar_event_id: string | null
+          calendar_html_link: string | null
           created_at: string
           drive_folder_url: string | null
           form_url: string | null
@@ -188,6 +190,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          calendar_event_id?: string | null
+          calendar_html_link?: string | null
           created_at?: string
           drive_folder_url?: string | null
           form_url?: string | null
@@ -202,6 +206,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          calendar_event_id?: string | null
+          calendar_html_link?: string | null
           created_at?: string
           drive_folder_url?: string | null
           form_url?: string | null
