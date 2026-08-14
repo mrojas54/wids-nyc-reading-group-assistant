@@ -23,9 +23,13 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # --- Deno (edge-function type-check + lint) ---
+# Installs the latest stable Deno (currently 2.x, matching the repo's
+# supabase/functions target and CI's `deno-version: v2.x`). The install
+# script takes a concrete version tag, not a range, so pass no argument to
+# get latest stable rather than an invalid "v2.x" tag.
 if ! command -v deno >/dev/null 2>&1; then
-  echo "[install] installing deno v2.x"
-  curl -fsSL https://deno.land/install.sh | sh -s v2.x
+  echo "[install] installing latest stable deno"
+  curl -fsSL https://deno.land/install.sh | sh
 fi
 export PATH="$HOME/.deno/bin:$PATH"
 
