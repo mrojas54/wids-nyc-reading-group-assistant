@@ -40,6 +40,14 @@ describe("deriveSeverity", () => {
     expect(deriveSeverity("no_action")).toBe("warn");
     expect(deriveSeverity("success")).toBe("info");
   });
+
+  // migration 029. A task that could only leave a draft for a human to send
+  // must not read as all-clear — that is exactly how the 2026-08-11
+  // pre-meeting-reminder run left 8 members unreminded without anyone noticing.
+  it("maps needs_action to warn, not info", () => {
+    expect(deriveSeverity("needs_action")).toBe("warn");
+    expect(deriveSeverity("needs_action")).not.toBe("info");
+  });
 });
 
 describe("relativeTime", () => {

@@ -373,7 +373,7 @@ uv run --with httpx python scripts/collect_specter2_fixtures.py
 
 # 2. Run the export. This produces scripts/_specter2_export/specter2_int8.onnx
 #    and prints a SHA-256 you'll pin into code.
-uv run --python 3.11 \
+uv run --no-project --python 3.11 \
        --with 'optimum[onnxruntime]' \
        --with adapters \
        --with 'torch>=2.6' \
@@ -473,6 +473,17 @@ them somewhere durable when (not if) you hit them again.
   falls back to a 2018 namesake package called `optimum 0.1.0` because
   no modern HuggingFace `optimum` version satisfies the full stack on
   3.13. **Pin `--python 3.11`** explicitly.
+
+- **`--python 3.11` needs `--no-project` to work.** The repo's
+  `requires-python` is `>=3.13`, so running from the repo root puts uv in
+  project context and it refuses the interpreter outright:
+  `error: The requested interpreter resolved to Python 3.11.x, which is
+  incompatible with the project's Python requirement: >=3.13`. Passing
+  `--no-project` detaches the command from the project so the pin takes
+  effect. **`--isolated` does not work** — it ignores caches and config
+  but still reads `project.requires-python`. Every SPECTER2 command in
+  this doc and in the three script docstrings carries `--no-project` for
+  this reason; keep it there.
 
 - **Don't use `--with torch` without a version pin.** Transformers
   4.51+ requires torch ≥ 2.6 to load `.bin` state dicts safely
