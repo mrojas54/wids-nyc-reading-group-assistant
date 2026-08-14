@@ -34,14 +34,25 @@ Next.js portal for the WiDS NYC AI Reading Group.
 
 ## Contributing checks
 
-CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits high-severity dependency issues, then runs lint, type-checking, and unit tests. Run those same gates before web changes, and run the production build for deployment-sensitive changes:
+CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits
+high-severity dependency issues across the full tree, then runs lint,
+type-checking, and unit tests. Match those gates before web changes, and run
+the production build for deployment-sensitive changes:
 
 ```sh
+npm audit --audit-level=high
 npm run lint
 npm run typecheck
 npm run test
 npm run build
 ```
+
+The temporary `--omit=dev` audit exemption (2026-07-27 → 2026-08-05) is gone:
+`brace-expansion` 1.1.18 backported GHSA-mh99-v99m-4gvg, and the lockfile was
+refreshed with `npm update`. If a transitive advisory looks stuck again,
+check whether the lockfile is simply behind its own declared ranges before
+concluding there is no upstream fix — plain `npm install` / `npm ci` will not
+bump an already-satisfying pin.
 
 The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only, so Vite upgrades affect tests rather than the production bundle.
 

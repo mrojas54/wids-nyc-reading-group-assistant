@@ -192,14 +192,15 @@ The operator-side Python helpers under [scripts/](scripts/) (paper suggestion, Z
 push, arXiv taxonomy, email preview rendering) are managed with
 [uv](https://docs.astral.sh/uv/). Dependencies and tool config live in a single
 [pyproject.toml](pyproject.toml); the resolved set is pinned in the committed
-`uv.lock`.
+`uv.lock`. The project floor is **Python ≥3.13**, and CI runs
+`uv sync --frozen --python 3.13` — keep those two in lockstep.
 
 Install `uv` first if `uv --version` is unavailable; use the
 [official installer](https://docs.astral.sh/uv/getting-started/installation/)
 and restart the shell so its install directory is on `PATH`.
 
 ```sh
-uv sync                  # install the locked dependency set (creates .venv/)
+uv sync --python 3.13    # install the locked dependency set (creates .venv/)
 uv run pytest tests      # run the Python test suite
 uv run ruff check scripts tests
 uv run ty check          # type-check the scripts/ package
@@ -208,7 +209,11 @@ uv run ty check          # type-check the scripts/ package
 `uv sync --frozen` asserts the lockfile is in sync with `pyproject.toml` and is what
 CI runs — re-run `uv lock` after changing a dependency so the lock stays current.
 The optional `ml` extra (`uv sync --extra ml`) pulls the heavy torch/transformers
-stack needed only by the SPECTER2 embedding scripts.
+stack needed only by the SPECTER2 embedding scripts. Those three SPECTER2
+scripts and `.github/workflows/export-specter2.yml` stay on **`--python 3.11`**
+on purpose — on 3.13 uv's resolver can silently pick a wrong 2018 `optimum`
+namesake package. See [docs/admin-suggest.md](docs/admin-suggest.md)
+§ "Python and the ML stack".
 
 ## Repository layout
 

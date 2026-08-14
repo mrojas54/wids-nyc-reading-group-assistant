@@ -67,23 +67,35 @@ It has been annotated; reinstating its grid is design work and stays out of scop
 
 Lesson: grepping a wrong claim's wording does not find the places that acted on it.
 
-### 5. Head comments ship in delivered mail — and were leaking values
+### 5. Head comments shipped in delivered mail — and were leaking values — **DONE**
 
-Found while smoke-testing: `scripts/render_email_previews.py` does **not** strip
-HTML comments (unlike `scripts/welcome_availability.py`, which does). So every
-head comment ships inside the delivered email, and any `{{ token }}` written in
-live syntax inside a comment gets substituted. `rsvp-confirmation`'s comment was
-rendering as *"Template tokens are Mustache-style (**Maya**)"* — a real
-recipient's first name, shipped in a comment, in every send.
+Found while smoke-testing: `scripts/render_email_previews.py` did **not** strip
+HTML comments (unlike `scripts/welcome_availability.py`, which already did). So
+every head comment shipped inside the delivered email, and any `{{ token }}`
+written in live syntax inside a comment got substituted. `rsvp-confirmation`'s
+comment was rendering as *"Template tokens are Mustache-style (**Maya**)"* — a
+real recipient's first name, shipped in a comment, in every send.
 
-Fixed by de-delimiting 17 tokens across four templates (`availability-reminder`,
-`magic-link`, `pre-meeting-reminder`, `rsvp-confirmation`). Bodies untouched;
-both renderers verified clean afterwards.
+Interim mitigation: de-delimited 17 tokens across four templates
+(`availability-reminder`, `magic-link`, `pre-meeting-reminder`,
+`rsvp-confirmation`). Bodies untouched.
 
-**Still open (recommended, not done):** give `render_email_previews.render()` the
-same comment-stripping pass `welcome_availability.py` already has. Then head
-comments stop shipping at all and this class of leak is closed structurally
-rather than by convention.
+**Structural fix landed** in `97c7482` (`fix(email): strip HTML comments before
+substitution on every send path`):
+
+- Shared helper `scripts.render_email_previews.strip_html_comments()` lifts
+  Outlook conditionals to sentinels, strips the rest, restores conditionals.
+- Call sites before substitution: `render_pair()`,
+  `welcome_availability.compose()` (via a thin wrapper that maps
+  `RenderError` → `CompositionError`), and
+  `generate_prerequisites.render_new_paper_email()`.
+- `.txt` twins are untouched; their doc headers use `[[BEGIN:_doc]]` blocks.
+- Canonical contract: `docs/runbooks/transactional-emails.md` (Architecture).
+- Coverage: `tests/render_email_previews_test.py` and
+  `tests/welcome_availability_test.py`.
+
+Do **not** reopen this as open work. New send paths must call the shared
+stripper before substitution — that rule is now the remaining constraint.
 
 ---
 
@@ -187,7 +199,8 @@ thread is permission-denied.
 | `.claude/commands/wids-add-member.md` | Line 239 documents the no-send capability limit correctly; used as the wording source. |
 | `docs/runbooks/transactional-emails.md` | Per-template contract and which are draft-only. |
 | `scripts/welcome_availability.py` | The composer. Never mail the template through `render()` directly. |
-| `scripts/render_email_previews.py` | Does **not** strip comments — see §5. |
+| `scripts/render_email_previews.py` | Owns `strip_html_comments()`; `render_pair()` strips HTML before substitution — see §5. |
+| `scripts/generate_prerequisites.py` | Announcement send path; also strips via the shared helper. |
 
 ---
 
@@ -249,9 +262,15 @@ date, the message ID it was verified against, and how it was verified.**
 
 ## Out of scope
 
-Design standardization. The suite has measurable drift — `availability-reminder`
-alone uses a magenta `#c8226d` CTA, a 40px mark and no dot grid, while five
-others use green `#467560` at 48px — but reconciling that is a separate piece of
-work and must not be bundled into this investigation. Reinstating
-`pre-meeting-reminder`'s dot grid now that its stated reason is refuted belongs
-to that same separate effort.
+Design standardization beyond the mark-rendering investigation. As of PR #135
+the wordmark (48×48 mark + lockup) and CTA *skeleton* are shared fragments —
+see `docs/runbooks/transactional-emails.md` § Shared fragments. What remains
+out of scope for *this* investigation:
+
+- `availability-reminder`'s magenta `#c8226d` CTA color (deliberate
+  design-system exception; still per-template via `cta.bg` /
+  `cta.borderColor`).
+- Reinstating `pre-meeting-reminder`'s dotted grid now that its stated reason
+  is refuted.
+- Broader CTA-label / footer-link reconciliation (functional per-template
+  differences, not drift).
