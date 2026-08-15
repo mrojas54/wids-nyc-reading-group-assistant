@@ -1998,6 +1998,12 @@ WHERE m.status='done'
 
 (Catches meetings that auto-advanced to done in the past day.)
 
+> **Superseded 2026-08-15 — do not copy the query above.** The 36h ceiling is
+> narrower than the slack in `meeting-auto-advance`, so evening reading groups were
+> never thanked at all. The shipped window is 24h–7d with a `NOT EXISTS` idempotency
+> filter; see [scheduled_tasks/post-meeting-thanks.md](../../../scheduled_tasks/post-meeting-thanks.md).
+> The rest of this plan is left as the historical record.
+
 ## Step 2 — Idempotency
 
 For each, check if thanks already sent:
