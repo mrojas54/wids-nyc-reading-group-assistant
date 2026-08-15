@@ -23,7 +23,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `007_members_select_grant.sql` | Grants authenticated reads on `members` so portal server actions can resolve the signed-in member row. **Table-level `SELECT` — over-broad.** Postgres treats that as every column, so it undid the `002` column lock. Corrected forward by `031`. |
 | `008_meeting_attendance_grants.sql` | Pins authenticated grants for RSVP reads/writes and the attendance sequence. |
 | `009_papers_zotero_item_key.sql` | Stores the Zotero group-library item key after companion pushes. |
-| `010_paper_embeddings.sql` | Enables `pgvector`; creates the `paper_embeddings` cache used by paper-suggestion ranking. |
+| `010_paper_embeddings.sql` | Enables `pgvector`; creates the `paper_embeddings` cache used by paper-suggestion ranking. Granted `SELECT` to `anon`/`authenticated` and claimed RLS was off. `ensure_rls` turned RLS on with no policies, and default `GRANT ALL` was never revoked. Corrected by `033`. |
 | `011_papers_s2_paper_id.sql` | Adds `papers.s2_paper_id` for Semantic Scholar lookups. |
 | `012_papers_s2_paper_id_constraint.sql` | Replaces the partial S2-ID index with a full unique constraint for Supabase upserts. |
 | `013_paper_companions.sql` | Creates the `paper_companions` table (JSONB Paper Pal synthesis payload, keyed by `paper_id`) and its four RLS policies. |
@@ -46,6 +46,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `030_meetings_grants.sql` | Revokes the leftover default `GRANT ALL` on `meetings` from `anon`/`authenticated` and pins the table to `SELECT`-only for `authenticated` (nothing for `anon`), matching the one policy that actually exists (`meetings_select`). Closes a latent gap: RLS had no write policy on `meetings`, so the stale grant was harmless today, but it was the widest possible ceiling for whatever write policy gets added next. All current `meetings` writes already go through the service-role client (`web/lib/paperpal/inbox-actions.ts`), so this changes no observable behavior. Also drops the now-unused `USAGE`/`SELECT` grant on `meetings_id_seq`. |
 | `031_members_column_grants.sql` | Restores the `members` column lock. `REVOKE ALL` from `anon`/`authenticated`, then `GRANT SELECT (id, name, role, auth_user_id)` to `authenticated` — the four columns the portal session client actually reads (`auth_user_id` is what `007` needed; `007`'s table-level `SELECT` had re-opened `email` / `phone` / `whatsapp` / `active` / `vouched_by`). Also drops leftover default write grants and the unused `members_id_seq` USAGE, matching `030`'s meetings posture. No row rewrite. After apply: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/members_column_grants_test.sql`. |
 | `032_replace_my_availability.sql` | Adds `replace_my_availability(meeting_id, range_starts[], range_ends[])` — a `SECURITY DEFINER` RPC that deletes and re-inserts the caller's availability rows in one transaction, bound to `current_member_id()` and `meetings.status = 'prep'`. Also adds `UNIQUE (meeting_id, member_id, range_start)` so overlapping submits cannot duplicate a day. Replaces the two-round-trip delete-then-insert in `web/app/availability/actions.ts`. Preview for duplicate days before applying (see migration header). After apply: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/replace_my_availability_test.sql`. |
+| `033_paper_embeddings_grants.sql` | Pins `paper_embeddings` to service-role-only: `REVOKE ALL` from `anon`/`authenticated`, no re-grant. Matches how `embedding-cache.ts` already reads and writes (service client) and how `ensure_rls` already hides the table from browser roles (RLS on, no policies). Forwards the table comment so it no longer claims SELECT-only + RLS off. |
 
 ## `ensure_rls` event trigger
 
@@ -89,6 +90,8 @@ browser (anon/authenticated). `command_log` is the one accepted exception
 - `replace_my_availability(int, timestamptz[], timestamptz[])` exists and is
   executable by `authenticated`. `availability` has a unique index on
   `(meeting_id, member_id, range_start)`.
+- `paper_embeddings` is service-role-only after `033`: `anon` and
+  `authenticated` hold no table privileges; RLS remains on with no policies.
 - `meetings.updated_at` exists, is `NOT NULL`, and equals `created_at` on every
   row that has not been edited since migration 026; the
   `meetings_set_updated_at` trigger is attached to `meetings`, and

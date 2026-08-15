@@ -232,7 +232,9 @@ insert **and** skip the email, and count it as `venue_drift_repeat` in Step 5.
 `status='no_action'` is deliberate — `/admin/logs` derives severity from
 status and renders `no_action` as a warning, which is what an unresolved drift
 should look like. Do not invent a new status value; the `command_log.status`
-CHECK admits only `success`, `failure`, `no_action`.
+CHECK admits `success`, `failure`, `no_action`, and `needs_action`
+(migration 029). Drift stays `no_action` (warn) — nothing is waiting
+on a person until they decide which venue is right.
 
 Then email the operator (`SELECT email, name FROM members WHERE role='operator'`):
 

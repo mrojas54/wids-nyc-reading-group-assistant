@@ -41,7 +41,7 @@ The route uses the same leader-role gate as `/admin/suggest`:
 
 | Caller | Result |
 |---|---|
-| Not signed in | Middleware redirects protected `/admin/*` requests to `/`; if the server gate is reached without a user, it redirects to `/auth`. |
+| Not signed in | Middleware redirects protected `/admin/*` requests to `/`; if the server gate is reached without a user, it also redirects to `/` (the magic-link form). There is no `/auth` page. |
 | Signed-in member without `operator`, `leader`, or `admin` role | Redirects to `/dashboard`. |
 | `operator`, `leader`, or `admin` | Can view the log page. |
 
@@ -247,7 +247,7 @@ npm test -- lib/__tests__/logs.test.ts lib/__tests__/log.test.ts
 
 | Symptom | Check |
 |---|---|
-| `/admin/logs` redirects to `/auth` | The Supabase session is missing or expired. Sign in again. |
+| `/admin/logs` redirects to `/` | The Supabase session is missing or expired. Sign in again. |
 | `/admin/logs` redirects to `/dashboard` | The roster row does not have `role` set to `operator`, `leader`, or `admin`. |
 | Header says "Couldn't load status" | Confirm `SUPABASE_SERVICE_ROLE_KEY` is present in the Vercel `web` project and the migration has been applied. |
 | Rows are missing enrichment fields | Older rows and writers that do not pass the optional fifth argument keep those columns null/defaulted. |
