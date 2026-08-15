@@ -162,9 +162,14 @@ improvement. Write `result.suggested_location` — Google's string with the `|`
 tagline and the trailing country removed, original casing kept:
 `Prince Tea House Ktown, 324 5th Ave, New York, NY 10001`.
 
+Dollar-quote every interpolated text value (`$wids$…$wids$`), never
+single quotes. Venue strings contain apostrophes (`Jack's Wife Freda` —
+the 2026-08-10 incident). If a value itself contains `$wids$`, pick
+another tag. `<meeting_id>` is an integer and stays unquoted.
+
 ```sql
 UPDATE meetings
-SET location = '<result.suggested_location>'
+SET location = $wids$<result.suggested_location>$wids$
 WHERE id = <meeting_id> AND location IS NULL;
 ```
 
@@ -193,22 +198,31 @@ rather than daily:
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'calendar-rsvp-sync', 'no_action',
-        'meeting=<id>: venue drift held for operator — DB "<db_location>" vs Calendar "<calendar_location>"',
-        'calendar-rsvp-sync:venue-drift:meeting=<id>:<drift_slug(result)>',
+        format(
+          'meeting=%s: venue drift held for operator — DB %s vs Calendar %s',
+          <id>,
+          $wids$<db_location>$wids$,
+          $wids$<calendar_location>$wids$
+        ),
+        format(
+          'calendar-rsvp-sync:venue-drift:meeting=%s:%s',
+          <id>,
+          $wids$<drift_slug(result)>$wids$
+        ),
         jsonb_build_object(
           'event',                'venue_drift',
           'classification',       'material',
           'meeting_id',           <id>,
-          'calendar_event_id',    '<event_id>',
-          'db_location',          '<db_location>',
-          'calendar_location',    '<calendar_location>',
-          'suggested_location',   '<result.suggested_location>',
-          'db_address_key',       '<result.db_address_key>',
-          'calendar_address_key', '<result.calendar_address_key>',
+          'calendar_event_id',    $wids$<event_id>$wids$,
+          'db_location',          $wids$<db_location>$wids$,
+          'calendar_location',    $wids$<calendar_location>$wids$,
+          'suggested_location',   $wids$<result.suggested_location>$wids$,
+          'db_address_key',       $wids$<result.db_address_key>$wids$,
+          'calendar_address_key', $wids$<result.calendar_address_key>$wids$,
           'auto_write_withheld',  true,
           'resolution_required',  true,
-          'event_updated',        '<event.updated>',
-          'meeting_updated_at',   '<meeting_updated_at or null>'
+          'event_updated',        $wids$<event.updated>$wids$,
+          'meeting_updated_at',   $wids$<meeting_updated_at or null>$wids$
         ));
 ```
 
@@ -242,7 +256,7 @@ If the Calendar is right, run this — I've tidied Google's string, but the
 "<Name> - <Neighborhood>" house style needs your eye, so edit before running:
 
   UPDATE meetings
-  SET location = '<result.suggested_location>'
+  SET location = $wids$<result.suggested_location>$wids$
   WHERE id = <id>;
   -- expect: UPDATE 1
 
