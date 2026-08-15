@@ -10,7 +10,7 @@ export default async function SuggestPage() {
   try {
     await requireLeaderRole();
   } catch (e) {
-    if (e instanceof UnauthorizedError) redirect("/auth");
+    if (e instanceof UnauthorizedError) redirect("/");
     if (e instanceof ForbiddenError) redirect("/dashboard");
     throw e;
   }

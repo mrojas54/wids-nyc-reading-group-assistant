@@ -13,7 +13,8 @@ assessment workflow specified in
 All three require a Supabase JWT in `Authorization: Bearer ...`.
 `analyze-paper` uses the `can_synthesize_paper_pal` RPC (migration 017);
 `analyze-hint` and `analyze-socratic` use the looser attending-member gate
-in `_shared/gate.ts` so RSVP'd readers can use assessment helpers.
+in `_shared/gate.ts` so RSVP'd readers and the meeting's `leader_id` (even
+without an RSVP) can use assessment helpers.
 
 ## Layout
 
