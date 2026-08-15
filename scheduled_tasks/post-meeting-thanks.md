@@ -1,6 +1,6 @@
 ---
 schedule: daily
-description: Send thank-you note day after each meeting; reading_group needs leader's 1-line addition
+description: Draft thank-you note day after each meeting (operator sends); reading_group needs leader's 1-line addition
 ---
 
 # scheduled_tasks/post-meeting-thanks
@@ -17,13 +17,58 @@ FROM meetings m
 LEFT JOIN papers p ON p.id = m.paper_id
 LEFT JOIN members leader ON leader.id = m.leader_id
 WHERE m.status='done'
-  AND m.scheduled_at >= now() - interval '36 hours'
-  AND m.scheduled_at <  now() - interval '24 hours';
+  AND m.scheduled_at <  now() - interval '24 hours'
+  AND m.scheduled_at >= now() - interval '7 days'
+  AND NOT EXISTS (
+        SELECT 1 FROM command_log cl
+        WHERE cl.idempotency_key = 'post-meeting-thanks:meeting=' || m.id)
+ORDER BY m.scheduled_at;
 ```
 
-(Catches meetings that auto-advanced to done in the past day.)
+The 24h lower bound is the "day after the meeting" intent. The 7-day upper bound
+is **slack, not scheduling** — what bounds the work is the `NOT EXISTS` filter,
+which folds the Step 2 key check into the scan so a wide window still cannot
+re-thank an already-thanked meeting. Step 2 still runs per meeting as the race
+backstop.
+
+Meetings with `scheduled_at IS NULL` (a few legacy `admin` rows) never match, since
+NULL comparisons are false. They are out of scope by construction, not by accident.
+
+**Safety cap: if this query returns more than 2 rows, stop and report instead of
+sending.** This task emails every active member, and a fortnightly cadence puts at
+most one meeting in a 7-day window. More than that means something upstream is
+wrong — a bulk status edit, a restored backup — and a blast to the whole roster is
+not how that should be discovered.
+
+### Why 7 days and not 36 hours
+
+The 36h ceiling was the bug. A meeting only becomes `done` when
+`meeting-auto-advance` first runs at least 24h after `scheduled_at`, and daily runs
+are 24h apart, so a meeting is somewhere between 24h and 48h old the first time it
+is visible here. A 24–36h window covered only the first half of that range.
+
+Reading groups meet at 18:30 ET and the daily tasks run mid-morning, which put
+every reading group at ~38h old — three hours past the ceiling — on the first run
+that could have seen it, and outside the window forever after. The result was not a
+delayed email but no email: as of 2026-08-15, `command_log` had never once written
+a `post-meeting-thanks:meeting=<id>` key, across 21 completed meetings going back to
+2024-11-05. Meeting #37 (2026-08-13) was thanked only via a manual catch-up.
+
+7 days is far wider than any plausible slack (a missed run, a weekend, a laptop that
+was closed) while still short enough that no historical meeting can re-enter scope:
+when this was changed, the next-oldest unthanked `done` meeting was 56 days back, so
+the widened window needed no backfill suppression rows to stay safe. A meeting that
+goes unthanked for a full week drops out permanently, which is deliberate — a
+thank-you that arrives eight days late is worse than none. Note the filter is on
+`scheduled_at`, not on when the row became `done`, so marking an old meeting `done`
+today does not drag it back into scope.
 
 ## Step 2 — Idempotency
+
+Step 1's `NOT EXISTS` already filters these out, so in a healthy run this check is
+redundant — keep it anyway. It is what makes the window width a performance
+question rather than a correctness one, and it closes the gap between Step 1's scan
+and the send.
 
 For each, check if thanks were already sent — keyed on the exact
 `idempotency_key` written in Step 4 (no brittle `summary LIKE` scan):
@@ -43,11 +88,11 @@ The index is partial (`WHERE idempotency_key IS NOT NULL`), so the daily
 
 **This key means "members have been emailed," not "the run did something."** The
 reading_group path (Step 3b) touches a meeting across two runs and writes a
-*different* key on the first one; only the run that actually sends to members
+*different* key on the first one; only the run that actually drafts to members
 writes `post-meeting-thanks:meeting=<id>`. Writing this key when nothing was
 sent would permanently suppress the send.
 
-## Step 3a — type='admin': auto-send
+## Step 3a — type='admin': draft the recap
 
 Recipients: active members.
 
@@ -67,7 +112,9 @@ Here's where we landed:
 I'll be in touch with reminders as we get closer.
 ```
 
-Send via Gmail MCP. Log success.
+**Draft it, do not send it.** Create one Gmail draft addressed to the active
+members and leave it for the operator to send — see "Do not add a send path"
+below. Log with `status='needs_action'` per Step 4.
 
 ## Step 3b — type='reading_group': leader-augmented
 
@@ -114,19 +161,37 @@ in Gmail and members would never be thanked.
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
-        'Leader draft created for meeting=<id>, awaiting leader line',
+VALUES ('scheduled_task', 'post-meeting-thanks', 'needs_action',
+        'Leader draft created for meeting=<id>, awaiting operator send then leader line',
         'post-meeting-thanks:leader-draft:meeting=<id>',
         jsonb_build_object('meeting_id', <id>, 'meeting_type', 'reading_group',
-                           'awaiting_leader_line', true, 'emails_sent', 0));
+                           'awaiting_leader_line', true,
+                           'operator_action_required', true, 'emails_sent', 0));
 ```
-`status='success'` because the drafting action succeeded; `emails_sent: 0` is
-what records that nothing went out.
+`needs_action`, not `success`: the draft cannot reach the leader until the operator
+sends it, so this row is a request directed at them and belongs in amber on
+`/admin/logs`. `emails_sent: 0` records that nothing went out.
 
-### 3b-ii — later run: send, with or without the leader's line
+**Known limitation in the clock.** 3b-ii ages this row from its `ran_at` — when the
+draft was *created* — because the task cannot observe when the operator actually
+sends it. If the leader draft sits unsent for more than a day, the 24h fallback
+fires and drafts the members' thanks with the placeholder stripped, pre-empting a
+leader who never had a chance to reply. The practical rule: send the leader draft
+the day it appears, or expect the un-augmented version. Closing this properly needs
+a signal the task can read (an operator-flipped flag, or a reply-detection pass) —
+it must not be closed by giving the task send capability.
 
-Reached when the leader-draft row exists but the Step 2 key still does not. Age
-the draft:
+### 3b-ii — later run: draft to members, with or without the leader's line
+
+Reached when the leader-draft row exists but the Step 2 key still does not.
+
+This path depends entirely on the meeting still being in Step 1's window a day
+after its own leader draft was written. Under the old 36h ceiling it never was,
+which made this whole section dead code — the draft would sit in Gmail and members
+would never hear anything. The 7-day window is what makes it reachable, and it
+gives the leader roughly six days to reply rather than a single run.
+
+Age the draft:
 ```sql
 SELECT ran_at FROM command_log
 WHERE idempotency_key = 'post-meeting-thanks:leader-draft:meeting=<id>';
@@ -144,41 +209,47 @@ this fallback never fires. That interaction is the design, not a race.
 
 ### V1 fallback — leader never replied
 
-Send the draft to active members with the `[YOUR 1-LINE ADDITION HERE]`
-placeholder line removed.
+Create the members' Gmail draft with the `[YOUR 1-LINE ADDITION HERE]` placeholder
+line removed. **Draft, not send** — the operator presses send, exactly as on the
+clean path.
 
-The email still went out, so this degraded send is logged with `status='success'`
-— the same valid status as a clean send (the only difference is the missing
-leader line). `command_log.status` is CHECK-constrained to
-`('success', 'failure', 'no_action')`, so there is no `partial` status to use;
-`no_action` would be wrong (an email *was* sent) and `failure` would be wrong (it
-succeeded). Write the **same** `idempotency_key` as a clean send (so the
-status-agnostic Step 2 check still blocks a re-send), and record the degraded
-nature with a `metadata.degraded` flag — that is the only thing distinguishing
-this row from a clean Step 4 send:
+Write the **same** `idempotency_key` as a clean run (so the status-agnostic Step 2
+check still blocks a duplicate), and record the degraded nature with a
+`metadata.degraded` flag — that is the only thing distinguishing this row from a
+clean Step 4 row:
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
-        'Sent thanks for meeting=<id> type=reading_group (leader line missing)',
+VALUES ('scheduled_task', 'post-meeting-thanks', 'needs_action',
+        'Members draft ready for meeting=<id> type=reading_group (leader line missing)',
         'post-meeting-thanks:meeting=<id>',
         jsonb_build_object('meeting_id', <id>, 'meeting_type', 'reading_group',
-                           'degraded', 'leader_no_reply'));
+                           'degraded', 'leader_no_reply',
+                           'operator_action_required', true,
+                           'recipients', <n>, 'drafts_created', 1, 'emails_sent', 0));
 ```
 
-On the `/admin/logs` page this renders as `info` severity (see
-`deriveSeverity` in `web/lib/logs.ts`: `success→info`), which is the right signal
-— the send succeeded, it was just missing the leader's one-line addition.
+On `/admin/logs` this renders as `warn` severity (see `deriveSeverity` in
+`web/lib/logs.ts`: `needs_action→warn`), which is the right signal — a draft is
+sitting in the operator's mailbox waiting on them, and amber is what surfaces it.
 
 ## Step 4 — Log
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-VALUES ('scheduled_task', 'post-meeting-thanks', 'success',
-        'Sent thanks for meeting=<id> type=<type>',
+VALUES ('scheduled_task', 'post-meeting-thanks', 'needs_action',
+        'Members draft ready for meeting=<id> type=<type>',
         'post-meeting-thanks:meeting=<id>',
-        jsonb_build_object('meeting_id', <id>, 'meeting_type', '<type>'));
+        jsonb_build_object('meeting_id', <id>, 'meeting_type', '<type>',
+                           'operator_action_required', true,
+                           'recipients', <n>, 'drafts_created', 1, 'emails_sent', 0));
 ```
+`needs_action` rather than `success` because the run's own work finished but the
+message has not reached anyone — a human still has to press send. It derives to
+`warn` on `/admin/logs`, so a forgotten draft shows up amber instead of hiding
+inside a green "success" row. Reserve `success` for a run that needed nothing
+from the operator.
+
 The degraded leader-no-reply fallback (Step 3b) logs the **same**
 `idempotency_key` (`'post-meeting-thanks:meeting=<id>'`) so the status-agnostic
 Step-2 check blocks a later duplicate. Only one row per meeting can carry this
@@ -191,7 +262,7 @@ row with a NULL key:
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'post-meeting-thanks', 'no_action',
-        'No meetings wrapped 24-36h ago',
+        'No unthanked meetings in the 24h-7d window',
         NULL,
         jsonb_build_object('window_matches', 0, 'emails_sent', 0,
                            'reason', 'no_meetings_in_window'));
@@ -199,25 +270,54 @@ VALUES ('scheduled_task', 'post-meeting-thanks', 'no_action',
 
 ### Key inventory
 
-Three keys, and only the second one means "members were emailed":
+Three keys, and only the second one means "the members' message has been handed
+off":
 
 | Key | Written by | Meaning |
 |-----|-----------|---------|
-| `post-meeting-thanks:leader-draft:meeting=<id>` | 3b-i | Leader draft exists; clock started. Does **not** block the send. |
-| `post-meeting-thanks:meeting=<id>` | Step 4, the 3b-ii fallback, or a manual operator send | Members were emailed. Blocks everything further for this meeting. |
+| `post-meeting-thanks:leader-draft:meeting=<id>` | 3b-i | Leader draft exists; clock started. Does **not** block the members' draft — Step 1 deliberately filters on the second key only, so the meeting stays in scope for 3b-ii. |
+| `post-meeting-thanks:meeting=<id>` | Step 4, the 3b-ii fallback, or a manual operator send | The members' draft exists (or the operator already sent). Blocks everything further for this meeting. |
 | `NULL` | the `no_action` row | Nothing qualified. Exempt from the unique index, so it repeats daily. |
+
+Note the second key is claimed when the **draft** is created, not when the mail
+goes out — the task cannot observe the send, since a human performs it. That is
+the correct trade: the failure it must prevent is drafting the same thanks twice,
+and an unsent draft stays visible as an amber `needs_action` row on `/admin/logs`.
 
 ## Schema facts
 
-Verified 2026-08-05 against project `dmyulakudbdegwkqgelx`. These have bitten
+Re-verified 2026-08-15 against project `dmyulakudbdegwkqgelx`. These have bitten
 past runs, so check here before writing a new `command_log` insert:
 
 - The timestamp column is **`ran_at`**, not `created_at`. A `RETURNING created_at`
   aborts the whole insert.
-- `status` CHECK: `('success', 'failure', 'no_action')` — no `partial`.
+- `status` CHECK: `('success', 'failure', 'no_action', 'needs_action')` — no
+  `partial`. `needs_action` was added by
+  [migration 029](../migrations/029_command_log_needs_action_status.sql) and is the
+  correct status for "a draft is waiting on the operator."
 - `source` CHECK: `('slash_command', 'scheduled_task', 'server_action')`.
 - `metadata` is `jsonb NOT NULL DEFAULT '{}'`. It has a default, so an insert
   omitting it succeeds — but pass it explicitly so rows carry real context.
 - `command_log_idempotency_key_unique` is a **partial** unique index
   (`WHERE idempotency_key IS NOT NULL`). A duplicate trips SQLSTATE 23505 —
   treat that as "already handled," not as a failure.
+
+## Do not add a send path — this is policy, not a limitation
+
+**The operator has ruled that nothing in this repo may send email as them.** Every
+member-facing message is drafted and a human presses send. That is the intended
+design, not a capability gap waiting on someone to wire a sender. The same rule
+governs [`pre-meeting-reminder.md`](pre-meeting-reminder.md) and
+[`docs/runbooks/transactional-emails.md`](../docs/runbooks/transactional-emails.md).
+
+Until 2026-08-15 this spec said "send" in Step 3a and in the 3b-ii fallback. That
+was an oversight, not an exemption — the policy commit that reframed the other
+specs simply missed this file. The wording had never caused a wrongful send only
+because the 36h window bug meant neither path had ever executed. Fixing that window
+made both paths live, which is why they were converted to drafts in the same change.
+
+Those send routes are technically reachable — Composio catalogues
+`GMAIL_SEND_EMAIL` and `GMAIL_SEND_DRAFT`, and the Gmail MCP may expose a
+`send_message` tool. **Reachable is not permitted.** A future run that finds a send
+tool available must not read availability as permission. Only the operator can
+change this, in their own words.
