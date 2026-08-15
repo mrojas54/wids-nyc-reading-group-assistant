@@ -258,10 +258,12 @@ For each non-submitter row:
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent reminder meeting=<meeting_id> member=<member_id> to=<email>',
-           'availability-chase:meeting=<meeting_id>:member=<member_id>',
+           format('Sent reminder meeting=%s member=%s to=%s',
+                  <meeting_id>, <member_id>, $wids$<email>$wids$),
+           format('availability-chase:meeting=%s:member=%s',
+                  <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_reminder', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>'));
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$));
    ```
 
 ### 5d — Confirm back to operator
@@ -329,8 +331,10 @@ For each submitter row:
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent thanks meeting=<meeting_id> member=<member_id> to=<email>',
-           'availability-chase:thanks:meeting=<meeting_id>:member=<member_id>',
+           format('Sent thanks meeting=%s member=%s to=%s',
+                  <meeting_id>, <member_id>, $wids$<email>$wids$),
+           format('availability-chase:thanks:meeting=%s:member=%s',
+                  <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_thanks', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>'));
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$));
    ```
