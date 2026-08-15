@@ -413,8 +413,17 @@ Current keys:
 | `/wids-add-member` welcome send (after operator confirms) | **Same key** as the chase reminder above — deliberate namespace share so the nightly chase does not re-nudge |
 | Availability thank-you to one submitter | `availability-chase:thanks:meeting=<meeting_id>:member=<member_id>` |
 | Pre-meeting reminder run for one meeting | `pre-meeting-reminder:meeting=<id>` |
-| Post-meeting thanks run for one meeting | `post-meeting-thanks:meeting=<id>` |
+| Post-meeting thanks — leader draft queued (reading_group, first run) | `post-meeting-thanks:leader-draft:meeting=<id>` |
+| Post-meeting thanks — members emailed (admin, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
 | New-paper announcement drafts for one paper | `new-paper-announcement:paper=<paper_id>` |
+
+`post-meeting-thanks` for `reading_group` meetings spans **two daily runs**.
+The first writes only the `leader-draft` key (does **not** mean members were
+emailed). The second run — after the leader replies, or the degraded
+no-reply fallback — writes `post-meeting-thanks:meeting=<id>`, which is the
+status-agnostic "already handled" gate. Do not write the send key when only
+the leader draft exists, or the member send is permanently suppressed. Full
+path: `scheduled_tasks/post-meeting-thanks.md`.
 
 `availability-chase` operator alerts intentionally do **not** use
 `idempotency_key`; they use `metadata.kind = 'operator_alert'` plus

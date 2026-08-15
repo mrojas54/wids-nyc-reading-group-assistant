@@ -68,6 +68,10 @@ browser (anon/authenticated). `command_log` is the one accepted exception
   `papers.companion_url`, `papers.s2_paper_id`, `papers.zotero_item_key`,
   `papers.prerequisites`, `availability.created_at`, the
   `current_member_id()` function, and 10 RLS policies.
+- `meetings.packets_sent_at` is **absent** after `024`. Derive Paper Pal
+  readiness from `paper_companions.generated_at` (see migration header).
+  Active operator prompts that still queried the old column — notably
+  `/wids-status` — were updated to join `paper_companions` instead.
 - Paper Pal artifacts exist: `paper_companions`,
   `paper_socratic_turns`, `paper_embeddings`, the
   `upsert_paper_companion()`, `can_synthesize_paper_pal(int)`, and
