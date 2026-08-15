@@ -59,6 +59,7 @@ flowchart TD
 |---|---|
 | `.claude/commands/wids-add-member.md` | Operator slash command — insert/reactivate, compose, draft, log |
 | `migrations/023_members_vouched_by.sql` | Nullable self-FK `members.vouched_by` + no-self CHECK + partial index |
+| `migrations/031_members_column_grants.sql` | Portal sessions can `SELECT` only `id`, `name`, `role`, `auth_user_id`. `vouched_by` / `email` / `phone` stay on the service-role client (applied 2026-08-15) |
 | `assets/emails/template/welcome-availability.{html,txt}` | Template pair with `BEGIN-BLOCK` / `[[BEGIN:]]` markers; HTML hosts `__WORDMARK_BLOCK__` / `__CTA_BLOCK__` |
 | `assets/emails/template/_{wordmark,cta,footer_brand}_shared.html` | Shared fragments spliced by `splice_shared_blocks()` before comment stripping |
 | `scripts/welcome_availability.py` | Block composer; preview via `uv run python -m scripts.welcome_availability` |
@@ -102,6 +103,7 @@ Blurb copy depends on who is sending:
 - **HTML tokens are escaped** by the composer; the `.txt` twin is not. Do not double-escape.
 - **Mark will be missing** when the operator sends from Gmail compose — verified; see `docs/runbooks/email-client-behavior.md`. Everything else survives via `bgcolor` attributes.
 - **Do not log the chase idempotency key for an unsent draft.** That silences `availability-chase` for a member who never got mail.
+- **Read `vouched_by` with the service-role client.** After `031`, an authenticated portal session cannot `SELECT` that column.
 
 ## Preview and tests
 

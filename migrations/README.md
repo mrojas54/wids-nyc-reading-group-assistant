@@ -1,12 +1,22 @@
 # Database migrations
 
 SQL migrations for the WiDS NYC reading-group Supabase project, applied
-**in numeric order**. They are hand-applied — paste each file
-into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool.
-There is no migration-tracking table; filenames define order only.
+**in numeric order**. Apply a new file by pasting it into the Supabase SQL
+Editor, or with the Supabase MCP `apply_migration` tool (omit the
+`BEGIN;` / `COMMIT;` wrapper — `apply_migration` runs in its own
+transaction).
 
-Because of that, **do not edit a migration that has already been applied** —
-not even its comments. Changing a landed file updates the repository but not
+Filenames define apply order. MCP `apply_migration` also writes a row
+to `supabase_migrations.schema_migrations`. A SQL Editor paste does
+not. Do not treat a missing history row as "not applied" — check the
+object itself (see post-migration verification).
+
+The live project is through `033` as of 2026-08-15 (MCP history names
+`031_members_column_grants`, `032_replace_my_availability`,
+`033_paper_embeddings_grants`).
+
+**Do not edit a migration that has already been applied** — not even
+its comments. Changing a landed file updates the repository but not
 any database that already ran it, so the two silently disagree. Correct a
 landed migration with a new forward migration instead (see `025`, which
 re-applies a `COMMENT` that was edited in place on `023`). Editing an
@@ -44,9 +54,9 @@ unapplied migration you have not yet run anywhere is fine.
 | `028_meetings_calendar_event.sql` | Adds nullable `meetings.calendar_event_id` and `meetings.calendar_html_link` plus a partial unique index on the id, so the Google Calendar event behind a meeting is identified by a stored key instead of the `scheduled_at` + `WiDS NYC%` title search that `calendar-rsvp-sync` Step 2 itself flagged as a V1 shortcut. Also gives `links.calendar` in the RSVP thank-you a real source, replacing `meetings.calendar_ics_url` — a column named by the spec that has never existed in this schema. **Not backfilled and not backfillable:** an event id lives only in Google's copy, so every pre-`028` row stays NULL and consumers must keep the title search as a documented fallback rather than reading NULL as "no event exists". Populated at booking time by `/wids-schedule-reading-group` and `/wids-schedule-admin`. Purely additive (two nullable `ADD COLUMN`s, one index) — no `UPDATE`, no confirmation needed. Regenerate `web/lib/database.types.ts` after applying. |
 | `029_command_log_needs_action_status.sql` | Widens the `command_log_status_check` CHECK to add a fourth status, `needs_action`: the run finished its own work and a **human must now act** for the outcome to be real. Exists because the three original statuses could not express that — `success` renders `info`/green on `/admin/logs`, so a run holding 8 unsent Gmail drafts looked identical to a clean one, and `no_action` renders warn but is untrue and collides with the genuine nothing-to-do case. Maps to **warn** in `web/lib/logs.ts`, rendered amber rather than `no_action`'s neutral grey. The standing producer is any member-facing scheduled task, since the Gmail MCP has no send tool and those tasks terminate in a draft the operator sends. Widening a CHECK cannot invalidate existing rows, so there is no backfill and no row rewrite; `ADD CONSTRAINT` does take a brief ACCESS EXCLUSIVE lock and re-validate the table, which is immaterial on a small service-role-only table. `DROP ... IF EXISTS` + `ADD` in one transaction, so it is re-runnable and a failure leaves the original constraint in place. No confirmation needed. `status` is typed as plain `string` in `web/lib/database.types.ts`, so no regeneration is required. |
 | `030_meetings_grants.sql` | Revokes the leftover default `GRANT ALL` on `meetings` from `anon`/`authenticated` and pins the table to `SELECT`-only for `authenticated` (nothing for `anon`), matching the one policy that actually exists (`meetings_select`). Closes a latent gap: RLS had no write policy on `meetings`, so the stale grant was harmless today, but it was the widest possible ceiling for whatever write policy gets added next. All current `meetings` writes already go through the service-role client (`web/lib/paperpal/inbox-actions.ts`), so this changes no observable behavior. Also drops the now-unused `USAGE`/`SELECT` grant on `meetings_id_seq`. |
-| `031_members_column_grants.sql` | Restores the `members` column lock. `REVOKE ALL` from `anon`/`authenticated`, then `GRANT SELECT (id, name, role, auth_user_id)` to `authenticated` — the four columns the portal session client actually reads (`auth_user_id` is what `007` needed; `007`'s table-level `SELECT` had re-opened `email` / `phone` / `whatsapp` / `active` / `vouched_by`). Also drops leftover default write grants and the unused `members_id_seq` USAGE, matching `030`'s meetings posture. No row rewrite. After apply: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/members_column_grants_test.sql`. |
-| `032_replace_my_availability.sql` | Adds `replace_my_availability(meeting_id, range_starts[], range_ends[])` — a `SECURITY DEFINER` RPC that deletes and re-inserts the caller's availability rows in one transaction, bound to `current_member_id()` and `meetings.status = 'prep'`. Also adds `UNIQUE (meeting_id, member_id, range_start)` so overlapping submits cannot duplicate a day. Replaces the two-round-trip delete-then-insert in `web/app/availability/actions.ts`. Preview for duplicate days before applying (see migration header). After apply: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/replace_my_availability_test.sql`. |
-| `033_paper_embeddings_grants.sql` | Pins `paper_embeddings` to service-role-only: `REVOKE ALL` from `anon`/`authenticated`, no re-grant. Matches how `embedding-cache.ts` already reads and writes (service client) and how `ensure_rls` already hides the table from browser roles (RLS on, no policies). Forwards the table comment so it no longer claims SELECT-only + RLS off. |
+| `031_members_column_grants.sql` | Restores the `members` column lock. `REVOKE ALL` from `anon`/`authenticated`, then `GRANT SELECT (id, name, role, auth_user_id)` to `authenticated` — the four columns the portal session client actually reads (`auth_user_id` is what `007` needed; `007`'s table-level `SELECT` had re-opened `email` / `phone` / `whatsapp` / `active` / `vouched_by`). Also drops leftover default write grants and the unused `members_id_seq` USAGE, matching `030`'s meetings posture. No row rewrite. **Applied 2026-08-15** via MCP. Re-check: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/members_column_grants_test.sql`. |
+| `032_replace_my_availability.sql` | Adds `replace_my_availability(meeting_id, range_starts[], range_ends[])` — a `SECURITY DEFINER` RPC that deletes and re-inserts the caller's availability rows in one transaction, bound to `current_member_id()` and `meetings.status = 'prep'`. Also adds `UNIQUE (meeting_id, member_id, range_start)` so overlapping submits cannot duplicate a day. Replaces the two-round-trip delete-then-insert in `web/app/availability/actions.ts`. Duplicate-day preview was empty on apply. **Applied 2026-08-15** via MCP. Re-check: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/replace_my_availability_test.sql`. |
+| `033_paper_embeddings_grants.sql` | Pins `paper_embeddings` to service-role-only: `REVOKE ALL` from `anon`/`authenticated`, no re-grant. Matches how `embedding-cache.ts` already reads and writes (service client) and how `ensure_rls` already hides the table from browser roles (RLS on, no policies). Forwards the table comment so it no longer claims SELECT-only + RLS off. **Applied 2026-08-15** via MCP. |
 
 ## `ensure_rls` event trigger
 
@@ -58,10 +68,13 @@ intentionally kept as a defense-in-depth guardrail.
 
 **Implication for new tables:** RLS is on automatically, so a migration that
 creates a table *must* also add policies, or the table is invisible to the
-browser (anon/authenticated). `command_log` is the one accepted exception
-(service-role-only, no browser access needed).
+browser (anon/authenticated). Accepted service-role-only exceptions
+(RLS on, no policies): `command_log`, `blackout_periods`, and
+`paper_embeddings` (the last pinned by `033`).
 
 ## Post-migration verification
+
+Checked on the live project 2026-08-15 after applying `031`–`033`.
 
 - 10 base tables exist: `members`, `topics`, `papers`, `paper_topics`,
   `meetings`, `volunteers`, `availability`, `meeting_attendance`,
