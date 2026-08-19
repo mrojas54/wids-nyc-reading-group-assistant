@@ -1,6 +1,30 @@
 // Server-side data accessors for the dashboard.
 // All queries assume the supplied client respects RLS (server.ts client).
+//
+// The `<Database>` generic is load-bearing, not decoration. `SupabaseClient`'s
+// generic parameter defaults to `any`, so a bare annotation silently discards
+// the schema types that lib/supabase/{server,browser,service}.ts attach at
+// construction. Without it `tsc` accepted `.from("meetingz")` — a table that
+// does not exist — with zero errors. Keep the generic on every accessor's
+// client parameter.
+//
+// What it catches, as measured on this file: unknown table in .from(), unknown
+// function in .rpc(), unknown column in filters (.eq/.gte/.order/...), and
+// unknown column inside a .select("a, b, c") string.
+//
+// That last one has a catch worth knowing about. postgrest-js does detect it,
+// but it reports it *in the result type* rather than at the call:
+//
+//   .select("id, bogus_col")
+//     -> SelectQueryError<"column 'bogus_col' does not exist on 'meetings'."> | null
+//
+// which is only an error once something consumes `data` in a type-checked way.
+// The `any` row-mappers below (mapMeeting, companionUrl) and the `as` casts
+// swallow it, so today that diagnostic is computed and then discarded. Retiring
+// those `any`s in favour of the Tables<"..."> helpers in lib/database.types.ts
+// is what makes it surface — the check is already paid for.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 
 export type MeetingStatus = "prep" | "scheduled" | "done" | "cancelled" | "guide_failed";
 export type RsvpStatus = "attending" | "declined" | "tentative" | "no_response";
@@ -17,7 +41,7 @@ export type NextMeeting = {
   companion_url: string | null;
 };
 
-export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | null> {
+export async function nextMeeting(sb: SupabaseClient<Database>): Promise<NextMeeting | null> {
   const nowIso = new Date().toISOString();
 
   const { data: scheduled } = await sb
@@ -86,7 +110,7 @@ export type PrepMeetingRef = { id: number; type: string };
  * nextMeeting()'s tier-2 fallback lands on. Used by /availability when no
  * `?meeting=<id>` param pins a specific meeting.
  */
-export async function newestPrepMeeting(sb: SupabaseClient): Promise<PrepMeetingRef | null> {
+export async function newestPrepMeeting(sb: SupabaseClient<Database>): Promise<PrepMeetingRef | null> {
   const { data } = await orderNewestPrep(
     sb.from("meetings").select("id, type").eq("status", "prep"),
   )
@@ -126,13 +150,13 @@ function mapMeeting(row: any): NextMeeting {
   };
 }
 
-export async function currentMemberId(sb: SupabaseClient): Promise<number | null> {
+export async function currentMemberId(sb: SupabaseClient<Database>): Promise<number | null> {
   const { data } = await sb.rpc("current_member_id");
   return (data as number | null) ?? null;
 }
 
 export async function myAvailabilitySubmitted(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   prepMeetingId: number,
   memberId: number | null,
 ): Promise<boolean> {
@@ -146,7 +170,7 @@ export async function myAvailabilitySubmitted(
 }
 
 export async function myRsvp(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   meetingId: number,
 ): Promise<RsvpStatus | null> {
   const { data } = await sb
@@ -185,7 +209,7 @@ export type UpcomingRsvp = {
  * member another member's RSVPs.
  */
 export async function upcomingRsvps(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   memberId: number | null,
 ): Promise<UpcomingRsvp[]> {
   const nowIso = new Date().toISOString();
@@ -235,7 +259,7 @@ export type Stats = {
 };
 
 export async function myStats(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   availabilitySubmitted: boolean,
   memberId: number | null,
 ): Promise<Stats> {
@@ -289,7 +313,7 @@ export type SynthesisGate =
  * See docs/superpowers/specs/2026-05-17-paper-pal-edge-functions.md §7.
  */
 export async function canSynthesizePaperPal(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   paperId: number,
 ): Promise<SynthesisGate> {
   const { data, error } = await sb.rpc("can_synthesize_paper_pal", {
@@ -312,7 +336,7 @@ export type PaperCatalogRow = {
 
 /** Looks up papers.id and joins the most recent meeting's leader, if any. */
 export async function paperCatalogRow(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   paperId: number,
 ): Promise<PaperCatalogRow | null> {
   const { data: paper } = await sb
@@ -338,7 +362,7 @@ export async function paperCatalogRow(
   };
 }
 
-export async function myHistory(sb: SupabaseClient, limit = 10): Promise<HistoryItem[]> {
+export async function myHistory(sb: SupabaseClient<Database>, limit = 10): Promise<HistoryItem[]> {
   // `!inner` makes the meetings embed an INNER JOIN, so `meetings.status` filters
   // the meeting_attendance rows themselves — letting the DB do the filtering and
   // ordering and return exactly `limit` rows (no JS post-filter / sort / pad).
