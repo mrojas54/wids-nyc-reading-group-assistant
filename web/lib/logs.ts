@@ -15,6 +15,7 @@
 //                  enrichment (idempotencyKey, durationMs, metadata) when present
 // mapCommandLogRow is the single place these columns are wired in.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { formatDateTimeNY } from "@/lib/time";
 
 // `source` is constrained in the DB to these three. We keep `edge_function` in
@@ -252,7 +253,7 @@ export type ListOptions = {
 };
 
 export async function listCommandLog(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   opts: ListOptions = {},
 ): Promise<ListResult> {
   const limit = opts.limit ?? 50;

@@ -3,6 +3,7 @@
 // design_handoff/architecture.md → "Inbox query".
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 
 export type InboxPaper = {
   id: number;
@@ -67,7 +68,7 @@ const MEETING_SELECT =
   "id, status, scheduled_at, location, leader_id, leader:leader_id(name), paper:paper_id(id, title, authors, venue, companion_url)";
 
 export async function getCurrentReading(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxMeeting | null> {
   const nowIso = new Date().toISOString();
   const { data, error } = await sb
@@ -85,7 +86,7 @@ export async function getCurrentReading(
 }
 
 export async function getUpcomingPicks(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
   const { data, error } = await sb
@@ -102,7 +103,7 @@ export async function getUpcomingPicks(
 }
 
 export async function getWantToLead(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxSuggestion[]> {
   // paper_suggestions joined to papers + suggester member name; filter out
   // suggestions whose paper already has a meeting with a leader assigned.
@@ -151,7 +152,7 @@ export async function getWantToLead(
 // Viewer-scoped facts the Inbox needs to decide which actions to show:
 // the current member id and the meetings they've already volunteered for.
 export async function getInboxViewer(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxViewer> {
   const { data: memberId } = await sb.rpc("current_member_id");
   if (typeof memberId !== "number") {
@@ -172,7 +173,7 @@ export async function getInboxViewer(
 
 // Catalog papers a member can propose to lead, newest first.
 export async function listCatalogPapers(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<CatalogPaper[]> {
   const { data, error } = await sb
     .from("papers")
@@ -185,7 +186,7 @@ export async function listCatalogPapers(
 }
 
 export async function getRecentlyDiscussed(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   limit = 10,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
@@ -203,7 +204,7 @@ export async function getRecentlyDiscussed(
   return (data ?? []).map(mapMeeting);
 }
 
-export async function getInbox(sb: SupabaseClient) {
+export async function getInbox(sb: SupabaseClient<Database>) {
   const [reading, upcoming, suggestions, past, viewer, catalogPapers] =
     await Promise.all([
       getCurrentReading(sb),
