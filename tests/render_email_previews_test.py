@@ -402,7 +402,7 @@ def test_magic_link_has_no_placeholder_deploy_url():
 # CTA fragment — assets/emails/template/_cta_shared.html
 # ---------------------------------------------------------------------------
 
-from scripts.render_email_previews import (  # noqa: E402
+from scripts.render_email_previews import (
     AVAIL_TOKENS,
     NEW_PAPER_TOKENS,
     PRE_MEETING_TOKENS,

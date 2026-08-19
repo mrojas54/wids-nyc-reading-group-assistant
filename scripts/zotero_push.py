@@ -694,7 +694,7 @@ def push_from_csv(
             status, detail = push_backfill_row(
                 conn, row=row, api_key=api_key, group_id=group_id, dry_run=dry_run,
             )
-        except Exception as e:  # noqa: BLE001 — per-row boundary; keep going
+        except Exception as e:  # per-row boundary; keep going
             failures += 1
             print(f"  ✗ {label}: {type(e).__name__}: {e}", file=sys.stderr)
         else:
@@ -864,7 +864,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                 group_id=env["ZOTERO_GROUP_ID"],
                 prod_host=env["WIDS_PROD_HOST"],
             )
-        except Exception as e:  # noqa: BLE001 — top-level boundary
+        except Exception as e:  # top-level boundary
             error_msg = f"{type(e).__name__}: {e}"
             print(
                 f"⚠ Zotero push failed for paper {args.paper_id}: {error_msg}\n"
@@ -877,7 +877,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                     name="/wids-make-companion:zotero-push",
                     error=error_msg,
                 )
-            except Exception as inner:  # noqa: BLE001
+            except Exception as inner:  # logging boundary; the original error still returns
                 print(f"   (also failed to write command_log: {inner})",
                       file=sys.stderr)
             return 1
