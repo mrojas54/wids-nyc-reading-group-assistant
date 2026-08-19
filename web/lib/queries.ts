@@ -8,14 +8,21 @@
 // does not exist — with zero errors. Keep the generic on every accessor's
 // client parameter.
 //
-// What it does and does not catch, as measured on this file:
-//   caught   — unknown table in .from(), unknown function in .rpc(), unknown
-//              column in filters (.eq/.gte/.order/...)
-//   NOT yet  — unknown column inside a .select("a, b, c") string; those are
-//              still absorbed by the `any` row-mappers below (mapMeeting,
-//              companionUrl). Replacing those `any`s with Tables<"..."> row
-//              types is what closes that gap — see the module-size note in
-//              lib/database.types.ts for the generated helpers.
+// What it catches, as measured on this file: unknown table in .from(), unknown
+// function in .rpc(), unknown column in filters (.eq/.gte/.order/...), and
+// unknown column inside a .select("a, b, c") string.
+//
+// That last one has a catch worth knowing about. postgrest-js does detect it,
+// but it reports it *in the result type* rather than at the call:
+//
+//   .select("id, bogus_col")
+//     -> SelectQueryError<"column 'bogus_col' does not exist on 'meetings'."> | null
+//
+// which is only an error once something consumes `data` in a type-checked way.
+// The `any` row-mappers below (mapMeeting, companionUrl) and the `as` casts
+// swallow it, so today that diagnostic is computed and then discarded. Retiring
+// those `any`s in favour of the Tables<"..."> helpers in lib/database.types.ts
+// is what makes it surface — the check is already paid for.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
