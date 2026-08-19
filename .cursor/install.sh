@@ -4,7 +4,7 @@
 # Prepares the three toolchains this repo's CI exercises:
 #   - Python 3.13 via uv         (scripts/ + tests/: ruff, ty, pytest)
 #   - Node 22.22.3 via nvm       (web/: Next.js member portal)
-#   - Deno v2.x                  (supabase/functions/: edge-function check + lint)
+#   - Deno, pinned by .dvmrc     (supabase/functions/: edge-function check + lint)
 #
 # Safe to run repeatedly: every tool install is guarded, and dependency
 # installs come from committed lockfiles (uv.lock, web/package-lock.json).
@@ -23,13 +23,20 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # --- Deno (edge-function type-check + lint) ---
-# Installs the latest stable Deno (currently 2.x, matching the repo's
-# supabase/functions target and CI's `deno-version: v2.x`). The install
-# script takes a concrete version tag, not a range, so pass no argument to
-# get latest stable rather than an invalid "v2.x" tag.
-if ! command -v deno >/dev/null 2>&1; then
-  echo "[install] installing latest stable deno"
-  curl -fsSL https://deno.land/install.sh | sh
+# Version comes from .dvmrc, the single source this script and CI share:
+# ci.yml's edge-functions job passes the same file to setup-deno via
+# `deno-version-file`. Previously this installed "latest stable" while CI
+# resolved `v2.x`; both landed on 2.x, so the divergence was dormant — but it
+# would have activated silently on the Deno 3 release, type-checking edge
+# functions here on a major CI had never run.
+#
+# Pinning exactly (rather than a `2.x` range) mirrors how web/.nvmrc pins Node
+# to 22.22.3. The install script takes a concrete version tag, not a range, so
+# an exact pin is also the only form both consumers can share verbatim.
+DENO_VERSION="$(cat .dvmrc)"
+if [ "$(deno --version 2>/dev/null | head -1 | cut -d' ' -f2)" != "$DENO_VERSION" ]; then
+  echo "[install] installing deno ${DENO_VERSION}"
+  curl -fsSL https://deno.land/install.sh | sh -s "v${DENO_VERSION}"
 fi
 export PATH="$HOME/.deno/bin:$PATH"
 

@@ -126,10 +126,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Version comes from .dvmrc at the repo root, shared verbatim with
+      # .cursor/install.sh so the cloud agent and CI cannot drift onto
+      # different Deno majors. Bump that one file to move both.
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version-file: .dvmrc
 
       - name: Type-check Edge Functions
         run: deno check '**/*.ts'
