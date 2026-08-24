@@ -47,8 +47,9 @@ Doesn't matter — they're independent. But a sensible order is:
 3. `pre-meeting-reminder`
 4. `cycle-keep-alive`
 5. `availability-chase`
-6. `post-meeting-thanks` (reading_group path is two-run; see that file's
-   `leader-draft` vs send idempotency keys)
+6. `post-meeting-thanks` (24h–7d window on `scheduled_at`; reading_group
+   path is two-run — see that file's `leader-draft` vs send keys; drafts
+   only, logs `needs_action`)
 7. `prune-paper-pdfs` (weekly Sunday 02:00 UTC; starts dry-run)
 
 Do **not** register `leader-nudge`. It is deprecated and superseded by the
