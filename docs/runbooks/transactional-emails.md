@@ -407,16 +407,28 @@ Current keys:
 | Availability thank-you to one submitter | `availability-chase:thanks:meeting=<meeting_id>:member=<member_id>` |
 | Pre-meeting reminder run for one meeting | `pre-meeting-reminder:meeting=<id>` |
 | Post-meeting thanks — leader draft queued (reading_group, first run) | `post-meeting-thanks:leader-draft:meeting=<id>` |
-| Post-meeting thanks — members emailed (admin, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
+| Post-meeting thanks — members draft ready (admin, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
 | New-paper announcement drafts for one paper | `new-paper-announcement:paper=<paper_id>` |
 
 `post-meeting-thanks` for `reading_group` meetings spans **two daily runs**.
-The first writes only the `leader-draft` key (does **not** mean members were
-emailed). The second run — after the leader replies, or the degraded
+The first writes only the `leader-draft` key (does **not** mean the members'
+draft exists yet). The second run — after the leader replies, or the degraded
 no-reply fallback — writes `post-meeting-thanks:meeting=<id>`, which is the
-status-agnostic "already handled" gate. Do not write the send key when only
-the leader draft exists, or the member send is permanently suppressed. Full
-path: `scheduled_tasks/post-meeting-thanks.md`.
+status-agnostic "already handled" gate (claimed when the **members' draft** is
+created; the task cannot observe the human send). Do not write that key when
+only the leader draft exists, or the members' draft is permanently suppressed.
+Full path: `scheduled_tasks/post-meeting-thanks.md`.
+
+**Selection window (as of 2026-08-14):** Step 1 selects `done` meetings with
+`scheduled_at` in **[now − 7d, now − 24h)** plus a `NOT EXISTS` filter on the
+send key. The old 24–36h ceiling was narrower than `meeting-auto-advance`
+slack (first daily run ≥24h after `scheduled_at`), so reading groups that meet
+at 18:30 ET were already ~38h old on the first run that could see them and
+never entered scope. Idempotency — not window width — bounds the work; a
+safety cap stops and reports if the query returns more than 2 rows. Both the
+admin path and the leader-no-reply fallback **draft only** (same
+draft-only policy as the rest of this runbook) and log `needs_action` with
+`operator_action_required` so `/admin/logs` renders amber rather than green.
 
 `availability-chase` operator alerts intentionally do **not** use
 `idempotency_key`; they use `metadata.kind = 'operator_alert'` plus
@@ -429,6 +441,9 @@ provides.
 
 ## Common pitfalls
 
+- Do not restore a 24–36h ceiling on `post-meeting-thanks` Step 1. That
+  window is narrower than `meeting-auto-advance` slack and permanently
+  skips reading-group thanks. Keep 24h–7d plus the send-key `NOT EXISTS`.
 - Do not assume a template is live because it renders in previews. Check the
   scheduled-task spec or slash command that sends it.
 - Do not commit `*_rendered.*` preview artifacts.

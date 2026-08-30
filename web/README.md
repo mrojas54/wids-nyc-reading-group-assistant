@@ -54,7 +54,51 @@ check whether the lockfile is simply behind its own declared ranges before
 concluding there is no upstream fix — plain `npm install` / `npm ci` will not
 bump an already-satisfying pin.
 
-The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only, so Vite upgrades affect tests rather than the production bundle.
+**Dependabot** (`.github/dependabot.yml`) opens one weekly grouped PR for
+`web/` minor/patch npm bumps (Monday 09:00 America/New_York). That turns
+audit-driven CI breaks — e.g. the 2026-08-14 nanoid advisory — into scheduled
+review instead of interrupting unrelated PRs. Majors stay ungrouped; `eslint`,
+`typescript`, and `jsdom` majors are ignored until their revisit conditions in
+that file are met. Python stays uv-locked (`uv lock --check`); there is no
+Dependabot `pip` entry yet.
+
+The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only
+(`vitest.config.mts`; the `.mts` extension keeps the config real ESM without
+setting `"type": "module"` on `package.json`), so Vite upgrades affect tests
+rather than the production bundle.
+
+## Typed Supabase accessors
+
+`createClient` in `lib/supabase/{server,browser,service}.ts` is constructed as
+`createClient<Database>`. Any helper that takes that client **must** annotate
+the parameter as `SupabaseClient<Database>` — a bare `SupabaseClient` defaults
+the generic to `any` and silently discards schema checking at the function
+boundary. Without the generic, `tsc --noEmit` accepted `.from("meetingz")`
+(a table that does not exist) with zero errors.
+
+Keep the generic on every accessor in:
+
+- `lib/queries.ts`
+- `lib/logs.ts`
+- `lib/paperpal/inbox.ts`
+- `lib/suggest/orchestrator.ts`
+- `lib/suggest/embedding-cache.ts`
+
+What it catches today: unknown tables in `.from()`, unknown RPCs in `.rpc()`,
+unknown columns in filters (`.eq` / `.gte` / `.order` / …), and unknown columns
+inside a `.select("a, b, c")` string. That last case is reported **in the
+result type** as `SelectQueryError<…> | null`, not at the call site — so it
+only becomes a hard error when something consumes `data` in a type-checked
+way. `any` row-mappers and `as` casts (still present in `queries.ts`) swallow
+the diagnostic; retiring them in favour of `Tables<"…">` helpers from
+`lib/database.types.ts` is what surfaces it.
+
+**pgvector caveat** (`embedding-cache.ts`): `supabase gen types` maps the
+`vector` column to `string` for both Row and Insert. Reads really are text
+literals (`parseVector` decodes them); writes deliberately send `number[]`
+and use a narrow cast because PostgREST accepts a JSON array and Postgres
+casts server-side. Do not "fix" that by switching the write path to a string
+without live-DB verification.
 
 ## Deployment
 

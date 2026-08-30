@@ -39,6 +39,10 @@ via relative path (`../../../web/lib/paperpal/providers/index.ts`). The
 import map aliases `zod` to the npm specifier so both Node tests and Deno
 Edge Functions resolve the same package.
 
+**Deno version:** pin is the repo-root [`.dvmrc`](../../.dvmrc) (currently
+`2.9.5`). CI's edge-functions job and `.cursor/install.sh` both install from
+that file — bump it in one place when upgrading Deno.
+
 ## Environment variables
 
 Set in Supabase Cloud:

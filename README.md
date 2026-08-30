@@ -226,5 +226,13 @@ scripts/             Operator-side Python helpers (uv-managed; see "Python tooli
 docs/                Guides, specs, and plans
 tests/               SQL smoke tests (RLS) + Python unit tests (pytest)
 web/                 Next.js member portal app
+.dvmrc               Deno version pin (CI + Cursor cloud agent; currently 2.9.5)
+web/.nvmrc           Node version pin for the portal (22.22.3)
 pyproject.toml       Python deps + ruff/ty config (single source of truth)
 ```
+
+Deno for `supabase/functions/` is pinned in [`.dvmrc`](.dvmrc). CI
+(`denoland/setup-deno` with `deno-version-file`) and `.cursor/install.sh`
+both read that file so a Deno 3 release cannot silently diverge type-check
+between environments. Bump the pin deliberately; do not install "latest"
+in one place and a range in the other.
