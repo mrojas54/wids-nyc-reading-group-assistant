@@ -170,7 +170,10 @@ function buildHistorySb(rows: unknown[]): {
     },
     limit(n: number) {
       limitCalls.push(n);
-      return Promise.resolve({ data: rows });
+      const result: any = { data: rows, error: null };
+      const p: any = Promise.resolve(result);
+      p.returns = () => p;
+      return p;
     },
   };
 
@@ -280,10 +283,15 @@ function buildNextMeetingSb(opts: { scheduled?: unknown; prep?: unknown }): {
         for (const m of ["eq", "gte", "order", "limit"]) {
           builder[m] = () => builder;
         }
-        builder.maybeSingle = () =>
-          Promise.resolve({
+        builder.maybeSingle = () => {
+          const result: any = {
             data: (tier === 0 ? opts.scheduled : opts.prep) ?? null,
-          });
+            error: null,
+          };
+          const p: any = Promise.resolve(result);
+          p.returns = () => p;
+          return p;
+        };
         return builder;
       }),
     })),
@@ -461,7 +469,10 @@ function buildMeetingsSb(rows: MeetingRow[]): SupabaseClient {
           }
           return 0;
         });
-        return Promise.resolve({ data: sorted.slice(0, take)[0] ?? null });
+        const result: any = { data: sorted.slice(0, take)[0] ?? null, error: null };
+        const p: any = Promise.resolve(result);
+        p.returns = () => p;
+        return p;
       },
     };
     return b;
