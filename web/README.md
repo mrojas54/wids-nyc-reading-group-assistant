@@ -8,6 +8,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | --- | --- |
 | `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
 | `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `paper_companions` row; legacy papers can fall back to `papers.companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
+| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via middleware (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries.ts`. |
 | `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting via the `replace_my_availability` RPC from migration `032` (one transaction; selected 6–9 PM ET windows; live as of 2026-08-15). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
 | `/papers` | Paper Pal inbox. Shows reading now, upcoming lead picks, member-proposed "want to lead" suggestions, and recently discussed papers. Signed-in roster members can propose catalog papers or volunteer for proposed meetings. See [../docs/paper-pal-portal.md](../docs/paper-pal-portal.md). |
 | `/new` | Paper Pal synthesis upload page (`/new?paperId=<id>`). Gated by the `can_synthesize_paper_pal` RPC — only operator/admin or the paper's meeting leader sees the upload form. `NewPaperForm` uploads the PDF to the `papers-pdfs` bucket and POSTs `/functions/v1/analyze-paper`, streaming a 5-stage SSE progress flow. |
@@ -89,9 +90,39 @@ unknown columns in filters (`.eq` / `.gte` / `.order` / …), and unknown column
 inside a `.select("a, b, c")` string. That last case is reported **in the
 result type** as `SelectQueryError<…> | null`, not at the call site — so it
 only becomes a hard error when something consumes `data` in a type-checked
-way. `any` row-mappers and `as` casts (still present in `queries.ts`) swallow
-the diagnostic; retiring them in favour of `Tables<"…">` helpers from
-`lib/database.types.ts` is what surfaces it.
+way.
+
+### `queries.ts` pattern (post-#156)
+
+`lib/queries.ts` pins embedded selects with `.returns<T>()`, where `T` is built
+from `Tables<"…">` `Pick` types (`PaperCompanionEmbed`,
+`MeetingWithLeaderAndPaper`, `UpcomingMeetingRow`, and friends). That is what
+turns a renamed/dropped column into a real `tsc` error instead of a silent
+`undefined` at runtime. Do not reintroduce `any` row-mappers or `as any[]`
+casts on those embeds — they undo the generic.
+
+Hand-rolled Supabase mocks in Vitest must implement a no-op `.returns()` on
+the thenable the builder returns (postgrest-js exposes it; at runtime it is a
+type-only identity). See `lib/__tests__/queries.test.ts` and
+`upcomingRsvps.test.ts` for the `p.returns = () => p` pattern.
+
+### Runtime query failures vs empty data
+
+Most dashboard accessors still return `null` / `[]` / `false` on failure so the
+UI stays empty rather than throwing. Before #156 they also **dropped** the
+PostgREST `error` field, so a permission failure or bad filter looked identical
+to "no rows." They now call `logQueryError`, which writes one JSON line to the
+server console:
+
+```json
+{"event":"query_failed","fn":"upcomingRsvps.meetings","message":"…","code":"…"}
+```
+
+`fn` is the accessor (and sub-query when there are two). This goes to **Vercel
+function / `next dev` logs**, not `command_log` / `/admin/logs`. If a member
+sees an empty dashboard, history, or `/me/rsvps` list that should have data,
+search those logs for `event":"query_failed"` before assuming the roster is
+empty.
 
 **pgvector caveat** (`embedding-cache.ts`): `supabase gen types` maps the
 `vector` column to `string` for both Row and Insert. Reads really are text
