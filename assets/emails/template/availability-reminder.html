@@ -20,6 +20,14 @@
     meetings.location is null. Match the marker as written here, not as the
     chase spec quotes it — the spec's shorter form silently mails an empty chip.
 
+    Paper card, "Skim the paper first" link and PS are a BLOCK PAIR, named
+    paper and paper_pending (markers BEGIN-BLOCK: <name> / END-BLOCK: <name>;
+    the .txt twin uses [[BEGIN:<name>]] / [[END:<name>]]). Exactly one ships
+    per send: paper once meetings.paper_id is set, paper_pending ("Paper Pal
+    coming soon") while the leader is still choosing. Resolved before
+    substitution by scripts.render_email_previews.resolve_blocks; the pending
+    state references no paper.* token and no links.companionPreview.
+
     Merge fields: scheduled_tasks/availability-chase.md (Step 5, operator
     'remind'), including the Step 5b citation composition rule.
 
@@ -104,6 +112,7 @@
             </td>
           </tr>
 
+          <!-- BEGIN-BLOCK: paper -->
           <!-- ── Paper card ── -->
           <tr>
             <td class="pad-x" style="padding:22px 32px 0 32px;">
@@ -261,6 +270,80 @@
             </td>
           </tr>
 
+          <!-- END-BLOCK: paper -->
+          <!-- BEGIN-BLOCK: paper_pending -->
+          <!-- ── Paper card — paper not chosen yet ── -->
+          <tr>
+            <td class="pad-x" style="padding:22px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#faf8f4;border:1px solid #e6dfd1;border-radius:20px;">
+                <tr>
+                  <td style="padding:22px 24px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td valign="middle" style="padding-right:8px;line-height:0;">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#365c4b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                        </td>
+                        <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#365c4b;font-weight:600;">
+                          Next paper
+                        </td>
+                      </tr>
+                    </table>
+
+                    <h2 class="paper-title serif" style="margin:8px 0 4px 0;font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:24px;line-height:1.2;letter-spacing:-0.02em;color:#1a1814;font-weight:600;">
+                      Paper Pal coming soon
+                    </h2>
+
+                    <p style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5;color:#4f4a3e;">
+                      The paper is being chosen now. I'll send a separate note the moment it's picked and the companion page is up.
+                    </p>
+
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:14px;">
+                      <tr>
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#fdeaf3;border:1px solid #f9c8df;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c8226d" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#a51858;font-weight:500;">
+                                      Reading group
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 10px;">
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                                  <tr>
+                                    <td valign="middle" style="padding-right:6px;line-height:0;">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8e8674" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    </td>
+                                    <td valign="middle" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;">
+                                      Paper TBD
+                                    </td>
+                                  </tr>
+                                </table>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- END-BLOCK: paper_pending -->
+
           <!-- ── Body paragraph ── -->
           <tr>
             <td class="pad-x" style="padding:20px 32px 0 32px;">
@@ -287,11 +370,13 @@
                     journal sources; the destination is whatever canonical
                     URL exists for this paper.
                   -->
+                  <!-- BEGIN-BLOCK: paper -->
                   <td style="padding-left:14px;">
                     <a href="{{ paper.url }}" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14.5px;color:#365c4b;text-decoration:underline;text-underline-offset:3px;">
                       Skim the paper first ↗
                     </a>
                   </td>
+                  <!-- END-BLOCK: paper -->
                 </tr>
               </table>
             </td>
@@ -345,9 +430,16 @@
                     <p class="signoff-name" style="margin:6px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#1a1814;font-weight:500;line-height:1.55;">
                       &mdash; {{ operator.displayName }}
                     </p>
+                    <!-- BEGIN-BLOCK: paper -->
                     <p style="margin:10px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:#8e8674;line-height:1.55;">
                       PS &mdash; your Paper Pal goes live Wednesday morning. I'll send a separate note when it's ready. <a href="{{ links.companionPreview }}" style="color:#365c4b;text-decoration:underline;text-underline-offset:3px;">Preview link</a> if you're curious.
                     </p>
+                    <!-- END-BLOCK: paper -->
+                    <!-- BEGIN-BLOCK: paper_pending -->
+                    <p style="margin:10px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;color:#8e8674;line-height:1.55;">
+                      PS &mdash; Paper Pal is coming soon. I'll send a separate note the moment it's ready.
+                    </p>
+                    <!-- END-BLOCK: paper_pending -->
                   </td>
                 </tr>
               </table>
