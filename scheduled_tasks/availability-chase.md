@@ -277,6 +277,14 @@ For each non-submitter row:
    full capability limit. An earlier version of this step read "Send via Gmail
    MCP", which was unfollowable as written.
 
+   **The connector strips the mark and every other image at draft creation**
+   (verified 2026-09-02 — `docs/runbooks/email-client-behavior.md`). It also
+   drops `<style>`, `<svg>`, classes and Outlook conditionals, and rewrites
+   hrefs through `google.com/url`. The table layout, inline styles and copy
+   survive, so the draft is still the designed email minus its images. Tell
+   the operator in the Step 5d summary that the mark is absent, so they can
+   paste the PNG into the compose window before sending if they want it.
+
 5. Log:
 
    ```sql

@@ -1,7 +1,22 @@
 # HANDOFF — why does the WiDS mark reach members in May but not later?
 
-**Status:** unresolved. A leading hypothesis exists and is **not** proven. Do not
-act on it.
+**Status (2026-09-02): mechanism established.** The Gmail MCP `create_draft`
+path strips every `<img>`, `<svg>`, `<style>`, class and MSO conditional and
+rewrites every href **when it writes the draft** — before any human opens it.
+Verified by reading two drafts back raw (`get_draft` has a `RAW` format;
+`get_message` does not). Full entries, message IDs and method in the runbook.
+The composer-vs-API framing below is superseded: the connector never stores the
+mark in the first place, so nothing downstream can render it. `cid:` with a real
+inline part is stripped too.
+
+**What is still open:** only whether a draft built as raw MIME through the Gmail
+REST API survives the compose window's Send. That is the remaining experiment,
+and it needs a draft this connector did not write. Everything under "The
+decisive experiment" below is kept for the record but is no longer the plan.
+
+**Immediate consequence for operators:** connector-drafted mail cannot carry the
+mark. Either paste the PNG into the compose window before Send, or accept the
+text wordmark. The runbook lists the options in order of preference.
 
 **Scope note:** this is the image/rendering investigation plus the template
 comment cleanup it triggered. Design standardization — migrating
@@ -142,7 +157,12 @@ corroboration, not proof. Evidence against taking it as settled:
 
 ---
 
-## The decisive experiment
+## The decisive experiment — SUPERSEDED 2026-09-02
+
+Kept for the record. The mechanism was found by reading drafts back raw instead;
+see the status block at the top and the runbook. The experiment below would have
+compared two sends of a connector-written draft, and both would have lost the
+mark, because the draft never had it.
 
 Requires one setup step the operator must run:
 
@@ -181,8 +201,9 @@ Whatever applies that rewrite happens at or before draft creation, not at send.
 
 ## Blocked paths — do not burn time rediscovering these
 
-Listed with current state in the runbook. In short: no raw RFC822 via the Gmail
-MCP (no `raw` format) or via Composio (denied, and gmail toolkit unlinked); no
+Listed with current state in the runbook. In short: raw RFC822 **is** available
+for drafts via the Gmail MCP (`get_draft` with `messageFormat: "RAW"`, found
+2026-09-02) but not for messages; Composio denied and gmail toolkit unlinked; no
 send tool anywhere available to the agent; `get_thread` on the staged draft's
 thread is permission-denied.
 

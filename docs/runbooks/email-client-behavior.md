@@ -111,24 +111,84 @@ Gmail MCP's parsing.
 `mark-reader-96.png` → `200 image/png 2283b`; `mark-reader-192.png` →
 `200 image/png 5081b`. A 404 does not explain any of this.
 
-### `UNVERIFIED` — why profile B happens
+### `VERIFIED` 2026-09-02 — profile B is produced at draft creation, by the Gmail MCP `create_draft` path
 
-Still open, and **the date confound is not broken**. Every profile-A message
-predates every profile-B message, so calendar time predicts the outcome exactly
-as well as any mechanism story does. Narrowing the window to 24 days does not
-separate them.
+**This closes the "why".** The stripping happens when the connector writes the
+draft, before any human opens it and before anything is sent. Calendar time
+and the compose window were never the variable.
 
-The leading hypothesis remains that pressing Send in the Gmail compose window
-ships the composer's re-parsed DOM, while a programmatic send ships the stored
-HTML. It is consistent with the four-marker footprint — `<style>`, classes,
-preheader and `<img>` are all things an editable-DOM round-trip would lose. It is
-**not proven**, and two things argue against treating it as settled:
+Method: `create_draft` with `htmlBody` + `body` for `availability-reminder`
+(paper_pending state), then `get_draft` with `messageFormat: "RAW"` — that
+option exists on `get_draft` even though `get_message` lacks it — then
+base64url-decode and quoted-printable-decode the `raw` field. Draft
+`r-4555741430189389421`, message `1a0653edc864a7af`, to `annaagoha@gmail.com`.
+The operator independently confirmed the mark absent in the Gmail web UI for the
+same unsent draft (screenshot, 2026-09-02).
 
-- The 2026-05-25 message's plain-text part is a flattening derived from its HTML,
-  not the hand-wrapped `.txt` twin — itself a claimed composer signature. That
-  message may have gone through the composer and kept its mark anyway.
-- The only documentary support was `scheduled_tasks/availability-chase.md`
-  Step 5c, which is independently known to be wrong (see below).
+Stored HTML part versus what was submitted:
+
+| Submitted | Stored |
+|---|---|
+| `<!doctype>`, `<html>`, `<head>`, `<title>`, `<meta>` | gone — body content only |
+| `<style>` block, `<!--[if mso]>` conditionals, VML button | gone |
+| every `<img>` (the mark) | gone — the `<td width="48">` cell is stored **empty** |
+| every inline `<svg>` (card icons) | gone — cells stored empty |
+| `class="…"`, `role="presentation"` | gone |
+| `href="https://wids-nyc-…"` | rewritten `https://www.google.com/url?q=…&source=gmail&ust=…&sa=E`, in the HTML **and** the plain-text part |
+| hidden preheader `<div>` | **kept**, minus `opacity` and `mso-hide` |
+| `bgcolor`, inline `style`, table layout, `&mdash;` text | kept |
+
+The MIME headers read `Received: from … by gmailapi.google.com with HTTPREST`.
+
+That is profile B minus the preheader. The preheader is present in the stored
+draft and absent in delivered profile-B mail, so one more pass (the composer's
+Send, or delivery) removes it — but the mark, the styles and the classes are
+already gone before that pass runs.
+
+### `VERIFIED` 2026-09-02 — `<img>` is dropped by tag, whatever the `src`, `cid:` with a real inline part included
+
+Draft `r-3749716002901602761`, message `1a0654f51096d7ee`, to self, subject
+"MARK TEST via create_draft — cid / data / https (do not send)". Three
+`<img>` in three labelled cells: `src="cid:mark.png"` with the PNG passed as
+`attachments[0].inline = true`; a `data:image/png;base64` URI; the live `https`
+URL. Stored HTML: all three cells empty, zero `<img>`. The PNG is stored as a
+real part — `Content-Disposition: inline; filename=mark.png`,
+`Content-ID: <ii_1a0654f4da2e9f73880>` — with nothing referencing it, exactly
+the orphaned-attachment shape seen in delivered mail on 2026-07-27.
+
+Consequence: **no image the Gmail MCP writes into a draft reaches anyone.**
+Not the mark, not the card icons, not a QR code. Do not spend another cycle on
+`src` schemes, asset hosting, or template markup — none of them is the lever.
+
+### `VERIFIED` 2026-09-02 — the date confound is broken; May's send path is the only unknown
+
+Every profile-B message in the table is consistent with having been drafted by
+this connector. The two profile-A messages (2026-05-25, 2026-05-27) rendered the
+mark, so whatever wrote them was not this path in its current form. That send
+path is unrecorded. The working explanation is that the drafting tool changed
+between 2026-05-27 and 2026-06-19, not Gmail. Only May's mechanism remains
+`UNVERIFIED`, and it no longer needs resolving to fix the problem.
+
+### What this means for getting the mark back
+
+Three options, in order of preference:
+
+1. **Build drafts as raw MIME through the Gmail REST API** (`drafts.create`
+   with `raw`), from a local script under the operator's own OAuth. The API
+   stores raw MIME verbatim, so the stored draft would carry the full template.
+   The operator still presses Send — this is drafting, not sending, so it stays
+   inside the standing rule. **The one remaining experiment** is whether the
+   compose window re-sanitises a raw-MIME draft on Send. That is the old
+   "decisive experiment" with the right vehicle: it needs a draft the connector
+   did not write.
+2. **Paste the PNG into the compose window before Send.** Standard Gmail
+   behaviour keeps pasted inline images (`UNVERIFIED` here — check on one send).
+   Manual, per draft; a stopgap.
+3. **Ship the text wordmark and drop the empty 48px cell** in connector-drafted
+   mail, so the header sits flush instead of advertising a missing image. The
+   `WiDS NYC` / magenta rule / `AI READING GROUP` lockup survives intact.
+
+The 2026-09-02 reminder batch went out as option 3 without the cell removed.
 
 ### `UNVERIFIED` 2026-07-27 — the staged experiment draft may have no HTML part
 
@@ -245,10 +305,11 @@ any message was sent programmatically.
 
 | Path | State as of 2026-07-27 |
 |---|---|
-| Raw RFC822 via Gmail MCP | Unavailable. `get_message` offers `MINIMAL` / `FULL_CONTENT` / `METADATA_ONLY`. No `raw`. |
+| Raw RFC822 via Gmail MCP | **Drafts: available** — `get_draft` accepts `messageFormat: "RAW"` and returns the base64url MIME (verified 2026-09-02, see above). Messages: still unavailable; `get_message` offers `MINIMAL` / `FULL_CONTENT` / `METADATA_ONLY` / `PLAIN_TEXT` only. |
 | Raw RFC822 via Composio | `GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID` with `format:"raw"` denied at the permission prompt; separately the gmail toolkit is **not linked** (`composio connections list` returns only `eventbrite`, `discord`, `firecrawl`, `supabase`, `github`). |
 | Sending anything programmatically | **Not permitted, independent of tooling.** The operator has ruled that nothing here sends email as them; everything member-facing is drafted for a human to send. Gmail MCP also has no send tool, and Composio catalogues `GMAIL_SEND_EMAIL` / `GMAIL_SEND_DRAFT` on an unlinked account — but treat those as incidental. Linking the account would not make sending allowed. See [`transactional-emails.md`](transactional-emails.md). |
 | `get_thread` on the staged draft's thread | `The caller does not have permission`. |
 
-Because raw MIME is unreachable, everything above is read through the MCP's
-parsed body. That reader was controlled for — see the Zoom entry.
+Delivered messages are still read through the MCP's parsed body (that reader
+was controlled for — see the Zoom entry). Drafts can now be read raw, which is
+what settled the mechanism on 2026-09-02.
