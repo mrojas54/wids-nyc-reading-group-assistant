@@ -156,6 +156,10 @@ real part — `Content-Disposition: inline; filename=mark.png`,
 `Content-ID: <ii_1a0654f4da2e9f73880>` — with nothing referencing it, exactly
 the orphaned-attachment shape seen in delivered mail on 2026-07-27.
 
+Confirmed visually by the operator in the Gmail compose window (screenshot,
+2026-09-02): the three labels render with nothing beside them, and `mark.png
+(3K)` sits in the attachment tray as a plain file.
+
 Consequence: **no image the Gmail MCP writes into a draft reaches anyone.**
 Not the mark, not the card icons, not a QR code. Do not spend another cycle on
 `src` schemes, asset hosting, or template markup — none of them is the lever.
