@@ -142,6 +142,7 @@ If no meeting is in `prep`, the command adds the member and stops there — they
 ### When something goes wrong
 
 - **DB write failed** → check `/admin/logs` or query `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`. See [docs/admin-logs.md](docs/admin-logs.md) for filters, enrichment fields, and idempotency-key conventions.
+- **Dashboard / `/me/rsvps` looks empty but data should exist** → portal read accessors still return empty UI on PostgREST failure; they now also emit `{"event":"query_failed",…}` to **Vercel / `next dev` server logs** (not `command_log`). Search for that event before treating it as a real empty roster. See [web/README.md](web/README.md#runtime-query-failures-vs-empty-data).
 - **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
 - **Members can't submit certain dates, or the scheduler skips a window** → those dates fall inside a blackout period (the group is on break). To view, add, extend, or remove windows — and the `range_end`-is-exclusive gotcha — see [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md).
 - **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
