@@ -177,14 +177,14 @@ between 2026-05-27 and 2026-06-19, not Gmail. Only May's mechanism remains
 
 Three options, in order of preference:
 
-1. **Build drafts as raw MIME through the Gmail REST API** (`drafts.create`
-   with `raw`), from a local script under the operator's own OAuth. The API
-   stores raw MIME verbatim, so the stored draft would carry the full template.
-   The operator still presses Send — this is drafting, not sending, so it stays
-   inside the standing rule. **The one remaining experiment** is whether the
-   compose window re-sanitises a raw-MIME draft on Send. That is the old
-   "decisive experiment" with the right vehicle: it needs a draft the connector
-   did not write.
+1. **Build drafts as raw MIME through the Gmail REST API** — now
+   `scripts/gmail_raw_drafts.py`, documented in
+   [`gmail-raw-drafts.md`](gmail-raw-drafts.md). `drafts.create` with `raw`
+   stores MIME verbatim, so the stored draft carries the full template with the
+   mark as an inline `cid:` part. The operator still presses Send — the script
+   has no send path. **The one remaining experiment** is whether the compose
+   window re-sanitises a raw-MIME draft on Send; the runbook has the procedure
+   and the table for recording the outcome.
 2. **Paste the PNG into the compose window before Send.** Standard Gmail
    behaviour keeps pasted inline images (`UNVERIFIED` here — check on one send).
    Manual, per draft; a stopgap.

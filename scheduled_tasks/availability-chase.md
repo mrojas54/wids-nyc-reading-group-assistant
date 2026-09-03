@@ -285,6 +285,13 @@ For each non-submitter row:
    the operator in the Step 5d summary that the mark is absent, so they can
    paste the PNG into the compose window before sending if they want it.
 
+   The path that keeps the images is `scripts/gmail_raw_drafts.py`
+   (`docs/runbooks/gmail-raw-drafts.md`): `reminder-manifest` renders this
+   exact step for a recipients list, `batch` writes the drafts as raw MIME.
+   It runs on the operator's machine under their own OAuth, so the agent
+   hands over `recipients.json` + `tokens.json` and the two commands rather
+   than calling `create_draft`. Still drafts only; the operator sends.
+
 5. Log:
 
    ```sql
