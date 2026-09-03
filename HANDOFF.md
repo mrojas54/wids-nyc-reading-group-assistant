@@ -10,9 +10,11 @@ mark in the first place, so nothing downstream can render it. `cid:` with a real
 inline part is stripped too.
 
 **What is still open:** only whether a draft built as raw MIME through the Gmail
-REST API survives the compose window's Send. That is the remaining experiment,
-and it needs a draft this connector did not write. Everything under "The
-decisive experiment" below is kept for the record but is no longer the plan.
+REST API survives the compose window's Send. `scripts/gmail_raw_drafts.py`
+builds such drafts (setup, usage and the experiment procedure in
+[`docs/runbooks/gmail-raw-drafts.md`](docs/runbooks/gmail-raw-drafts.md)); one
+send to yourself settles it. Everything under "The decisive experiment" below
+is kept for the record but is no longer the plan.
 
 **Immediate consequence for operators:** connector-drafted mail cannot carry the
 mark. Either paste the PNG into the compose window before Send, or accept the
