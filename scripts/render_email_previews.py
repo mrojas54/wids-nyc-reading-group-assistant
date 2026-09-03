@@ -156,6 +156,31 @@ REMINDER_TOKENS = {
     "cta.label": "Open availability →",
 }
 
+# availability-reminder ships in one of two states, resolved per send from
+# meetings.paper_id — see scheduled_tasks/availability-chase.md Step 5c.
+REMINDER_BLOCKS = {"paper": True, "paper_pending": False}
+REMINDER_PAPER_PENDING_BLOCKS = {"paper": False, "paper_pending": True}
+
+# The pending state ("Paper Pal coming soon") is what goes out while the
+# leader is still choosing — reading_group #41 in prep with no paper, for
+# instance. It must render with NO paper.* token at all: the tokens are
+# removed here rather than blanked so the unresolved-token check proves the
+# `paper_pending` block never references one.
+_PAPER_ONLY_TOKENS = frozenset(
+    {k for k in REMINDER_TOKENS if k.startswith("paper.")} | {"links.companionPreview"}
+)
+REMINDER_PAPER_PENDING_TOKENS = {
+    k: v for k, v in REMINDER_TOKENS.items() if k not in _PAPER_ONLY_TOKENS
+}
+
+# The state render_pair() resolves when a caller names only the stem. A
+# template that declares blocks and has no entry here still fails loudly —
+# the point is that the *usual* preview of a two-state template is the
+# with-paper one, not that blocks are optional.
+DEFAULT_BLOCKS: dict[str, dict[str, bool]] = {
+    "availability-reminder": REMINDER_BLOCKS,
+}
+
 PRE_MEETING_TOKENS = {
     "recipient.firstName": "Maya",
     "meeting.dayName": "Tuesday",
@@ -218,6 +243,67 @@ MUSTACHE = re.compile(r"\{\{\s*([A-Za-z0-9_.]+)\s*\}\}")
 
 class RenderError(RuntimeError):
     """Raised when a template cannot be turned into a mailable body."""
+
+
+# ── Per-send block toggles ───────────────────────────────────────────────────
+#
+# render() is a flat substituter with no conditionals, so any branching a
+# template needs is frozen into the body *before* substitution. A block is
+# written as `<!-- BEGIN-BLOCK: name --> … <!-- END-BLOCK: name -->` in HTML
+# and `[[BEGIN:name]] … [[END:name]]` in the .txt twin. One name governs both
+# bodies, and the same name may wrap several regions of one body — e.g.
+# availability-reminder's paper card, "Skim the paper first" link and PS all
+# exist only once a paper is chosen, so all three carry the `paper` name and
+# toggle together; `paper_pending` is the "Paper Pal coming soon" state that
+# ships in their place. welcome_availability.compose() resolves its nine
+# handoff toggles through the same helper.
+HTML_BLOCK = (
+    r"[ \t]*<!-- BEGIN-BLOCK: {name} -->.*?<!-- END-BLOCK: {name} -->[ \t]*\n?"
+)
+TXT_BLOCK = r"[ \t]*\[\[BEGIN:{name}\]\]\n.*?[ \t]*\[\[END:{name}\]\][ \t]*\n?"
+
+# Deliberately precise: the templates *document* the marker syntax in their
+# own header comments, writing the placeholder as a literal `<name>`. A loose
+# `"BEGIN-BLOCK" in body` check matches that prose and reports a survived
+# marker on a perfectly composed body. Requiring a real identifier between the
+# delimiters distinguishes an actual marker from prose about markers.
+LEFTOVER_MARKER = re.compile(
+    r"<!--\s*(?:BEGIN|END)-BLOCK:\s*[A-Za-z0-9_]+\s*-->"
+    r"|\[\[(?:BEGIN|END):[A-Za-z0-9_]+\]\]"
+)
+
+
+def unwrap_block_markers(block: str, name: str) -> str:
+    """Remove the BEGIN/END marker lines, preserving the block's body."""
+    for marker in (
+        rf"[ \t]*<!-- BEGIN-BLOCK: {re.escape(name)} -->[ \t]*\n?",
+        rf"[ \t]*<!-- END-BLOCK: {re.escape(name)} -->[ \t]*\n?",
+        rf"[ \t]*\[\[BEGIN:{re.escape(name)}\]\][ \t]*\n?",
+        rf"[ \t]*\[\[END:{re.escape(name)}\]\][ \t]*\n?",
+    ):
+        block = re.sub(marker, "", block)
+    return block
+
+
+def resolve_blocks(body: str, ext: str, blocks: dict[str, bool]) -> str:
+    """Freeze per-send block toggles into `body` before substitution.
+
+    `blocks` maps a block name to whether it ships. An enabled block keeps its
+    contents and loses only its marker lines; a disabled one is dropped whole,
+    every region of it. Names the template does not declare are a no-op, and
+    names the template declares but `blocks` omits survive as markers — which
+    render_pair() refuses to ship.
+    """
+    pattern = HTML_BLOCK if ext == "html" else TXT_BLOCK
+    for name, keep in blocks.items():
+        block_re = re.compile(pattern.format(name=re.escape(name)), re.S)
+        if keep:
+            body = block_re.sub(
+                lambda m, n=name: unwrap_block_markers(m.group(0), n), body
+            )
+        else:
+            body = block_re.sub("", body)
+    return body
 
 
 # Documentation comments must not ship. HTML comments are not rendered, but
@@ -287,13 +373,37 @@ def render(template_text: str, tokens: dict[str, str]) -> tuple[str, list[str]]:
     return MUSTACHE.sub(sub, template_text), unresolved
 
 
-def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list[str]]:
-    """Render the .html + .txt pair for `stem`. Returns (rendered_by_ext, unresolved)."""
+def render_pair(
+    stem: str,
+    tokens: dict[str, str],
+    blocks: dict[str, bool] | None = None,
+    out_stem: str | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Render the .html + .txt pair for `stem`. Returns (rendered_by_ext, unresolved).
+
+    `blocks` freezes the template's BEGIN-BLOCK / [[BEGIN:…]] toggles before
+    anything else runs — see resolve_blocks(); omitted, it falls back to
+    DEFAULT_BLOCKS for the stem. A template that declares blocks cannot be
+    rendered without one or the other: the .txt markers would ship verbatim
+    and the HTML would carry both states stacked, so a surviving marker is a
+    RenderError rather than a preview. `out_stem` names the `*_rendered.*`
+    files when one template is previewed in more than one state.
+    """
+    if blocks is None:
+        blocks = DEFAULT_BLOCKS.get(stem)
     out: dict[str, str] = {}
     unresolved_all: list[str] = []
     for ext in ("html", "txt"):
         src = TEMPLATES / f"{stem}.{ext}"
         body = src.read_text(encoding="utf-8")
+        if blocks is not None:
+            body = resolve_blocks(body, ext, blocks)
+        leftover = LEFTOVER_MARKER.search(body)
+        if leftover:
+            raise RenderError(
+                f"{stem}.{ext}: block marker {leftover.group(0)!r} survived — "
+                "pass every block the template declares via blocks="
+            )
         if ext == "html":
             # Splice shared fragments before anything else: strip_html_comments
             # only removes real HTML comments and would never touch these
@@ -314,7 +424,7 @@ def render_pair(stem: str, tokens: dict[str, str]) -> tuple[dict[str, str], list
                     "a shared-fragment splice did not run or was reintroduced after it"
                 )
         unresolved_all.extend(unresolved)
-        dst = TEMPLATES / f"{stem}_rendered.{ext}"
+        dst = TEMPLATES / f"{out_stem or stem}_rendered.{ext}"
         dst.write_text(rendered, encoding="utf-8")
         out[ext] = rendered
     return out, unresolved_all
@@ -325,7 +435,15 @@ def main() -> int:
     qtokens = question_tokens(load_questions())
     rsvp, u_rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
     thanks, u_thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
-    reminder, u_reminder = render_pair("availability-reminder", {**REMINDER_TOKENS, **q})
+    reminder, u_reminder = render_pair(
+        "availability-reminder", {**REMINDER_TOKENS, **q}, blocks=REMINDER_BLOCKS
+    )
+    reminder_pending, u_pending = render_pair(
+        "availability-reminder",
+        {**REMINDER_PAPER_PENDING_TOKENS, **q},
+        blocks=REMINDER_PAPER_PENDING_BLOCKS,
+        out_stem="availability-reminder--paper-pending",
+    )
     pre_meeting, u_pre = render_pair(
         "pre-meeting-reminder", {**PRE_MEETING_TOKENS, **q, **qtokens}
     )
@@ -333,7 +451,9 @@ def main() -> int:
     new_paper, u_new = render_pair(
         "new-paper-announcement", {**NEW_PAPER_TOKENS, **q, **pq}
     )
-    unresolved = sorted(set(u_rsvp + u_thanks + u_reminder + u_pre + u_new))
+    unresolved = sorted(
+        set(u_rsvp + u_thanks + u_reminder + u_pending + u_pre + u_new)
+    )
     if unresolved:
         print(f"ERROR: unresolved tokens in rendered output: {unresolved}", file=sys.stderr)
         return 1
@@ -342,6 +462,10 @@ def main() -> int:
             "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},
             "availability_thanks": {"html": thanks["html"], "text": thanks["txt"]},
             "availability_reminder": {"html": reminder["html"], "text": reminder["txt"]},
+            "availability_reminder_paper_pending": {
+                "html": reminder_pending["html"],
+                "text": reminder_pending["txt"],
+            },
             "pre_meeting_reminder": {"html": pre_meeting["html"], "text": pre_meeting["txt"]},
             "new_paper_announcement": {"html": new_paper["html"], "text": new_paper["txt"]},
         },

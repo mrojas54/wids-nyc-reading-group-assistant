@@ -199,6 +199,7 @@ _ALL_STEMS = (
     "rsvp_confirmation",
     "availability_thanks",
     "availability_reminder",
+    "availability_reminder_paper_pending",
     "pre_meeting_reminder",
     "new_paper_announcement",
 )
@@ -544,3 +545,121 @@ def test_magic_link_footer_brand_matches_shared_source():
     )
     assert match is not None, "magic-link.html is missing FOOTER_BRAND:BEGIN/END sentinels"
     assert match.group(1).strip() == FOOTER_BRAND_BLOCK
+
+
+# --- per-send block toggles --------------------------------------------------
+#
+# availability-reminder ships in one of two states, resolved from
+# meetings.paper_id before substitution: `paper` (the card, the "Skim the
+# paper first" link and the Paper Pal PS) or `paper_pending` ("Paper Pal
+# coming soon"). The resolver is shared with welcome_availability.compose().
+
+_TWO_STATE_HTML = (
+    "<p>always</p>\n"
+    "<!-- BEGIN-BLOCK: paper -->\n<p>card</p>\n<!-- END-BLOCK: paper -->\n"
+    "<!-- BEGIN-BLOCK: paper_pending -->\n<p>soon</p>\n<!-- END-BLOCK: paper_pending -->\n"
+    "<p>mid</p>\n"
+    "<!-- BEGIN-BLOCK: paper -->\n<a>skim</a>\n<!-- END-BLOCK: paper -->\n"
+)
+_TWO_STATE_TXT = (
+    "always\n"
+    "[[BEGIN:paper]]\ncard\n[[END:paper]]\n"
+    "[[BEGIN:paper_pending]]\nsoon\n[[END:paper_pending]]\n"
+    "mid\n"
+    "[[BEGIN:paper]]\nskim\n[[END:paper]]\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("ext", "body"), [("html", _TWO_STATE_HTML), ("txt", _TWO_STATE_TXT)]
+)
+def test_resolve_blocks_keeps_one_state_and_drops_the_other(ext, body):
+    from scripts.render_email_previews import LEFTOVER_MARKER, resolve_blocks
+    out = resolve_blocks(body, ext, {"paper": False, "paper_pending": True})
+    assert "soon" in out
+    assert "card" not in out
+    # Every region carrying the disabled name goes, not just the first.
+    assert "skim" not in out
+    assert "always" in out and "mid" in out
+    assert LEFTOVER_MARKER.search(out) is None
+
+
+@pytest.mark.parametrize(
+    ("ext", "body"), [("html", _TWO_STATE_HTML), ("txt", _TWO_STATE_TXT)]
+)
+def test_resolve_blocks_unwraps_every_region_of_an_enabled_name(ext, body):
+    from scripts.render_email_previews import LEFTOVER_MARKER, resolve_blocks
+    out = resolve_blocks(body, ext, {"paper": True, "paper_pending": False})
+    assert "card" in out and "skim" in out
+    assert "soon" not in out
+    assert LEFTOVER_MARKER.search(out) is None
+
+
+def test_render_pair_refuses_a_template_whose_blocks_were_not_resolved(tmp_path, monkeypatch):
+    """A declared block the caller forgot is a shipped marker — fail, don't preview."""
+    import scripts.render_email_previews as rep
+    monkeypatch.setattr(rep, "TEMPLATES", tmp_path)
+    (tmp_path / "fake.html").write_text("<p>x</p>", encoding="utf-8")
+    (tmp_path / "fake.txt").write_text(_TWO_STATE_TXT, encoding="utf-8")
+    with pytest.raises(rep.RenderError, match=r"\[\[BEGIN:paper\]\]"):
+        rep.render_pair("fake", {})
+    with pytest.raises(rep.RenderError, match=r"\[\[BEGIN:paper_pending\]\]"):
+        rep.render_pair("fake", {}, blocks={"paper": True})
+
+
+def test_availability_reminder_declares_the_paper_block_pair():
+    for ext, begin in (("html", "<!-- BEGIN-BLOCK: {} -->"), ("txt", "[[BEGIN:{}]]")):
+        text = (_TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
+        for name in ("paper", "paper_pending"):
+            assert begin.format(name) in text, f"{ext} lacks block {name}"
+
+
+def test_availability_reminder_paper_state_is_the_default_preview(capsys):
+    payload = _payload(capsys)
+    body = payload["availability_reminder"]
+    assert "Skim the paper first" in body["html"]
+    assert "Paper Pal coming soon" not in body["html"]
+    assert "Paper Pal coming soon" not in body["text"]
+    assert "{{ links.companionPreview }}" not in body["text"]
+
+
+def test_availability_reminder_paper_pending_state_never_mentions_a_paper(capsys):
+    """What goes out while the leader is still choosing (reading_group #41 today)."""
+    from scripts.render_email_previews import LEFTOVER_MARKER, REMINDER_PAPER_PENDING_TOKENS
+    payload = _payload(capsys)
+    body = payload["availability_reminder_paper_pending"]
+    for fmt in ("html", "text"):
+        assert "Paper Pal coming soon" in body[fmt]
+        assert "{{" not in body[fmt]
+        assert LEFTOVER_MARKER.search(body[fmt]) is None
+        # Nothing paper-shaped survives: no title, no citation, no preview link.
+        assert "Hybrid LSTM" not in body[fmt]
+        assert "doi.org" not in body[fmt]
+        assert "papers/2" not in body[fmt]
+        assert "Wednesday morning" not in body[fmt]
+    assert "Skim the paper first" not in body["html"]
+    assert "Open availability" in body["html"]
+    # The state is proven paper-free by construction, not by blanking values.
+    assert not any(k.startswith("paper.") for k in REMINDER_PAPER_PENDING_TOKENS)
+    assert "links.companionPreview" not in REMINDER_PAPER_PENDING_TOKENS
+
+
+def test_both_reminder_states_share_the_pieces_that_do_not_depend_on_a_paper(capsys):
+    payload = _payload(capsys)
+    with_paper = payload["availability_reminder"]["html"]
+    pending = payload["availability_reminder_paper_pending"]["html"]
+    for shared in (
+        "It's been too long",
+        "Tap any weekday evening",
+        "Open availability",
+        "No availability this round is also a valid answer",
+        "Michelle Rojas",
+    ):
+        assert shared in with_paper and shared in pending, shared
+
+
+def test_render_pair_writes_the_pending_state_to_its_own_preview_files(capsys):
+    _payload(capsys)
+    for ext in ("html", "txt"):
+        assert (_TEMPLATES / f"availability-reminder--paper-pending_rendered.{ext}").exists()
+        assert (_TEMPLATES / f"availability-reminder_rendered.{ext}").exists()

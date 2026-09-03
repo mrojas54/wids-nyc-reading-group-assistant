@@ -41,10 +41,12 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from scripts.render_email_previews import (
+    LEFTOVER_MARKER,
     TEMPLATES,
     RenderError,
     find_surviving_placeholders,
     render,
+    resolve_blocks,
     splice_shared_blocks,
     strip_html_comments,
 )
@@ -66,22 +68,13 @@ OPTIONAL_BLOCKS = (
 # is a block like any other and is always stripped.
 _DOC_BLOCK = "_doc"
 
-_HTML_BLOCK = (
-    r"[ \t]*<!-- BEGIN-BLOCK: {name} -->.*?<!-- END-BLOCK: {name} -->[ \t]*\n?"
-)
-_TXT_BLOCK = r"[ \t]*\[\[BEGIN:{name}\]\]\n.*?[ \t]*\[\[END:{name}\]\][ \t]*\n?"
+# The marker grammar, the resolver and the survived-marker check all live in
+# `scripts.render_email_previews` (resolve_blocks / LEFTOVER_MARKER), shared
+# with availability-reminder's paper / paper_pending pair, so the two send
+# paths cannot drift on what a block is.
+__all__ = ["Blocks", "CompositionError", "Content", "LEFTOVER_MARKER", "compose"]
 
 _LEFTOVER_TOKEN = re.compile(r"\{\{[^}]*\}\}")
-
-# Deliberately precise: both templates *document* the marker syntax in their
-# own header comments, writing the placeholder as a literal `<name>`. A loose
-# `"BEGIN-BLOCK" in body` check matches that prose and reports a survived
-# marker on a perfectly composed body. Requiring a real identifier between the
-# delimiters distinguishes an actual marker from prose about markers.
-LEFTOVER_MARKER = re.compile(
-    r"<!--\s*(?:BEGIN|END)-BLOCK:\s*[A-Za-z0-9_]+\s*-->"
-    r"|\[\[(?:BEGIN|END):[A-Za-z0-9_]+\]\]"
-)
 
 
 class CompositionError(RuntimeError):
@@ -110,30 +103,6 @@ class Content:
 
     tokens: dict[str, str]
     blocks: Blocks = field(default_factory=Blocks)
-
-
-def _strip_blocks(body: str, pattern: str, keep: set[str], names: tuple[str, ...]) -> str:
-    """Drop disabled blocks whole; unwrap the markers around enabled ones."""
-    for name in names:
-        block_re = re.compile(pattern.format(name=re.escape(name)), re.S)
-        if name in keep:
-            # Keep the contents, drop only the two marker lines.
-            body = block_re.sub(lambda m: _unwrap(m.group(0), name), body)
-        else:
-            body, _ = block_re.subn("", body)
-    return body
-
-
-def _unwrap(block: str, name: str) -> str:
-    """Remove the BEGIN/END marker lines, preserving the block's body."""
-    for marker in (
-        rf"[ \t]*<!-- BEGIN-BLOCK: {re.escape(name)} -->[ \t]*\n?",
-        rf"[ \t]*<!-- END-BLOCK: {re.escape(name)} -->[ \t]*\n?",
-        rf"[ \t]*\[\[BEGIN:{re.escape(name)}\]\][ \t]*\n?",
-        rf"[ \t]*\[\[END:{re.escape(name)}\]\][ \t]*\n?",
-    ):
-        block = re.sub(marker, "", block)
-    return block
 
 
 # Documentation comments must not ship — this template's header comment alone
@@ -196,7 +165,6 @@ def _compose_one(
     ext: Literal["html", "txt"], content: Content
 ) -> tuple[str, list[str]]:
     src = (TEMPLATES / f"{STEM}.{ext}").read_text(encoding="utf-8")
-    pattern = _HTML_BLOCK if ext == "html" else _TXT_BLOCK
     keep = content.blocks.enabled()
 
     names = OPTIONAL_BLOCKS
@@ -204,7 +172,7 @@ def _compose_one(
         # The twin carries its own doc comment, which never ships.
         names = (_DOC_BLOCK,) + OPTIONAL_BLOCKS
 
-    body = _strip_blocks(src, pattern, keep, names)
+    body = resolve_blocks(src, ext, {name: name in keep for name in names})
     tokens = content.tokens
     if ext == "html":
         # Splice shared fragments (wordmark, CTA skeleton, footer brand line)
