@@ -11,6 +11,7 @@ import {
   S2RequestError,
   ModelLoadError,
 } from "@/lib/suggest/types";
+import type { Tables } from "@/lib/database.types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,6 +21,12 @@ const BodySchema = z.object({
   batch_size: z.number().int().min(1).max(15).default(10),
 });
 
+// The inferred select results are assigned to these Row-derived shapes so a
+// renamed column fails here at compile time rather than as `undefined` in the
+// embed input. (Not `.returns<T>()` — see lib/queries.ts for why that is a
+// cast that would hide exactly this.)
+type EligibleRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
+type CachedRow = Pick<Tables<"paper_embeddings">, "paper_id">;
 type Row = { id: number; s2_paper_id: string; title: string; abstract: string };
 
 export async function POST(req: Request) {
@@ -48,21 +55,26 @@ export async function POST(req: Request) {
       .not("s2_paper_id", "is", null)
       .order("id", { ascending: true });
     if (papersErr) throw papersErr;
+    const eligibleRows: EligibleRow[] = eligible ?? [];
 
     const { data: cached, error: cacheErr } = await client
       .from("paper_embeddings")
       .select("paper_id")
       .eq("model", "specter_v2");
     if (cacheErr) throw cacheErr;
+    const cachedRows: CachedRow[] = cached ?? [];
 
-    const cachedIds = new Set((cached ?? []).map((r: any) => r.paper_id as number));
-    const missing: Row[] = ((eligible ?? []) as any[])
-      .filter(r => !cachedIds.has(r.id as number))
+    const cachedIds = new Set(cachedRows.map(r => r.paper_id));
+    const missing: Row[] = eligibleRows
+      // The filter above excludes NULL s2_paper_id server-side; the guard
+      // narrows the generated `string | null` without a cast.
+      .filter((r): r is EligibleRow & { s2_paper_id: string } => r.s2_paper_id !== null)
+      .filter(r => !cachedIds.has(r.id))
       .map(r => ({
-        id: r.id as number,
-        s2_paper_id: r.s2_paper_id as string,
-        title: (r.title as string) ?? "",
-        abstract: (r.abstract as string) ?? "",
+        id: r.id,
+        s2_paper_id: r.s2_paper_id,
+        title: r.title ?? "",
+        abstract: r.abstract ?? "",
       }));
 
     if (missing.length === 0) {

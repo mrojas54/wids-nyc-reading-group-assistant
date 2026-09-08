@@ -20,10 +20,18 @@
 //
 // which is only an error once something consumes `data` in a type-checked way.
 // Row mappers and casts that widen back to `any` swallow that diagnostic, so
-// it's computed and then discarded. The `.returns<...>()` calls below pin
-// each embedded select to an explicit shape built from Tables<"..."> — that's
-// what makes a renamed/dropped column surface as a real tsc error instead of
-// a silent `undefined` at runtime.
+// it's computed and then discarded.
+//
+// So does `.returns<T>()`, which this file used until 2026-09. In postgrest-js
+// 2.x it is a cast: `CheckMatchingArrayTypes<Result, T>` only checks array-vs-
+// single shape and otherwise yields `T` verbatim, so a select-string typo
+// compiled clean under it (verified by renaming a column and running tsc: zero
+// errors). What actually engages the guard is letting the *inferred* result
+// flow into a value or parameter typed off Tables<"..."> — the assignment
+// fails when a field has become a SelectQueryError. Every embedded select
+// below therefore lands in a typed mapper parameter or an annotated local,
+// never a `.returns<T>()`. Re-verify after touching this: rename a column in
+// one select string and confirm tsc rejects it.
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/database.types";
 
@@ -74,8 +82,7 @@ export async function nextMeeting(sb: SupabaseClient<Database>): Promise<NextMee
     .gte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true })
     .limit(1)
-    .maybeSingle()
-    .returns<MeetingWithLeaderAndPaper>();
+    .maybeSingle();
   logQueryError("nextMeeting.scheduled", scheduledError);
 
   if (scheduled) return mapMeeting(scheduled);
@@ -89,8 +96,7 @@ export async function nextMeeting(sb: SupabaseClient<Database>): Promise<NextMee
       .eq("status", "prep"),
   )
     .limit(1)
-    .maybeSingle()
-    .returns<MeetingWithLeaderAndPaper>();
+    .maybeSingle();
   logQueryError("nextMeeting.prep", prepError);
 
   return prep ? mapMeeting(prep) : null;
@@ -257,11 +263,10 @@ export async function upcomingRsvps(
     )
     .eq("status", "scheduled")
     .gte("scheduled_at", nowIso)
-    .order("scheduled_at", { ascending: true })
-    .returns<UpcomingMeetingRow[]>();
+    .order("scheduled_at", { ascending: true });
   logQueryError("upcomingRsvps.meetings", meetingsError);
 
-  const rows = meetings ?? [];
+  const rows: UpcomingMeetingRow[] = meetings ?? [];
   if (rows.length === 0) return [];
 
   const byMeeting = new Map<number, RsvpStatus>();
@@ -273,10 +278,10 @@ export async function upcomingRsvps(
       .in(
         "meeting_id",
         rows.map((m) => m.id),
-      )
-      .returns<AttendanceRsvpRow[]>();
+      );
     logQueryError("upcomingRsvps.attendance", attendanceError);
-    for (const a of attendance ?? []) {
+    const attendanceRows: AttendanceRsvpRow[] = attendance ?? [];
+    for (const a of attendanceRows) {
       byMeeting.set(a.meeting_id, a.rsvp_status as RsvpStatus);
     }
   }
@@ -407,15 +412,15 @@ export async function paperCatalogRow(
     .eq("paper_id", paperId)
     .order("scheduled_at", { ascending: false, nullsFirst: false })
     .limit(1)
-    .maybeSingle()
-    .returns<LeaderOnlyMeetingRow>();
+    .maybeSingle();
   logQueryError("paperCatalogRow.meeting", meetingError);
+  const leaderRow: LeaderOnlyMeetingRow | null = meeting;
 
   return {
     id: paper.id,
     title: paper.title,
     authors: paper.authors ?? null,
-    leader_name: meeting?.members?.name ?? null,
+    leader_name: leaderRow?.members?.name ?? null,
   };
 }
 
@@ -435,11 +440,11 @@ export async function myHistory(sb: SupabaseClient<Database>, limit = 10): Promi
       ascending: false,
       nullsFirst: false,
     })
-    .limit(limit)
-    .returns<HistoryAttendanceRow[]>();
+    .limit(limit);
   logQueryError("myHistory", error);
+  const rows: HistoryAttendanceRow[] = data ?? [];
 
-  return (data ?? [])
+  return rows
     .map((r) => r.meetings)
     .filter((m): m is NonNullable<HistoryAttendanceRow["meetings"]> => m != null)
     .map((m) => ({

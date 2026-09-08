@@ -20,13 +20,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import psycopg
+
+from scripts.env_file import parse_env_file as _parse_env_file
 
 from scripts.render_email_previews import (
     TEMPLATES,
@@ -38,7 +39,6 @@ from scripts.render_email_previews import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
-_ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 _PAPER_COLS = "id, title, url, abstract, authors, year, prerequisites"
 
@@ -217,23 +217,6 @@ def save_prerequisites(conn: psycopg.Connection, paper_id: int, payload: dict[st
             (json.dumps(payload), paper_id),
         )
     conn.commit()
-
-
-def _parse_env_file(path: Path) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not path.exists():
-        return out
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        m = _ENV_LINE_RE.match(line)
-        if not m:
-            continue
-        key, val = m.group(1), m.group(2)
-        if (val[:1], val[-1:]) in (('"', '"'), ("'", "'")):
-            val = val[1:-1]
-        out[key] = val
-    return out
 
 
 def _db_url() -> str:

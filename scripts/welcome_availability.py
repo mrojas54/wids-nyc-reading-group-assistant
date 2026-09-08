@@ -45,10 +45,7 @@ from scripts.render_email_previews import (
     TEMPLATES,
     RenderError,
     find_surviving_placeholders,
-    render,
-    resolve_blocks,
-    splice_shared_blocks,
-    strip_html_comments,
+    render_body,
 )
 
 STEM = "welcome-availability"
@@ -105,26 +102,6 @@ class Content:
     blocks: Blocks = field(default_factory=Blocks)
 
 
-# Documentation comments must not ship — this template's header comment alone
-# is ~5 KB of repo file paths, migration numbers, design rationale, and the
-# *alternate* wording of copy the recipient is reading. The stripper (and the
-# reasoning behind its sentinel dance, which is what keeps the Outlook
-# conditionals alive) lives in `scripts.render_email_previews` so this composer
-# and the preview/JSON renderer cannot drift apart on what ships.
-
-
-def _strip_html_comments(body: str) -> str:
-    """Strip doc comments, restating failures as :class:`CompositionError`.
-
-    ``compose()`` promises exactly one failure type, so the shared stripper's
-    :class:`RenderError` is translated rather than allowed to escape.
-    """
-    try:
-        return strip_html_comments(body)
-    except RenderError as exc:
-        raise CompositionError(str(exc)) from exc
-
-
 #: The handoff hard-wraps the plain-text twin at ~68 characters.
 TXT_WIDTH = 68
 
@@ -172,21 +149,8 @@ def _compose_one(
         # The twin carries its own doc comment, which never ships.
         names = (_DOC_BLOCK,) + OPTIONAL_BLOCKS
 
-    body = resolve_blocks(src, ext, {name: name in keep for name in names})
     tokens = content.tokens
     if ext == "html":
-        # Splice shared fragments (wordmark, CTA skeleton, footer brand line)
-        # before comment-stripping and before the blanket html.escape() below
-        # — see render_email_previews.SPLICE_BLOCKS for why these can't be
-        # {{ }} tokens (escape() would corrupt the wordmark's raw markup) or
-        # HTML comments (strip_html_comments() would delete them). The {{
-        # cta.* }} tokens embedded inside the spliced CTA skeleton are plain
-        # text/URLs, so they resolve normally through the escaped tokens dict
-        # below along with everything else.
-        body = splice_shared_blocks(body)
-        # Before substitution: the header comment lists token names, and
-        # stripping first keeps them out of the unresolved tally entirely.
-        body = _strip_html_comments(body)
         # render() is a plain string substituter with no escaping, so a token
         # value goes into the markup verbatim. "Michelle & Claudia" then ships
         # a bare ampersand — which browsers forgive, but is invalid, and a name
@@ -194,8 +158,20 @@ def _compose_one(
         # No token in this template is meant to carry markup (unlike
         # availability-reminder's paper.citation, which deliberately holds an
         # <em>), so escaping all of them is safe and closes the whole class.
+        # The shared fragments (wordmark, CTA skeleton, footer brand line) are
+        # spliced by render_body() as raw markup, not tokens, so the escape
+        # never touches them — see render_email_previews.SPLICE_BLOCKS.
         tokens = {k: html.escape(v, quote=True) for k, v in tokens.items()}
-    rendered, unresolved = render(body, tokens)
+    # The send pipeline itself — blocks, marker check, splice, comment strip,
+    # substitute, placeholder check — is render_body(), shared with the
+    # preview renderer and the Gmail draft manifest. compose() promises
+    # exactly one failure type, so its RenderError is translated here.
+    try:
+        rendered, unresolved = render_body(
+            src, ext, {name: name in keep for name in names}, tokens, label=f"{STEM}.{ext}"
+        )
+    except RenderError as exc:
+        raise CompositionError(str(exc)) from exc
     if ext == "txt":
         rendered = _wrap_txt(rendered)
     return rendered, unresolved

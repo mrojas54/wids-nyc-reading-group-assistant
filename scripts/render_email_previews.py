@@ -16,6 +16,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Literal
 
 from scripts.discussion_questions import load_questions, question_tokens
 from scripts.prerequisites import prereq_tokens
@@ -166,12 +167,41 @@ REMINDER_PAPER_PENDING_BLOCKS = {"paper": False, "paper_pending": True}
 # instance. It must render with NO paper.* token at all: the tokens are
 # removed here rather than blanked so the unresolved-token check proves the
 # `paper_pending` block never references one.
-_PAPER_ONLY_TOKENS = frozenset(
-    {k for k in REMINDER_TOKENS if k.startswith("paper.")} | {"links.companionPreview"}
-)
-REMINDER_PAPER_PENDING_TOKENS = {
-    k: v for k, v in REMINDER_TOKENS.items() if k not in _PAPER_ONLY_TOKENS
-}
+def strip_paper_tokens(tokens: dict[str, str]) -> dict[str, str]:
+    """Drop every ``paper.*`` token and ``links.companionPreview``.
+
+    Every path that renders the pending state derives its token set through
+    this — the preview here and the Gmail draft manifest alike — so the
+    "proven paper-free" property holds for the body that reaches a recipient,
+    not only for the one that reaches the preview.
+    """
+    return {
+        k: v for k, v in tokens.items()
+        if not (k.startswith("paper.") or k == "links.companionPreview")
+    }
+
+
+ReminderState = Literal["paper", "paper_pending"]
+
+
+def reminder_tokens_for_state(tokens: dict[str, str], state: ReminderState) -> dict[str, str]:
+    """The token set availability-reminder renders with in ``state``."""
+    if state == "paper":
+        return dict(tokens)
+    if state == "paper_pending":
+        return strip_paper_tokens(tokens)
+    raise RenderError(f"unknown availability-reminder state {state!r}")
+
+
+def reminder_blocks_for_state(state: ReminderState) -> dict[str, bool]:
+    if state == "paper":
+        return REMINDER_BLOCKS
+    if state == "paper_pending":
+        return REMINDER_PAPER_PENDING_BLOCKS
+    raise RenderError(f"unknown availability-reminder state {state!r}")
+
+
+REMINDER_PAPER_PENDING_TOKENS = strip_paper_tokens(REMINDER_TOKENS)
 
 # The state render_pair() resolves when a caller names only the stem. A
 # template that declares blocks and has no entry here still fails loudly —
@@ -373,6 +403,58 @@ def render(template_text: str, tokens: dict[str, str]) -> tuple[str, list[str]]:
     return MUSTACHE.sub(sub, template_text), unresolved
 
 
+def render_body(
+    src: str,
+    ext: str,
+    blocks: dict[str, bool] | None,
+    tokens: dict[str, str],
+    *,
+    label: str = "body",
+) -> tuple[str, list[str]]:
+    """The one send pipeline, from template source to mailable body.
+
+    Every path that turns a template into something a member reads — the
+    preview here, ``welcome_availability.compose()``, and the Gmail draft
+    manifest in ``gmail_raw_drafts`` — runs these steps in this order:
+
+        resolve_blocks → survived-marker check → splice_shared_blocks
+        → strip_html_comments → render → survived-placeholder check
+
+    The order is load-bearing (splicing before stripping keeps fragment
+    markup subject to the comment pass; stripping before rendering keeps
+    documented token names out of the unresolved tally and out of the
+    output), and it used to be hand-maintained per caller with a docstring
+    promising they matched. Now it is maintained here.
+
+    Raises :class:`RenderError` on a survived block marker or shared-fragment
+    placeholder — neither body is mailable. Returns ``(rendered, unresolved)``
+    and leaves the unresolved-token decision to the caller: the preview
+    collects them across a pair and reports all at once; the composers raise.
+    ``label`` names the source in error messages.
+    """
+    body = src
+    if blocks is not None:
+        body = resolve_blocks(body, ext, blocks)
+    leftover = LEFTOVER_MARKER.search(body)
+    if leftover:
+        raise RenderError(
+            f"{label}: block marker {leftover.group(0)!r} survived — "
+            "pass every block the template declares via blocks="
+        )
+    if ext == "html":
+        body = splice_shared_blocks(body)
+        body = strip_html_comments(body)
+    rendered, unresolved = render(body, tokens)
+    if ext == "html":
+        surviving = find_surviving_placeholders(rendered)
+        if surviving:
+            raise RenderError(
+                f"{label}: {surviving} survived rendering — "
+                "a shared-fragment splice did not run or was reintroduced after it"
+            )
+    return rendered, unresolved
+
+
 def render_pair(
     stem: str,
     tokens: dict[str, str],
@@ -394,35 +476,8 @@ def render_pair(
     out: dict[str, str] = {}
     unresolved_all: list[str] = []
     for ext in ("html", "txt"):
-        src = TEMPLATES / f"{stem}.{ext}"
-        body = src.read_text(encoding="utf-8")
-        if blocks is not None:
-            body = resolve_blocks(body, ext, blocks)
-        leftover = LEFTOVER_MARKER.search(body)
-        if leftover:
-            raise RenderError(
-                f"{stem}.{ext}: block marker {leftover.group(0)!r} survived — "
-                "pass every block the template declares via blocks="
-            )
-        if ext == "html":
-            # Splice shared fragments before anything else: strip_html_comments
-            # only removes real HTML comments and would never touch these
-            # placeholders, but ordering it first keeps the fragments' own
-            # markup subject to the same comment-stripping pass as the rest
-            # of the body, in case a future edit reintroduces a doc comment.
-            body = splice_shared_blocks(body)
-            # Before substitution — see strip_html_comments. The .txt twins
-            # carry no HTML comments; their doc header is a [[BEGIN:_doc]]
-            # block, which is a composer's concern, not this one's.
-            body = strip_html_comments(body)
-        rendered, unresolved = render(body, tokens)
-        if ext == "html":
-            surviving = find_surviving_placeholders(rendered)
-            if surviving:
-                raise RenderError(
-                    f"{stem}.html: {surviving} survived rendering — "
-                    "a shared-fragment splice did not run or was reintroduced after it"
-                )
+        src = (TEMPLATES / f"{stem}.{ext}").read_text(encoding="utf-8")
+        rendered, unresolved = render_body(src, ext, blocks, tokens, label=f"{stem}.{ext}")
         unresolved_all.extend(unresolved)
         dst = TEMPLATES / f"{out_stem or stem}_rendered.{ext}"
         dst.write_text(rendered, encoding="utf-8")

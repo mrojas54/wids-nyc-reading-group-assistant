@@ -56,10 +56,16 @@ import json
 import sys
 from pathlib import Path
 
+# Invoked as `python scripts/<this>.py` (see the docstring), which puts scripts/
+# on sys.path but not the repo root; the shared cosine lives in the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 import torch
 from adapters import AutoAdapterModel
 from transformers import AutoTokenizer
+
+from scripts.vecmath import cosine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = REPO_ROOT / "scripts" / "specter2_parity_fixtures.json"
@@ -70,10 +76,6 @@ FIXTURES = REPO_ROOT / "scripts" / "specter2_parity_fixtures.json"
 # magnitude tighter than the INT8 parity test.
 PIVOT_MEDIAN_THRESHOLD = 0.999
 PIVOT_MIN_THRESHOLD = 0.998
-
-
-def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
 def main() -> int:

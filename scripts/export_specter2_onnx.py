@@ -49,10 +49,16 @@ import json
 import sys
 from pathlib import Path
 
+# Invoked as `python scripts/<this>.py` (see the docstring), which puts scripts/
+# on sys.path but not the repo root; the shared cosine lives in the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 import torch
 from adapters import AutoAdapterModel
 from transformers import AutoTokenizer
+
+from scripts.vecmath import cosine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = REPO_ROOT / "scripts" / "specter2_parity_fixtures.json"
@@ -130,10 +136,6 @@ def quantize_int8(fp32_path: Path, int8_path: Path) -> None:
         weight_type=QuantType.QInt8,
     )
     print(f"INT8 ONNX: {int8_path.stat().st_size / 1e6:.1f} MB")
-
-
-def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
 def verify_parity(int8_path: Path, fixtures: list[dict]) -> tuple[bool, list[float]]:
