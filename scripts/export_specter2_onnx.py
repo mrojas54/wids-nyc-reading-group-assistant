@@ -45,7 +45,6 @@ operator-run). See the plan
 Task 1.1 for the full setup sequence.
 """
 import hashlib
-import json
 import sys
 from pathlib import Path
 
@@ -58,27 +57,18 @@ import torch
 from adapters import AutoAdapterModel
 from transformers import AutoTokenizer
 
+from scripts.specter2_parity import INT8_PARITY, FixtureError, load_fixtures, parity_verdict, sep_text
 from scripts.vecmath import cosine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = REPO_ROOT / "scripts" / "specter2_parity_fixtures.json"
 OUTPUT_DIR = REPO_ROOT / "scripts" / "_specter2_export"
 
-# Empirical INT8 dynamic-quantization fidelity for SPECTER2: ~10 of 11
-# fixtures land at cos >= 0.99 against S2's canonical FP32 vectors, with
-# occasional outliers down to ~0.94 on specific papers. The original
-# brainstorm guessed 0.997 ("0.5% quantization noise") which turned out
-# to be aspirational — INT8 just doesn't preserve cos sim that tightly
-# for a 110M-param transformer.
-#
-# We use MEDIAN rather than mean because a single quantization-tail
-# outlier can drag the mean below threshold even when the bulk of
-# fixtures are healthy. Median is robust to that. The min threshold
-# guards against catastrophic failure (wrong adapter -> <0.85,
-# tokenizer mismatch -> <0.7) while accepting a single outlier at the
-# quantization tail.
-PARITY_MEDIAN_THRESHOLD = 0.99
-PARITY_MIN_THRESHOLD = 0.93
+# Thresholds and the reasoning behind them live in scripts/specter2_parity.py
+# (INT8_PARITY), shared with the verifier and unit-tested; these aliases keep
+# the names this script's log lines and docs use.
+PARITY_MEDIAN_THRESHOLD = INT8_PARITY.median
+PARITY_MIN_THRESHOLD = INT8_PARITY.minimum
 
 
 def fuse_model() -> tuple[AutoAdapterModel, AutoTokenizer]:
@@ -95,7 +85,7 @@ def fuse_model() -> tuple[AutoAdapterModel, AutoTokenizer]:
 
 def embed_with_pytorch(model, tokenizer, title: str, abstract: str) -> np.ndarray:
     """Reference embedding via PyTorch — ground truth for parity check."""
-    text = f"{title}{tokenizer.sep_token}{abstract}"
+    text = sep_text(title, tokenizer.sep_token, abstract)
     inputs = tokenizer(text, padding=True, truncation=True, return_tensors="pt", max_length=512)
     with torch.no_grad():
         outputs = model(**inputs)
@@ -138,12 +128,12 @@ def quantize_int8(fp32_path: Path, int8_path: Path) -> None:
     print(f"INT8 ONNX: {int8_path.stat().st_size / 1e6:.1f} MB")
 
 
-def verify_parity(int8_path: Path, fixtures: list[dict]) -> tuple[bool, list[float]]:
+def verify_parity(int8_path: Path, fixtures: list) -> tuple[bool, list[float]]:
     """Compare INT8 ONNX outputs against S2's canonical vectors.
 
-    Returns (passed, sims) where passed reflects BOTH thresholds:
-      - median(sims) >= PARITY_MEDIAN_THRESHOLD (typical fidelity)
-      - min(sims) >= PARITY_MIN_THRESHOLD (no catastrophic outlier)
+    Returns (passed, sims) where passed reflects BOTH INT8_PARITY thresholds:
+      - median(sims) >= median threshold (typical fidelity)
+      - min(sims) >= minimum threshold (no catastrophic outlier)
     """
     import onnxruntime as ort
     from transformers import AutoTokenizer
@@ -151,18 +141,14 @@ def verify_parity(int8_path: Path, fixtures: list[dict]) -> tuple[bool, list[flo
     tok = AutoTokenizer.from_pretrained("allenai/specter2_base")
     sims = []
     for fix in fixtures:
-        text = f"{fix['title']}{tok.sep_token}{fix['abstract']}"
+        text = sep_text(fix.title, tok.sep_token, fix.abstract)
         enc = tok(text, padding="max_length", truncation=True, max_length=512, return_tensors="np")
         out = sess.run(None, {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]})
         local_vec = out[0][0, 0, :].astype(np.float32)  # CLS token
-        s2_vec = np.array(fix["vector"], dtype=np.float32)
-        sims.append(cosine(local_vec, s2_vec))
-    avg = float(np.mean(sims))
-    median = float(np.median(sims))
-    minimum = float(np.min(sims))
-    print(f"Parity over {len(sims)} fixtures: avg={avg:.4f}, median={median:.4f}, min={minimum:.4f}")
+        sims.append(cosine(local_vec, fix.vector))
+    passed, stats = parity_verdict(sims, INT8_PARITY)
+    print(f"Parity over {stats.count} fixtures: avg={stats.mean:.4f}, median={stats.median:.4f}, min={stats.minimum:.4f}")
     print(f"  (median threshold={PARITY_MEDIAN_THRESHOLD}, min threshold={PARITY_MIN_THRESHOLD})")
-    passed = median >= PARITY_MEDIAN_THRESHOLD and minimum >= PARITY_MIN_THRESHOLD
     return passed, sims
 
 
@@ -175,11 +161,12 @@ def sha256_of(path: Path) -> str:
 
 
 def main() -> int:
-    if not FIXTURES.exists():
-        print(f"ERROR: {FIXTURES} missing; run the fixtures-collection command from "
+    try:
+        fixtures = load_fixtures(FIXTURES)
+    except FixtureError as exc:
+        print(f"ERROR: {exc}; run the fixtures-collection command from "
               f"the plan's Task 1.1 Step 1 first.", file=sys.stderr)
         return 1
-    fixtures = json.loads(FIXTURES.read_text())
     model, tokenizer = fuse_model()
     fp32 = OUTPUT_DIR / "specter2_fp32.onnx"
     int8 = OUTPUT_DIR / "specter2_int8.onnx"

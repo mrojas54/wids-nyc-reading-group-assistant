@@ -52,7 +52,6 @@ Run -- pick the right command for your platform:
 Read-only. Does not modify scripts/specter2_parity_fixtures.json or any
 other file. Exits 0 on pass, 1 on fail.
 """
-import json
 import sys
 from pathlib import Path
 
@@ -60,11 +59,11 @@ from pathlib import Path
 # on sys.path but not the repo root; the shared cosine lives in the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import numpy as np
 import torch
 from adapters import AutoAdapterModel
 from transformers import AutoTokenizer
 
+from scripts.specter2_parity import FP32_PIVOT, FixtureError, load_fixtures, parity_verdict, sep_text
 from scripts.vecmath import cosine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -73,17 +72,18 @@ FIXTURES = REPO_ROOT / "scripts" / "specter2_parity_fixtures.json"
 # FP32-vs-FP32 across the same inference graph should be near-identical.
 # A real gap signals model-config mismatch (different adapter, tokenizer,
 # pooling), not quantization noise -- so the thresholds are an order of
-# magnitude tighter than the INT8 parity test.
-PIVOT_MEDIAN_THRESHOLD = 0.999
-PIVOT_MIN_THRESHOLD = 0.998
+# magnitude tighter than the INT8 parity test. Defined once in
+# scripts/specter2_parity.py (FP32_PIVOT); aliased here for the log lines.
+PIVOT_MEDIAN_THRESHOLD = FP32_PIVOT.median
+PIVOT_MIN_THRESHOLD = FP32_PIVOT.minimum
 
 
 def main() -> int:
-    if not FIXTURES.exists():
-        print(f"ERROR: {FIXTURES} missing.", file=sys.stderr)
+    try:
+        fixtures = load_fixtures(FIXTURES)
+    except FixtureError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 1
-
-    fixtures = json.loads(FIXTURES.read_text())
     print(f"Loaded {len(fixtures)} fixtures from {FIXTURES.name}")
 
     print("Loading specter2_base...")
@@ -101,28 +101,24 @@ def main() -> int:
     print(f"{'#':>3}  {'paperId':<42}  {'cos':>8}")
     print("-" * 60)
     for i, fix in enumerate(fixtures, start=1):
-        text = f"{fix['title']}{tok.sep_token}{fix['abstract']}"
+        text = sep_text(fix.title, tok.sep_token, fix.abstract)
         enc = tok(text, padding="max_length", truncation=True,
                   max_length=512, return_tensors="pt")
         with torch.no_grad():
             out = model(**enc)
         local_vec = out.last_hidden_state[0, 0, :].float().numpy()
-        s2_vec = np.array(fix["vector"], dtype=np.float32)
-        sim = cosine(local_vec, s2_vec)
+        sim = cosine(local_vec, fix.vector)
         sims.append(sim)
-        print(f"{i:>3}  {fix['paperId']:<42}  {sim:>8.6f}")
+        print(f"{i:>3}  {fix.paper_id:<42}  {sim:>8.6f}")
 
-    median = float(np.median(sims))
-    minimum = float(np.min(sims))
-    mean = float(np.mean(sims))
+    passed, stats = parity_verdict(sims, FP32_PIVOT)
 
     print("-" * 60)
-    print(f"mean   = {mean:.6f}")
-    print(f"median = {median:.6f}  (threshold {PIVOT_MEDIAN_THRESHOLD})")
-    print(f"min    = {minimum:.6f}  (threshold {PIVOT_MIN_THRESHOLD})")
+    print(f"mean   = {stats.mean:.6f}")
+    print(f"median = {stats.median:.6f}  (threshold {PIVOT_MEDIAN_THRESHOLD})")
+    print(f"min    = {stats.minimum:.6f}  (threshold {PIVOT_MIN_THRESHOLD})")
     print()
 
-    passed = median >= PIVOT_MEDIAN_THRESHOLD and minimum >= PIVOT_MIN_THRESHOLD
     if passed:
         print("PASS -- local FP32 ~= S2 served vectors.")
         print("        Fixture-harvester design pivot is safe:")
