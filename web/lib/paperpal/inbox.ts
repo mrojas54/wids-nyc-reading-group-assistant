@@ -1,8 +1,20 @@
 // Server-only DB helpers for the PaperPal Inbox screen.
 // Each function maps one of the four sections defined in
 // design_handoff/architecture.md → "Inbox query".
+//
+// Typing: the `<Database>` generic on the client gets `.from()` / `.rpc()` /
+// filter-column checking, and each select's *inferred* result flows into a
+// mapper whose parameter is a shape built from `Tables<"...">`. That
+// assignment is the guard. postgrest-js reports an unknown column inside a
+// select string in the result type (the field becomes a `SelectQueryError`),
+// so a renamed or dropped column in MEETING_SELECT fails to type-check at the
+// mapper call instead of surfacing as `undefined` at runtime.
+//
+// Deliberately NOT `.returns<T>()` — see the header of lib/queries.ts for
+// why that is a cast in postgrest-js 2.x and swallows the diagnostic.
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Tables } from "@/lib/database.types";
 
 export type InboxPaper = {
   id: number;
@@ -40,18 +52,47 @@ export type InboxViewer = {
   volunteeredMeetingIds: number[];
 };
 
-function mapPaper(p: any): InboxPaper | null {
+// ── Row shapes, built from the generated Row types ──────────────────────────
+
+type PaperEmbed = Pick<
+  Tables<"papers">,
+  "id" | "title" | "authors" | "venue" | "companion_url"
+>;
+
+type MeetingRow = Pick<
+  Tables<"meetings">,
+  "id" | "status" | "scheduled_at" | "location" | "leader_id"
+> & {
+  leader: Pick<Tables<"members">, "name"> | null;
+  paper: PaperEmbed | null;
+};
+
+type SuggestionRow = Pick<
+  Tables<"paper_suggestions">,
+  "id" | "meeting_id" | "suggested_at" | "notes" | "suggested_by"
+> & {
+  suggester: Pick<Tables<"members">, "name"> | null;
+  // paper_suggestions.meeting_id is NOT NULL, so the embed is never null.
+  meeting: Pick<Tables<"meetings">, "leader_id">;
+  // paper_id is NOT NULL too, but RLS can hide the papers row; keep the
+  // runtime filter below and let the type say so.
+  paper: PaperEmbed | null;
+};
+
+type SuggestionWithPaper = SuggestionRow & { paper: PaperEmbed };
+
+function mapPaper(p: PaperEmbed | null): InboxPaper | null {
   if (!p) return null;
   return {
     id: p.id,
     title: p.title ?? "",
-    authors: Array.isArray(p.authors) ? p.authors : p.authors ? [p.authors] : null,
+    authors: p.authors ?? null,
     venue: p.venue ?? null,
     companion_url: p.companion_url ?? null,
   };
 }
 
-function mapMeeting(m: any): InboxMeeting {
+function mapMeeting(m: MeetingRow): InboxMeeting {
   return {
     meeting_id: m.id,
     scheduled_at: m.scheduled_at ?? null,
@@ -63,11 +104,27 @@ function mapMeeting(m: any): InboxMeeting {
   };
 }
 
+function mapSuggestion(r: SuggestionWithPaper, paper: InboxPaper): InboxSuggestion {
+  return {
+    suggestion_id: r.id,
+    meeting_id: r.meeting_id,
+    meeting_leader_id: r.meeting.leader_id ?? null,
+    suggested_at: r.suggested_at ?? null,
+    note: r.notes ?? null,
+    suggested_by_id: r.suggested_by ?? null,
+    suggested_by_name: r.suggester?.name ?? null,
+    paper,
+  };
+}
+
 const MEETING_SELECT =
   "id, status, scheduled_at, location, leader_id, leader:leader_id(name), paper:paper_id(id, title, authors, venue, companion_url)";
 
+const SUGGESTION_SELECT =
+  "id, meeting_id, suggested_at, notes, suggested_by, suggester:suggested_by(name), meeting:meeting_id(leader_id), paper:paper_id(id, title, authors, venue, companion_url)";
+
 export async function getCurrentReading(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxMeeting | null> {
   const nowIso = new Date().toISOString();
   const { data, error } = await sb
@@ -85,7 +142,7 @@ export async function getCurrentReading(
 }
 
 export async function getUpcomingPicks(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
   const { data, error } = await sb
@@ -102,15 +159,13 @@ export async function getUpcomingPicks(
 }
 
 export async function getWantToLead(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxSuggestion[]> {
   // paper_suggestions joined to papers + suggester member name; filter out
   // suggestions whose paper already has a meeting with a leader assigned.
   const { data, error } = await sb
     .from("paper_suggestions")
-    .select(
-      "id, meeting_id, suggested_at, notes, suggested_by, suggester:suggested_by(name), meeting:meeting_id(leader_id), paper:paper_id(id, title, authors, venue, companion_url)",
-    )
+    .select(SUGGESTION_SELECT)
     .order("suggested_at", { ascending: false });
   if (error) {
     throw new Error(
@@ -118,10 +173,12 @@ export async function getWantToLead(
     );
   }
 
-  const rows = (data ?? []).filter((r: any) => r.paper);
+  const rows: SuggestionWithPaper[] = (data ?? []).filter(
+    (r): r is SuggestionWithPaper => r.paper !== null,
+  );
   if (rows.length === 0) return [];
 
-  const paperIds = Array.from(new Set(rows.map((r: any) => r.paper.id)));
+  const paperIds = Array.from(new Set(rows.map((r) => r.paper.id)));
   const { data: ledMeetings, error: ledMeetingsError } = await sb
     .from("meetings")
     .select("paper_id")
@@ -132,26 +189,21 @@ export async function getWantToLead(
       `getWantToLead: meetings query failed: ${ledMeetingsError.message}`,
     );
   }
-  const assigned = new Set((ledMeetings ?? []).map((m: any) => m.paper_id));
+  const assigned = new Set((ledMeetings ?? []).map((m) => m.paper_id));
 
-  return rows
-    .filter((r: any) => !assigned.has(r.paper.id))
-    .map((r: any) => ({
-      suggestion_id: r.id,
-      meeting_id: r.meeting_id,
-      meeting_leader_id: r.meeting?.leader_id ?? null,
-      suggested_at: r.suggested_at ?? null,
-      note: r.notes ?? null,
-      suggested_by_id: r.suggested_by ?? null,
-      suggested_by_name: r.suggester?.name ?? null,
-      paper: mapPaper(r.paper)!,
-    }));
+  const out: InboxSuggestion[] = [];
+  for (const r of rows) {
+    if (assigned.has(r.paper.id)) continue;
+    const paper = mapPaper(r.paper);
+    if (paper) out.push(mapSuggestion(r, paper));
+  }
+  return out;
 }
 
 // Viewer-scoped facts the Inbox needs to decide which actions to show:
 // the current member id and the meetings they've already volunteered for.
 export async function getInboxViewer(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<InboxViewer> {
   const { data: memberId } = await sb.rpc("current_member_id");
   if (typeof memberId !== "number") {
@@ -166,13 +218,13 @@ export async function getInboxViewer(
   }
   return {
     memberId,
-    volunteeredMeetingIds: (data ?? []).map((v: any) => v.meeting_id),
+    volunteeredMeetingIds: (data ?? []).map((v) => v.meeting_id),
   };
 }
 
 // Catalog papers a member can propose to lead, newest first.
 export async function listCatalogPapers(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
 ): Promise<CatalogPaper[]> {
   const { data, error } = await sb
     .from("papers")
@@ -181,11 +233,11 @@ export async function listCatalogPapers(
   if (error) {
     throw new Error(`listCatalogPapers: papers query failed: ${error.message}`);
   }
-  return (data ?? []).map((p: any) => ({ id: p.id, title: p.title ?? "" }));
+  return (data ?? []).map((p) => ({ id: p.id, title: p.title ?? "" }));
 }
 
 export async function getRecentlyDiscussed(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   limit = 10,
 ): Promise<InboxMeeting[]> {
   const nowIso = new Date().toISOString();
@@ -203,7 +255,7 @@ export async function getRecentlyDiscussed(
   return (data ?? []).map(mapMeeting);
 }
 
-export async function getInbox(sb: SupabaseClient) {
+export async function getInbox(sb: SupabaseClient<Database>) {
   const [reading, upcoming, suggestions, past, viewer, catalogPapers] =
     await Promise.all([
       getCurrentReading(sb),

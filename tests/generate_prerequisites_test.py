@@ -154,9 +154,44 @@ def test_build_tokens_maps_all_template_keys():
     assert t["paper.authorsShort"] == "Zhao, Guo & Wang"
     assert t["prereqs.lede"] == "Groundwork." and "<tr>" in t["prereqs.html"]
     assert t["recipient.firstName"] == "Maya" and t["quote.by"] == "Grace Hopper"
+    assert t["cta.href"] == "http://a"
+    assert t["cta.label"] == "Share your availability →"
 
 
 def test_render_new_paper_email_raises_on_unresolved():
     from scripts.generate_prerequisites import render_new_paper_email
     with pytest.raises(ValueError):
         render_new_paper_email({"recipient.firstName": "Maya"})  # missing most tokens
+
+
+def test_render_new_paper_email_splices_shared_fragments():
+    from scripts.generate_prerequisites import build_tokens, render_new_paper_email
+
+    paper = {
+        "id": 2,
+        "title": "Full Title",
+        "url": "http://x",
+        "authors": ["Li Zhao", "Mei Guo", "Wei Wang"],
+    }
+    prereqs = {
+        "lede": "Groundwork.",
+        "items": ["a", "b", "c"],
+        "summary": "it forecasts gold.",
+        "short_title": "Short T",
+    }
+    per_send = {
+        "recipient.firstName": "Maya",
+        "lead.name": "Claudia",
+        "lead.initial": "C",
+        "lead.blurb": "leads this one.",
+        "signoff.names": "Michelle & Claudia",
+        "links.availability": "http://a",
+        "links.rsvpManage": "http://r",
+    }
+    quote = {"quote.text": "q", "quote.by": "Grace Hopper", "quote.role": "CS"}
+    rendered = render_new_paper_email(build_tokens(paper, prereqs, per_send, quote))
+    html = rendered["html"]
+    assert "__WORDMARK_BLOCK__" not in html
+    assert "__CTA_BLOCK__" not in html
+    assert "Share your availability" in html
+    assert "http://a" in html

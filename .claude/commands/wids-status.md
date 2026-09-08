@@ -17,18 +17,23 @@ SELECT
   rg.location        AS rg_location,
   rg.paper_id,
   rg.leader_id,
-  rg.packets_sent_at,
   rg.drive_folder_url,
+  pc.generated_at    AS paper_pal_generated_at,
   admin.id           AS admin_id,
   admin.scheduled_at AS admin_scheduled,
   admin.status       AS admin_status
 FROM meetings rg
 LEFT JOIN meetings admin ON admin.id = rg.planned_by_admin_id
+LEFT JOIN paper_companions pc ON pc.paper_id = rg.paper_id
 WHERE rg.type = 'reading_group'
   AND rg.status IN ('prep','scheduled')
 ORDER BY rg.created_at DESC
 LIMIT 1;
 ```
+
+`meetings.packets_sent_at` was dropped in migration `024` (PDF-packet flow
+deprecated). Paper Pal readiness is `paper_companions.generated_at` via
+`paper_id` — see `migrations/024_drop_packets_sent_at.sql`.
 
 If no rows: print "No active cycle. Run `/wids-meeting-start admin` to begin." and exit.
 
@@ -53,6 +58,10 @@ GROUP BY rsvp_status;
 -- paper info if picked
 SELECT title, year, venue, companion_url FROM papers WHERE id = <paper_id>;
 
+-- Paper Pal companion (source of truth; preferred over papers.companion_url)
+SELECT generated_at, (payload IS NOT NULL) AS has_payload
+FROM paper_companions WHERE paper_id = <paper_id>;
+
 -- leader info if picked
 SELECT name FROM members WHERE id = <leader_id>;
 ```
@@ -76,14 +85,17 @@ Reading group (#<rg_id>):
   Location:         <rg_location or "TBD">
   Leader:           <leader_name or "not yet picked">
   Paper:            "<paper_title>" (<year>, <venue>) or "not yet picked"
-  Companion:        <"published — ${PORTAL_URL}<companion_url>" or "not yet generated"> (read from `papers.companion_url IS NOT NULL` for the active paper)
-  Members' packet:  <"sent <packets_sent_at>" or "not yet drafted">
+  Companion:        <"ready at ${PORTAL_URL}/papers/<paper_id> (generated <paper_pal_generated_at>)"
+                    or "not yet generated">
 
 Attendance: <attending=N declined=N tentative=N no_response=N>
 
 Next action:
   <inferred from status — see below>
 ```
+
+Prefer `paper_companions.payload` / `generated_at` for the Companion line.
+Fall back to `papers.companion_url` only when no `paper_companions` row exists.
 
 ## Step 4 — Infer next action
 
@@ -94,9 +106,13 @@ Logic (first match wins, in order):
 - If `rg.leader_id IS NULL`: "Run `/wids-pick-leader`." *(catches any post-admin or admin-less state where the leader still hasn't been chosen)*
 - If `rg.paper_id IS NULL`: "Leader: run `/wids-find-paper`."
 - If `rg.scheduled_at IS NULL`: "Run `/wids-meeting-start reading_group` then `/wids-schedule-reading-group`."
-- If `rg.scheduled_at` set AND no guide PDFs in Drive: "Leader: run `/wids-make-guide`."
-- If guide PDFs exist AND `packets_sent_at IS NULL`: "Leader: run `/wids-send-packets`."
+- If `rg.scheduled_at` set AND `paper_pal_generated_at IS NULL` (no
+  `paper_companions` row for the paper): "Leader: open `/new?paperId=<paper_id>`
+  and generate the Paper Pal companion before the pre-meeting reminder."
 - Otherwise: "Reading group on <date>. See you there."
+
+Do **not** nudge `/wids-make-guide` or `/wids-send-packets` — both are deprecated
+and superseded by Paper Pal (`docs/paper-pal-portal.md`).
 
 Earlier bullets short-circuit later ones — e.g. if `admin_status='prep'` the first bullet fires regardless of leader/paper state, which is correct because the operator shouldn't pick a leader until the admin meeting has happened.
 

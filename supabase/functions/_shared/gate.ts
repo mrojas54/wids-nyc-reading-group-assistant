@@ -82,5 +82,20 @@ export async function canRequestHint(
     console.error("[gate] canRequestHint attendance query failed:", error);
     throw new Error(`canRequestHint DB error: ${error.message}`);
   }
-  return (data?.length ?? 0) > 0;
+  if ((data?.length ?? 0) > 0) return true;
+
+  // Meeting leaders pass even without an RSVP — they are attending by
+  // definition. members.role='leader' is a different concept and is not
+  // enough on its own (can_synthesize uses meetings.leader_id the same way).
+  const { data: led, error: ledErr } = await sb
+    .from("meetings")
+    .select("id")
+    .eq("paper_id", paperId)
+    .eq("leader_id", memberId)
+    .limit(1);
+  if (ledErr) {
+    console.error("[gate] canRequestHint leader query failed:", ledErr);
+    throw new Error(`canRequestHint DB error: ${ledErr.message}`);
+  }
+  return (led?.length ?? 0) > 0;
 }

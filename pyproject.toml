@@ -87,6 +87,20 @@ target-version = "py313"
 # is deliberate. Excluding them keeps whole-repo `ruff check .` green.
 extend-exclude = ["web/public/notebooks"]
 
+[tool.ruff.lint]
+# RUF100 flags `# noqa` directives that suppress nothing — either because the
+# rule was never enabled or because a per-file-ignore already covers it. Four
+# such directives accumulated in this tree and sat dead for three weeks; each
+# one advertised an enforcement that did not exist. Enabling the rule makes
+# that class self-correcting rather than something a periodic audit has to
+# notice.
+#
+# Note this does NOT widen the default rule set (E4/E7/E9/F) otherwise. In
+# particular BLE (blind-except) remains unenabled: turning it on is a separate,
+# larger decision because two currently-unsuppressed sites would newly fail
+# (scripts/find_paper_suggest.py:425, scripts/embed_specter2_fp32.py:130).
+extend-select = ["RUF100"]
+
 [tool.ruff.lint.per-file-ignores]
 # Tests use a deliberate literate style: a smoke `import` test runs first, then
 # imports are interleaved between test functions. E402 is expected there and

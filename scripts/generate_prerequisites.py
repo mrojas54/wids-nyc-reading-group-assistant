@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -28,9 +27,18 @@ from typing import Any
 
 import psycopg
 
+from scripts.env_file import parse_env_file as _parse_env_file
+
+from scripts.render_email_previews import (
+    TEMPLATES,
+    find_surviving_placeholders,
+    render,
+    splice_shared_blocks,
+    strip_html_comments,
+)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
-_ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 _PAPER_COLS = "id, title, url, abstract, authors, year, prerequisites"
 
@@ -163,22 +171,38 @@ def build_tokens(
     tokens.update(prereq_tokens(prereqs["lede"], list(prereqs["items"])))
     tokens.update(per_send)
     tokens.update(quote)
+    # The CTA skeleton is spliced in at render time and carries {{ cta.* }}.
+    # Preview tokens already set these; the live --mode render stdin historically
+    # did not. Default them here so splice + substitute succeeds without a
+    # playbook change. An explicit per_send/quote key still wins (update above).
+    tokens.setdefault("cta.bg", "#467560")
+    tokens.setdefault("cta.borderColor", "#355c4b")
+    tokens.setdefault("cta.width", "236")
+    tokens.setdefault("cta.label", "Share your availability →")
+    tokens.setdefault("cta.href", tokens.get("links.availability", ""))
     return tokens
 
 
 def render_new_paper_email(tokens: dict[str, str]) -> dict[str, str]:
-    """Render the .html + .txt pair; raise ValueError if any token is unresolved."""
-    from scripts.render_email_previews import TEMPLATES, render, strip_html_comments
-
+    """Render the .html + .txt pair; raise ValueError if any token is unresolved
+    or a shared-fragment placeholder survives (same splice contract as render_pair).
+    """
     out: dict[str, str] = {}
     unresolved: list[str] = []
     for ext, key in (("html", "html"), ("txt", "text")):
         src = (TEMPLATES / f"new-paper-announcement.{ext}").read_text(encoding="utf-8")
         if ext == "html":
-            # This is a send path, not a preview: the head comment must not
-            # reach the member's inbox. Strip before substitution.
+            # Splice before strip: the fragments' own markup must go through
+            # the same comment-stripping pass as the host template.
+            src = splice_shared_blocks(src)
             src = strip_html_comments(src)
         rendered, missing = render(src, tokens)
+        if ext == "html":
+            surviving = find_surviving_placeholders(rendered)
+            if surviving:
+                raise ValueError(
+                    f"surviving splice placeholders: {sorted(surviving)}"
+                )
         unresolved.extend(missing)
         out[key] = rendered
     if unresolved:
@@ -193,23 +217,6 @@ def save_prerequisites(conn: psycopg.Connection, paper_id: int, payload: dict[st
             (json.dumps(payload), paper_id),
         )
     conn.commit()
-
-
-def _parse_env_file(path: Path) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not path.exists():
-        return out
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        m = _ENV_LINE_RE.match(line)
-        if not m:
-            continue
-        key, val = m.group(1), m.group(2)
-        if (val[:1], val[-1:]) in (('"', '"'), ("'", "'")):
-            val = val[1:-1]
-        out[key] = val
-    return out
 
 
 def _db_url() -> str:

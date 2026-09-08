@@ -13,7 +13,8 @@ assessment workflow specified in
 All three require a Supabase JWT in `Authorization: Bearer ...`.
 `analyze-paper` uses the `can_synthesize_paper_pal` RPC (migration 017);
 `analyze-hint` and `analyze-socratic` use the looser attending-member gate
-in `_shared/gate.ts` so RSVP'd readers can use assessment helpers.
+in `_shared/gate.ts` so RSVP'd readers and the meeting's `leader_id` (even
+without an RSVP) can use assessment helpers.
 
 ## Layout
 
@@ -37,6 +38,10 @@ Provider abstraction lives in `web/lib/paperpal/providers/` and is imported
 via relative path (`../../../web/lib/paperpal/providers/index.ts`). The
 import map aliases `zod` to the npm specifier so both Node tests and Deno
 Edge Functions resolve the same package.
+
+**Deno version:** pin is the repo-root [`.dvmrc`](../../.dvmrc) (currently
+`2.9.5`). CI's edge-functions job and `.cursor/install.sh` both install from
+that file — bump it in one place when upgrading Deno.
 
 ## Environment variables
 

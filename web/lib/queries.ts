@@ -1,6 +1,39 @@
 // Server-side data accessors for the dashboard.
 // All queries assume the supplied client respects RLS (server.ts client).
-import type { SupabaseClient } from "@supabase/supabase-js";
+//
+// The `<Database>` generic is load-bearing, not decoration. `SupabaseClient`'s
+// generic parameter defaults to `any`, so a bare annotation silently discards
+// the schema types that lib/supabase/{server,browser,service}.ts attach at
+// construction. Without it `tsc` accepted `.from("meetingz")` — a table that
+// does not exist — with zero errors. Keep the generic on every accessor's
+// client parameter.
+//
+// What it catches, as measured on this file: unknown table in .from(), unknown
+// function in .rpc(), unknown column in filters (.eq/.gte/.order/...), and
+// unknown column inside a .select("a, b, c") string.
+//
+// That last one has a catch worth knowing about. postgrest-js does detect it,
+// but it reports it *in the result type* rather than at the call:
+//
+//   .select("id, bogus_col")
+//     -> SelectQueryError<"column 'bogus_col' does not exist on 'meetings'."> | null
+//
+// which is only an error once something consumes `data` in a type-checked way.
+// Row mappers and casts that widen back to `any` swallow that diagnostic, so
+// it's computed and then discarded.
+//
+// So does `.returns<T>()`, which this file used until 2026-09. In postgrest-js
+// 2.x it is a cast: `CheckMatchingArrayTypes<Result, T>` only checks array-vs-
+// single shape and otherwise yields `T` verbatim, so a select-string typo
+// compiled clean under it (verified by renaming a column and running tsc: zero
+// errors). What actually engages the guard is letting the *inferred* result
+// flow into a value or parameter typed off Tables<"..."> — the assignment
+// fails when a field has become a SelectQueryError. Every embedded select
+// below therefore lands in a typed mapper parameter or an annotated local,
+// never a `.returns<T>()`. Re-verify after touching this: rename a column in
+// one select string and confirm tsc rejects it.
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Tables } from "@/lib/database.types";
 
 export type MeetingStatus = "prep" | "scheduled" | "done" | "cancelled" | "guide_failed";
 export type RsvpStatus = "attending" | "declined" | "tentative" | "no_response";
@@ -17,10 +50,30 @@ export type NextMeeting = {
   companion_url: string | null;
 };
 
-export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | null> {
+// Shape of the `papers:paper_id(...)` embed used by nextMeeting/myHistory —
+// built from the generated Row types so a renamed/dropped column on either
+// table is a compile error here, not a silently-undefined field at runtime.
+type PaperCompanionEmbed = Pick<Tables<"papers">, "id" | "title" | "companion_url"> & {
+  paper_companions: Pick<Tables<"paper_companions">, "paper_id">[] | Pick<Tables<"paper_companions">, "paper_id"> | null;
+};
+
+type MeetingWithLeaderAndPaper = Pick<
+  Tables<"meetings">,
+  "id" | "type" | "status" | "scheduled_at" | "location" | "leader_id" | "paper_id"
+> & {
+  members: Pick<Tables<"members">, "name"> | null;
+  papers: PaperCompanionEmbed | null;
+};
+
+function logQueryError(fn: string, error: PostgrestError | null): void {
+  if (!error) return;
+  console.error(JSON.stringify({ event: "query_failed", fn, message: error.message, code: error.code }));
+}
+
+export async function nextMeeting(sb: SupabaseClient<Database>): Promise<NextMeeting | null> {
   const nowIso = new Date().toISOString();
 
-  const { data: scheduled } = await sb
+  const { data: scheduled, error: scheduledError } = await sb
     .from("meetings")
     .select(
       "id, type, status, scheduled_at, location, leader_id, paper_id, members:leader_id(name), papers:paper_id(id, title, companion_url, paper_companions(paper_id))",
@@ -30,10 +83,11 @@ export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | nul
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  logQueryError("nextMeeting.scheduled", scheduledError);
 
   if (scheduled) return mapMeeting(scheduled);
 
-  const { data: prep } = await orderNewestPrep(
+  const { data: prep, error: prepError } = await orderNewestPrep(
     sb
       .from("meetings")
       .select(
@@ -43,6 +97,7 @@ export async function nextMeeting(sb: SupabaseClient): Promise<NextMeeting | nul
   )
     .limit(1)
     .maybeSingle();
+  logQueryError("nextMeeting.prep", prepError);
 
   return prep ? mapMeeting(prep) : null;
 }
@@ -86,13 +141,14 @@ export type PrepMeetingRef = { id: number; type: string };
  * nextMeeting()'s tier-2 fallback lands on. Used by /availability when no
  * `?meeting=<id>` param pins a specific meeting.
  */
-export async function newestPrepMeeting(sb: SupabaseClient): Promise<PrepMeetingRef | null> {
-  const { data } = await orderNewestPrep(
+export async function newestPrepMeeting(sb: SupabaseClient<Database>): Promise<PrepMeetingRef | null> {
+  const { data, error } = await orderNewestPrep(
     sb.from("meetings").select("id, type").eq("status", "prep"),
   )
     .limit(1)
     .maybeSingle();
-  return (data as PrepMeetingRef | null) ?? null;
+  logQueryError("newestPrepMeeting", error);
+  return data ?? null;
 }
 
 // Paper Pal stores each companion in `paper_companions` and renders it at
@@ -102,7 +158,7 @@ export async function newestPrepMeeting(sb: SupabaseClient): Promise<PrepMeeting
 // is NULL for every Paper-Pal-era paper. Gating on the column therefore hid every
 // Paper Pal companion. The companion row is the source of truth; fall back to the
 // column only for pre-Paper-Pal papers that have one.
-function companionUrl(papers: any): string | null {
+function companionUrl(papers: PaperCompanionEmbed | null): string | null {
   // paper_companions.paper_id is both PK and FK, so PostgREST may collapse this
   // 1-to-1 embed to a bare object instead of a single-element array.
   const embed = papers?.paper_companions;
@@ -112,11 +168,11 @@ function companionUrl(papers: any): string | null {
   return papers?.companion_url ?? null;
 }
 
-function mapMeeting(row: any): NextMeeting {
+function mapMeeting(row: MeetingWithLeaderAndPaper): NextMeeting {
   return {
     id: row.id,
-    type: row.type,
-    status: row.status,
+    type: row.type as NextMeeting["type"],
+    status: row.status as MeetingStatus,
     scheduled_at: row.scheduled_at,
     location: row.location,
     leader_name: row.members?.name ?? null,
@@ -126,34 +182,37 @@ function mapMeeting(row: any): NextMeeting {
   };
 }
 
-export async function currentMemberId(sb: SupabaseClient): Promise<number | null> {
-  const { data } = await sb.rpc("current_member_id");
-  return (data as number | null) ?? null;
+export async function currentMemberId(sb: SupabaseClient<Database>): Promise<number | null> {
+  const { data, error } = await sb.rpc("current_member_id");
+  logQueryError("currentMemberId", error);
+  return data ?? null;
 }
 
 export async function myAvailabilitySubmitted(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   prepMeetingId: number,
   memberId: number | null,
 ): Promise<boolean> {
   if (memberId == null) return false;
-  const { count } = await sb
+  const { count, error } = await sb
     .from("availability")
     .select("*", { count: "exact", head: true })
     .eq("meeting_id", prepMeetingId)
     .eq("member_id", memberId);
+  logQueryError("myAvailabilitySubmitted", error);
   return (count ?? 0) > 0;
 }
 
 export async function myRsvp(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   meetingId: number,
 ): Promise<RsvpStatus | null> {
-  const { data } = await sb
+  const { data, error } = await sb
     .from("meeting_attendance")
     .select("rsvp_status")
     .eq("meeting_id", meetingId)
     .maybeSingle();
+  logQueryError("myRsvp", error);
   return (data?.rsvp_status as RsvpStatus | undefined) ?? null;
 }
 
@@ -166,6 +225,13 @@ export type UpcomingRsvp = {
   paper_title: string | null;
   rsvp_status: RsvpStatus | null;
 };
+
+type UpcomingMeetingRow = Pick<Tables<"meetings">, "id" | "type" | "scheduled_at" | "location"> & {
+  members: Pick<Tables<"members">, "name"> | null;
+  papers: Pick<Tables<"papers">, "title"> | null;
+};
+
+type AttendanceRsvpRow = Pick<Tables<"meeting_attendance">, "meeting_id" | "rsvp_status">;
 
 /**
  * Every upcoming scheduled meeting, each carrying the caller's own RSVP.
@@ -185,12 +251,12 @@ export type UpcomingRsvp = {
  * member another member's RSVPs.
  */
 export async function upcomingRsvps(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   memberId: number | null,
 ): Promise<UpcomingRsvp[]> {
   const nowIso = new Date().toISOString();
 
-  const { data: meetings } = await sb
+  const { data: meetings, error: meetingsError } = await sb
     .from("meetings")
     .select(
       "id, type, scheduled_at, location, members:leader_id(name), papers:paper_id(title)",
@@ -198,13 +264,14 @@ export async function upcomingRsvps(
     .eq("status", "scheduled")
     .gte("scheduled_at", nowIso)
     .order("scheduled_at", { ascending: true });
+  logQueryError("upcomingRsvps.meetings", meetingsError);
 
-  const rows = (meetings ?? []) as any[];
+  const rows: UpcomingMeetingRow[] = meetings ?? [];
   if (rows.length === 0) return [];
 
   const byMeeting = new Map<number, RsvpStatus>();
   if (memberId != null) {
-    const { data: attendance } = await sb
+    const { data: attendance, error: attendanceError } = await sb
       .from("meeting_attendance")
       .select("meeting_id, rsvp_status")
       .eq("member_id", memberId)
@@ -212,14 +279,16 @@ export async function upcomingRsvps(
         "meeting_id",
         rows.map((m) => m.id),
       );
-    for (const a of (attendance ?? []) as any[]) {
+    logQueryError("upcomingRsvps.attendance", attendanceError);
+    const attendanceRows: AttendanceRsvpRow[] = attendance ?? [];
+    for (const a of attendanceRows) {
       byMeeting.set(a.meeting_id, a.rsvp_status as RsvpStatus);
     }
   }
 
   return rows.map((m) => ({
     meeting_id: m.id,
-    type: m.type,
+    type: m.type as NextMeeting["type"],
     scheduled_at: m.scheduled_at,
     location: m.location,
     leader_name: m.members?.name ?? null,
@@ -235,7 +304,7 @@ export type Stats = {
 };
 
 export async function myStats(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   availabilitySubmitted: boolean,
   memberId: number | null,
 ): Promise<Stats> {
@@ -251,9 +320,12 @@ export async function myStats(
         .select("*", { count: "exact", head: true })
         .eq("status", "done")
         .eq("leader_id", memberId)
-    : Promise.resolve({ count: 0 } as { count: number });
+    : Promise.resolve({ count: 0, error: null } as { count: number; error: PostgrestError | null });
 
-  const [{ count: attended }, { count: led }] = await Promise.all([attendedQ, ledQ]);
+  const [{ count: attended, error: attendedError }, { count: led, error: ledError }] =
+    await Promise.all([attendedQ, ledQ]);
+  logQueryError("myStats.attended", attendedError);
+  logQueryError("myStats.led", ledError);
 
   return {
     meetingsAttended: attended ?? 0,
@@ -267,6 +339,12 @@ export type HistoryItem = {
   paper_title: string | null;
   date: string | null;
   companion_url: string | null;
+};
+
+type HistoryAttendanceRow = {
+  meetings: (Pick<Tables<"meetings">, "id" | "scheduled_at" | "status"> & {
+    papers: PaperCompanionEmbed | null;
+  }) | null;
 };
 
 // Discriminated union — makes the illegal state
@@ -289,12 +367,13 @@ export type SynthesisGate =
  * See docs/superpowers/specs/2026-05-17-paper-pal-edge-functions.md §7.
  */
 export async function canSynthesizePaperPal(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   paperId: number,
 ): Promise<SynthesisGate> {
   const { data, error } = await sb.rpc("can_synthesize_paper_pal", {
     p_paper_id: paperId,
   });
+  logQueryError("canSynthesizePaperPal", error);
   if (error || !data) return { canSynthesize: false, reason: "none" };
   const row = data as { canSynthesize?: boolean; reason?: string };
   if (row.canSynthesize === true && (row.reason === "owner" || row.reason === "leader")) {
@@ -310,39 +389,46 @@ export type PaperCatalogRow = {
   leader_name: string | null;
 };
 
+type LeaderOnlyMeetingRow = {
+  members: Pick<Tables<"members">, "name"> | null;
+};
+
 /** Looks up papers.id and joins the most recent meeting's leader, if any. */
 export async function paperCatalogRow(
-  sb: SupabaseClient,
+  sb: SupabaseClient<Database>,
   paperId: number,
 ): Promise<PaperCatalogRow | null> {
-  const { data: paper } = await sb
+  const { data: paper, error: paperError } = await sb
     .from("papers")
     .select("id, title, authors")
     .eq("id", paperId)
     .maybeSingle();
+  logQueryError("paperCatalogRow.paper", paperError);
   if (!paper) return null;
 
-  const { data: meeting } = await sb
+  const { data: meeting, error: meetingError } = await sb
     .from("meetings")
     .select("members:leader_id(name)")
     .eq("paper_id", paperId)
     .order("scheduled_at", { ascending: false, nullsFirst: false })
     .limit(1)
     .maybeSingle();
+  logQueryError("paperCatalogRow.meeting", meetingError);
+  const leaderRow: LeaderOnlyMeetingRow | null = meeting;
 
   return {
     id: paper.id,
     title: paper.title,
     authors: paper.authors ?? null,
-    leader_name: (meeting as any)?.members?.name ?? null,
+    leader_name: leaderRow?.members?.name ?? null,
   };
 }
 
-export async function myHistory(sb: SupabaseClient, limit = 10): Promise<HistoryItem[]> {
+export async function myHistory(sb: SupabaseClient<Database>, limit = 10): Promise<HistoryItem[]> {
   // `!inner` makes the meetings embed an INNER JOIN, so `meetings.status` filters
   // the meeting_attendance rows themselves — letting the DB do the filtering and
   // ordering and return exactly `limit` rows (no JS post-filter / sort / pad).
-  const { data } = await sb
+  const { data, error } = await sb
     .from("meeting_attendance")
     .select(
       "meetings:meeting_id!inner(id, scheduled_at, status, papers:paper_id(id, title, companion_url, paper_companions(paper_id)))",
@@ -355,11 +441,13 @@ export async function myHistory(sb: SupabaseClient, limit = 10): Promise<History
       nullsFirst: false,
     })
     .limit(limit);
+  logQueryError("myHistory", error);
+  const rows: HistoryAttendanceRow[] = data ?? [];
 
-  return (data ?? [])
-    .map((r: any) => r.meetings)
-    .filter((m: any) => m)
-    .map((m: any) => ({
+  return rows
+    .map((r) => r.meetings)
+    .filter((m): m is NonNullable<HistoryAttendanceRow["meetings"]> => m != null)
+    .map((m) => ({
       meeting_id: m.id,
       paper_title: m.papers?.title ?? null,
       date: m.scheduled_at ?? null,

@@ -1,0 +1,73 @@
+# Automated dependency updates for the web/ member portal.
+#
+# Why this exists: `npm audit --audit-level=high` in ci.yml is a PR-time gate,
+# so an advisory that lands upstream fails CI on whichever unrelated PR happens
+# to be open next. That is not hypothetical — on 2026-08-14, GHSA-2v37-7h3g-55p8
+# (nanoid, transitive via postcss) failed CI and was cleared by hand in 9bde4d7.
+# A weekly PR turns that class of interruption into scheduled, reviewable work.
+#
+# Scope note: only the npm ecosystem in /web is registered. The Python side is
+# uv-locked and `uv lock --check` asserts it stays in sync with pyproject.toml,
+# and its drift has been quiet across the report series. Add a `pip` entry (uv
+# is pip-compatible for Dependabot's purposes) if that stops being true.
+
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    # The lockfile lives at web/package-lock.json, not the repo root.
+    directory: "/web"
+
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+
+    open-pull-requests-limit: 5
+
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+
+    groups:
+      # One PR per week for everything in-range, rather than a dozen.
+      #
+      # Grouping is load-bearing here, not just tidiness: `next` and
+      # `eslint-config-next` are pinned to the same exact version (16.2.11) and
+      # must move together. Ungrouped, Dependabot would open two PRs and
+      # whichever merged first would leave the pair mismatched until the second
+      # landed. Keeping every minor/patch bump in one PR means they move as a
+      # unit and the full gate chain (audit -> lint -> typecheck -> vitest)
+      # verifies the combination that will actually be on main.
+      web-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # Majors are deliberately left ungrouped: each one gets its own PR so it can
+    # be evaluated and, where appropriate, closed on its own merits. The three
+    # below are held for known reasons and would otherwise be reopened weekly.
+    #
+    # REVISIT each of these when its condition below is met — Dependabot cannot
+    # detect any of them, so nothing here expires on its own.
+    ignore:
+      # eslint 9 -> 10: eslint-config-next's bundled eslint-plugin-react calls
+      # context.getFilename(), which was removed in ESLint 10.
+      # REVISIT when eslint-config-next ships a release that drops that call.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+
+      # typescript 6 -> 7: held pending a deliberate toolchain pass (tsc,
+      # @types/*, and the eslint TS plugins want to move together).
+      # REVISIT when that pass is scheduled.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+      # jsdom 29 -> 30: test environment only; no reason to take a major
+      # mid-cycle for a dependency no shipped code touches.
+      # REVISIT opportunistically, ideally alongside a vitest major.
+      - dependency-name: "jsdom"
+        update-types: ["version-update:semver-major"]

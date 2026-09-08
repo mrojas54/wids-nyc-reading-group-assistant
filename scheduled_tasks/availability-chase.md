@@ -261,6 +261,24 @@ For each non-submitter row:
 
 1. Read `assets/emails/template/availability-reminder.html` and
    `assets/emails/template/availability-reminder.txt`.
+1a. Resolve the **paper / paper_pending block pair** before anything else —
+   the same call in both bodies, so they cannot disagree:
+
+   ```python
+   from scripts.render_email_previews import resolve_blocks
+   has_paper = meeting["paper_id"] is not None
+   body = resolve_blocks(body, ext, {"paper": has_paper, "paper_pending": not has_paper})
+   ```
+
+   `paper` is the card, the "Skim the paper first" link and the Paper Pal
+   PS; `paper_pending` is the "Paper Pal coming soon" card and PS that ship
+   in their place while the leader is still choosing (a reading_group in
+   prep with `paper_id IS NULL`). In the pending state **skip every
+   `paper.*` token and `links.companionPreview`** — the block references
+   none of them, and `render_pair()` refuses to ship a body with a marker
+   left in it. Preview both states with
+   `uv run python -m scripts.render_email_previews`: the pending one is
+   written to `availability-reminder--paper-pending_rendered.{html,txt}`.
 2. Substitute every `{{ token }}` with the resolved value (v2 contract).
    Tokens used in both `.html` and `.txt` unless noted. "(v2 / composed)"
    tokens are NOT raw DB columns — see "Derived values" in Step 5b for
@@ -289,6 +307,12 @@ For each non-submitter row:
    | `{{ quote.text }}` | rotating pool via `scripts/quotes.py` (Step 5b) | optional — fallback Grace Hopper |
    | `{{ quote.by }}` | author name from the same selection | optional |
    | `{{ quote.role }}` | author role from the same selection | optional |
+
+   In the `paper_pending` state only the non-paper rows above are resolved:
+   `recipient.firstName`, `stats.*`, `deadline.soft`, `links.availability`,
+   `links.portalBase`, `operator.displayName`, `quote.*` (plus the `cta.*`
+   skeleton tokens). Run the meeting/paper query in Step 5b anyway — it is
+   what tells you which state you are in.
 
    Tokens removed in v2 (do NOT use): `paper.arxivId`, `paper.arxivUrl`,
    `paper.slug`. Their roles are now subsumed by `paper.citation` /
@@ -321,17 +345,34 @@ For each non-submitter row:
    unfollowable as written and against policy; the version after that justified
    the limit as a missing send tool, which is not true in every session.
 
+   **The connector strips the mark and every other image at draft creation**
+   (verified 2026-09-02 — `docs/runbooks/email-client-behavior.md`). It also
+   drops `<style>`, `<svg>`, classes and Outlook conditionals, and rewrites
+   hrefs through `google.com/url`. The table layout, inline styles and copy
+   survive, so the draft is still the designed email minus its images. Tell
+   the operator in the Step 5d summary that the mark is absent, so they can
+   paste the PNG into the compose window before sending if they want it.
+
+   The path that keeps the images is `scripts/gmail_raw_drafts.py`
+   (`docs/runbooks/gmail-raw-drafts.md`): `reminder-manifest` renders this
+   exact step for a recipients list, `batch` writes the drafts as raw MIME.
+   It runs on the operator's machine under their own OAuth, so the agent
+   hands over `recipients.json` + `tokens.json` and the two commands rather
+   than calling `create_draft`. Still drafts only; the operator sends.
+
 5. Log:
 
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'needs_action',
-           'Drafted reminder meeting=<meeting_id> member=<member_id> to=<email> — UNSENT, operator must send',
-           'availability-chase:meeting=<meeting_id>:member=<member_id>',
+           format('Drafted reminder meeting=%s member=%s to=%s — UNSENT, operator must send',
+                  <meeting_id>, <member_id>, $wids$<email>$wids$),
+           format('availability-chase:meeting=%s:member=%s',
+                  <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_reminder', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>',
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$,
                               'delivery_mode', 'draft',
-                              'gmail_draft_id', '<draft_id>',
+                              'gmail_draft_id', $wids$<draft_id>$wids$,
                               'operator_action_required', true,
                               'emails_sent', 0));
    ```
@@ -411,12 +452,14 @@ For each submitter row:
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
    VALUES ('scheduled_task', 'availability-chase', 'needs_action',
-           'Drafted thanks meeting=<meeting_id> member=<member_id> to=<email> — UNSENT, operator must send',
-           'availability-chase:thanks:meeting=<meeting_id>:member=<member_id>',
+           format('Drafted thanks meeting=%s member=%s to=%s — UNSENT, operator must send',
+                  <meeting_id>, <member_id>, $wids$<email>$wids$),
+           format('availability-chase:thanks:meeting=%s:member=%s',
+                  <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_thanks', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>',
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$,
                               'delivery_mode', 'draft',
-                              'gmail_draft_id', '<draft_id>',
+                              'gmail_draft_id', $wids$<draft_id>$wids$,
                               'operator_action_required', true,
                               'emails_sent', 0));
    ```

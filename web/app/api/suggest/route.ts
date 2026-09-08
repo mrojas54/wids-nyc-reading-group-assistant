@@ -43,9 +43,11 @@ const TIMEOUT_MS = 55_000;
  * GET and POST when they live in the same file (same Lambda container).
  */
 export async function GET() {
-  // Fire warmup before auth so the WASM init starts ASAP. Auth check (~100ms)
-  // runs in parallel with the first ~100ms of the model load.
-  prewarmModel();
+  // Auth first. prewarmModel() starts the SPECTER2 blob fetch + WASM compile
+  // (15–25s, large memory). Doing that before requireLeaderRole() let any
+  // unauthenticated GET burn the Lambda — /api/* is not in the middleware
+  // matcher. Authorized callers still overlap load with ensureModelLoaded()
+  // below; they just cannot be used as a free warmup trigger.
   try {
     await requireLeaderRole();
   } catch (e) {
@@ -53,6 +55,7 @@ export async function GET() {
     if (e instanceof ForbiddenError) return NextResponse.json({ error: "forbidden" }, { status: 403 });
     throw e;
   }
+  prewarmModel();
 
   const t0 = Date.now();
   try {

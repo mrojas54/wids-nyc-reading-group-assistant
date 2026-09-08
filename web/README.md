@@ -8,7 +8,8 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | --- | --- |
 | `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
 | `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `paper_companions` row; legacy papers can fall back to `papers.companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
-| `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting (delete existing rows, then insert selected 6–9 PM ET windows). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
+| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via middleware (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries.ts`. |
+| `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting via the `replace_my_availability` RPC from migration `032` (one transaction; selected 6–9 PM ET windows; live as of 2026-08-15). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
 | `/papers` | Paper Pal inbox. Shows reading now, upcoming lead picks, member-proposed "want to lead" suggestions, and recently discussed papers. Signed-in roster members can propose catalog papers or volunteer for proposed meetings. See [../docs/paper-pal-portal.md](../docs/paper-pal-portal.md). |
 | `/new` | Paper Pal synthesis upload page (`/new?paperId=<id>`). Gated by the `can_synthesize_paper_pal` RPC — only operator/admin or the paper's meeting leader sees the upload form. `NewPaperForm` uploads the PDF to the `papers-pdfs` bucket and POSTs `/functions/v1/analyze-paper`, streaming a 5-stage SSE progress flow. |
 | `/papers/[id]` | Paper Pal reading page. If `paper_companions.payload` exists, renders the synthesized dashboard + assessment panel; else falls back to a static `web/content/papers/<id>.json` fixture; else shows a synthesize CTA (owner/leader) or read-only empty state; else 404s. No auth is required to read existing content — only synthesis is gated. |
@@ -34,16 +35,101 @@ Next.js portal for the WiDS NYC AI Reading Group.
 
 ## Contributing checks
 
-CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits high-severity dependency issues, then runs lint, type-checking, and unit tests. Run those same gates before web changes, and run the production build for deployment-sensitive changes:
+CI installs from [`package-lock.json`](package-lock.json) with `npm ci`, audits
+high-severity dependency issues across the full tree, then runs lint,
+type-checking, and unit tests. Match those gates before web changes, and run
+the production build for deployment-sensitive changes:
 
 ```sh
+npm audit --audit-level=high
 npm run lint
 npm run typecheck
 npm run test
 npm run build
 ```
 
-The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only, so Vite upgrades affect tests rather than the production bundle.
+The temporary `--omit=dev` audit exemption (2026-07-27 → 2026-08-05) is gone:
+`brace-expansion` 1.1.18 backported GHSA-mh99-v99m-4gvg, and the lockfile was
+refreshed with `npm update`. If a transitive advisory looks stuck again,
+check whether the lockfile is simply behind its own declared ranges before
+concluding there is no upstream fix — plain `npm install` / `npm ci` will not
+bump an already-satisfying pin.
+
+**Dependabot** (`.github/dependabot.yml`) opens one weekly grouped PR for
+`web/` minor/patch npm bumps (Monday 09:00 America/New_York). That turns
+audit-driven CI breaks — e.g. the 2026-08-14 nanoid advisory — into scheduled
+review instead of interrupting unrelated PRs. Majors stay ungrouped; `eslint`,
+`typescript`, and `jsdom` majors are ignored until their revisit conditions in
+that file are met. Python stays uv-locked (`uv lock --check`); there is no
+Dependabot `pip` entry yet.
+
+The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only
+(`vitest.config.mts`; the `.mts` extension keeps the config real ESM without
+setting `"type": "module"` on `package.json`), so Vite upgrades affect tests
+rather than the production bundle.
+
+## Typed Supabase accessors
+
+`createClient` in `lib/supabase/{server,browser,service}.ts` is constructed as
+`createClient<Database>`. Any helper that takes that client **must** annotate
+the parameter as `SupabaseClient<Database>` — a bare `SupabaseClient` defaults
+the generic to `any` and silently discards schema checking at the function
+boundary. Without the generic, `tsc --noEmit` accepted `.from("meetingz")`
+(a table that does not exist) with zero errors.
+
+Keep the generic on every accessor in:
+
+- `lib/queries.ts`
+- `lib/logs.ts`
+- `lib/paperpal/inbox.ts`
+- `lib/suggest/orchestrator.ts`
+- `lib/suggest/embedding-cache.ts`
+
+What it catches today: unknown tables in `.from()`, unknown RPCs in `.rpc()`,
+unknown columns in filters (`.eq` / `.gte` / `.order` / …), and unknown columns
+inside a `.select("a, b, c")` string. That last case is reported **in the
+result type** as `SelectQueryError<…> | null`, not at the call site — so it
+only becomes a hard error when something consumes `data` in a type-checked
+way.
+
+### `queries.ts` pattern (post-#156)
+
+`lib/queries.ts` pins embedded selects with `.returns<T>()`, where `T` is built
+from `Tables<"…">` `Pick` types (`PaperCompanionEmbed`,
+`MeetingWithLeaderAndPaper`, `UpcomingMeetingRow`, and friends). That is what
+turns a renamed/dropped column into a real `tsc` error instead of a silent
+`undefined` at runtime. Do not reintroduce `any` row-mappers or `as any[]`
+casts on those embeds — they undo the generic.
+
+Hand-rolled Supabase mocks in Vitest must implement a no-op `.returns()` on
+the thenable the builder returns (postgrest-js exposes it; at runtime it is a
+type-only identity). See `lib/__tests__/queries.test.ts` and
+`upcomingRsvps.test.ts` for the `p.returns = () => p` pattern.
+
+### Runtime query failures vs empty data
+
+Most dashboard accessors still return `null` / `[]` / `false` on failure so the
+UI stays empty rather than throwing. Before #156 they also **dropped** the
+PostgREST `error` field, so a permission failure or bad filter looked identical
+to "no rows." They now call `logQueryError`, which writes one JSON line to the
+server console:
+
+```json
+{"event":"query_failed","fn":"upcomingRsvps.meetings","message":"…","code":"…"}
+```
+
+`fn` is the accessor (and sub-query when there are two). This goes to **Vercel
+function / `next dev` logs**, not `command_log` / `/admin/logs`. If a member
+sees an empty dashboard, history, or `/me/rsvps` list that should have data,
+search those logs for `event":"query_failed"` before assuming the roster is
+empty.
+
+**pgvector caveat** (`embedding-cache.ts`): `supabase gen types` maps the
+`vector` column to `string` for both Row and Insert. Reads really are text
+literals (`parseVector` decodes them); writes deliberately send `number[]`
+and use a narrow cast because PostgREST accepts a JSON array and Postgres
+casts server-side. Do not "fix" that by switching the write path to a string
+without live-DB verification.
 
 ## Deployment
 
@@ -91,4 +177,12 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
   ```
 
   Thresholds: median cos ≥ 0.99, min cos ≥ 0.93 across all fixtures in
-  `scripts/specter2_parity_fixtures.json` (which must exist).
+  `scripts/specter2_parity_fixtures.json` (which must exist). They are defined
+  once in `scripts/specter2_parity.py` (`INT8_PARITY`) and a Python unit test
+  asserts the TS test carries the same numbers.
+
+  **In CI this runs on a schedule, not per PR** — `.github/workflows/specter2-parity.yml`
+  (Mondays, plus `workflow_dispatch`). It needs the same two values above as
+  repository secrets (`SPECTER2_MODEL_BLOB_URL`, `BLOB_READ_WRITE_TOKEN`) and
+  fails loudly, rather than skipping, when they are absent. The fixture file's
+  schema is checked on every PR by `tests/specter2_parity_test.py`.

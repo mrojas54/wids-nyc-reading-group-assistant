@@ -19,10 +19,11 @@
 -- is safe to run against a database that already has the new text, and safe to
 -- re-run.
 --
--- Numbering note: 024 is intentionally skipped. It is claimed by in-flight work
--- (024_drop_packets_sent_at.sql) that had not landed on main when this was
--- written. Filenames define order only and there is no tracking table, so a gap
--- is harmless; a duplicate number would not be.
+-- Numbering note: 024 was still in flight when this file was authored, so the
+-- number was reserved rather than reused. 024_drop_packets_sent_at.sql has
+-- since landed and there is no gap. Filenames define apply order only — there
+-- is no tracking table — so authoring order and numeric order need not match;
+-- numeric filename order remains the correct order to apply in.
 
 BEGIN;
 

@@ -612,6 +612,14 @@ export type Database = {
       can_synthesize_paper_pal: { Args: { p_paper_id: number }; Returns: Json }
       current_member_id: { Args: never; Returns: number }
       current_member_role: { Args: never; Returns: string }
+      replace_my_availability: {
+        Args: {
+          p_meeting_id: number
+          p_range_ends: string[]
+          p_range_starts: string[]
+        }
+        Returns: undefined
+      }
       upsert_paper_companion: {
         Args: {
           p_generated_by: number

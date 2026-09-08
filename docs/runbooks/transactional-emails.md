@@ -75,12 +75,16 @@ placeholder would be corrupted by `welcome_availability.py`'s blanket
 `scripts.render_email_previews.splice_shared_blocks()` does all three
 replacements in one pass; `find_surviving_placeholders()` reports which (if
 any) didn't get spliced. Both `render_pair()` and `welcome_availability.py`'s
-`_compose_one()` call `splice_shared_blocks()` first — before comment
-stripping, before any token dict is touched — and both raise
-(`RenderError` / `CompositionError`) if a placeholder survives to the end of
-rendering, the same "nothing unresolved ships" invariant
-`welcome_availability.py` already enforces for `{{ }}` tokens and block
-markers.
+`_compose_one()` call `splice_shared_blocks()` before comment stripping and
+before any token dict is touched, and both raise (`RenderError` /
+`CompositionError`) if a placeholder survives to the end of rendering — the
+same "nothing unresolved ships" invariant `welcome_availability.py` already
+enforces for `{{ }}` tokens and block markers.
+
+`render_new_paper_email()` splices shared fragments, then strips HTML
+comments, then substitutes tokens, and raises if a placeholder survives —
+the same contract as `render_pair()`. `--mode render` is a valid draft
+source.
 
 `magic-link.html` cannot consume the splice mechanism at all — it is
 hand-pasted into the Supabase Auth dashboard and uses Go template syntax, not
@@ -160,12 +164,12 @@ link; unsubscribe is a human reply, documented inline).
 | Template | Current consumer | Status / constraints |
 |---|---|---|
 | `magic-link.{html,txt}` | Supabase Auth dashboard -> Email Templates -> Magic Link | Static copy. Rotate manually; see `docs/email-quotes.md`. Not rendered by `render_email_previews.py`. |
-| `availability-reminder.{html,txt}` | `scheduled_tasks/availability-chase.md` Step 5c | Live only after the operator replies `remind`. Sent one recipient at a time to active members without an `availability` row for the meeting. Lede ("It's been too long") is written for a lapsed regular — for a brand-new member use `welcome-availability` instead. Note the location-chip marker in the HTML is longer than the chase spec quotes it (`BEGIN-OPTIONAL-CHIP: location \| OMIT …`); a matcher built on the quoted form silently mails an empty chip. |
+| `availability-reminder.{html,txt}` | `scheduled_tasks/availability-chase.md` Step 5c; `scripts/gmail_raw_drafts.py reminder-manifest` for the raw-MIME path | Live only after the operator replies `remind`. Sent one recipient at a time to active members without an `availability` row for the meeting. Lede ("It's been too long") is written for a lapsed regular — for a brand-new member use `welcome-availability` instead. Note the location-chip marker in the HTML is longer than the chase spec quotes it (`BEGIN-OPTIONAL-CHIP: location \| OMIT …`); a matcher built on the quoted form silently mails an empty chip. Carries a **block pair**, `paper` / `paper_pending`, resolved from `meetings.paper_id` by `resolve_blocks()` before substitution (chase Step 5c.1a): `paper_pending` is the "Paper Pal coming soon" state for a cycle whose leader has not chosen yet, and references no `paper.*` token. `render_email_previews.py` previews both states. |
 | `rsvp-confirmation.{html,txt}` | `scheduled_tasks/pre-meeting-reminder.md` Step 4a and `scheduled_tasks/availability-chase.md` Step 5e | Live for attending RSVPs 2 days before a meeting, and for availability submitters during the operator-triggered chase follow-up. |
 | `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. Flow: [`docs/welcome-availability-flow.md`](../welcome-availability-flow.md). **Not renderable by `render_email_previews.py`** — it carries per-send block toggles that must be resolved before substitution, so it goes through `compose()` instead. Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
-| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. Full field list under Token contracts below. |
+| `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. `render_new_paper_email()` splices shared fragments and fails on survivors. Full field list under Token contracts below. |
 
 ## Token contracts
 
@@ -402,8 +406,29 @@ Current keys:
 | `/wids-add-member` welcome send (after operator confirms) | **Same key** as the chase reminder above — deliberate namespace share so the nightly chase does not re-nudge |
 | Availability thank-you to one submitter | `availability-chase:thanks:meeting=<meeting_id>:member=<member_id>` |
 | Pre-meeting reminder run for one meeting | `pre-meeting-reminder:meeting=<id>` |
-| Post-meeting thanks run for one meeting | `post-meeting-thanks:meeting=<id>` |
+| Post-meeting thanks — leader draft queued (reading_group, first run) | `post-meeting-thanks:leader-draft:meeting=<id>` |
+| Post-meeting thanks — members draft ready (admin, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
 | New-paper announcement drafts for one paper | `new-paper-announcement:paper=<paper_id>` |
+
+`post-meeting-thanks` for `reading_group` meetings spans **two daily runs**.
+The first writes only the `leader-draft` key (does **not** mean the members'
+draft exists yet). The second run — after the leader replies, or the degraded
+no-reply fallback — writes `post-meeting-thanks:meeting=<id>`, which is the
+status-agnostic "already handled" gate (claimed when the **members' draft** is
+created; the task cannot observe the human send). Do not write that key when
+only the leader draft exists, or the members' draft is permanently suppressed.
+Full path: `scheduled_tasks/post-meeting-thanks.md`.
+
+**Selection window (as of 2026-08-14):** Step 1 selects `done` meetings with
+`scheduled_at` in **[now − 7d, now − 24h)** plus a `NOT EXISTS` filter on the
+send key. The old 24–36h ceiling was narrower than `meeting-auto-advance`
+slack (first daily run ≥24h after `scheduled_at`), so reading groups that meet
+at 18:30 ET were already ~38h old on the first run that could see them and
+never entered scope. Idempotency — not window width — bounds the work; a
+safety cap stops and reports if the query returns more than 2 rows. Both the
+admin path and the leader-no-reply fallback **draft only** (same
+draft-only policy as the rest of this runbook) and log `needs_action` with
+`operator_action_required` so `/admin/logs` renders amber rather than green.
 
 `availability-chase` operator alerts intentionally do **not** use
 `idempotency_key`; they use `metadata.kind = 'operator_alert'` plus
@@ -416,11 +441,17 @@ provides.
 
 ## Common pitfalls
 
+- Do not restore a 24–36h ceiling on `post-meeting-thanks` Step 1. That
+  window is narrower than `meeting-auto-advance` slack and permanently
+  skips reading-group thanks. Keep 24h–7d plus the send-key `NOT EXISTS`.
 - Do not assume a template is live because it renders in previews. Check the
   scheduled-task spec or slash command that sends it.
 - Do not commit `*_rendered.*` preview artifacts.
 - Do not drive `welcome-availability` through `render()` / `render_pair()` —
   unresolved block markers would ship. Use `compose()`.
+- `generate_prerequisites --mode render` splices shared fragments. If a
+  `__WORDMARK_BLOCK__` / `__CTA_BLOCK__` string still appears in `html`,
+  the CLI now errors — do not draft around that error.
 - `/wids-add-member` cannot send. Do not offer `reply send`; open the Gmail
   draft. Do not write the chase idempotency key for an unsent draft.
 - The portal treats a `paper_companions` row as the current source of truth and

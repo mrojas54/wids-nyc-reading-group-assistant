@@ -45,26 +45,17 @@ export async function submitAvailability(meetingId: number, days: string[]): Pro
     );
   }
 
-  const { error: delErr } = await sb
-    .from("availability")
-    .delete()
-    .eq("meeting_id", meetingId)
-    .eq("member_id", memberRow.id);
-  if (delErr) {
-    await logServerAction("submitAvailability", "failure", `delete: ${delErr.message}`);
-    throw new Error(delErr.message);
-  }
-
-  const rows = days.map((day) => ({
-    meeting_id: meetingId,
-    member_id: memberRow.id,
-    range_start: nyDayAtHour(day, 18),
-    range_end: nyDayAtHour(day, 21),
-  }));
-  const { error: insErr } = await sb.from("availability").insert(rows);
-  if (insErr) {
-    await logServerAction("submitAvailability", "failure", `insert: ${insErr.message}`);
-    throw new Error(insErr.message);
+  // One RPC so delete+insert commit together. The function binds member_id
+  // to current_member_id() and refuses anything but status='prep' — a
+  // forged meetingId for a scheduled/done row cannot wipe or write rows.
+  const { error: replaceErr } = await sb.rpc("replace_my_availability", {
+    p_meeting_id: meetingId,
+    p_range_starts: days.map((day) => nyDayAtHour(day, 18)),
+    p_range_ends: days.map((day) => nyDayAtHour(day, 21)),
+  });
+  if (replaceErr) {
+    await logServerAction("submitAvailability", "failure", `replace: ${replaceErr.message}`);
+    throw new Error(replaceErr.message);
   }
 
   await logServerAction(

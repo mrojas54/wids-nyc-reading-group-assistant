@@ -1,0 +1,11 @@
+{
+  "name": "WiDS NYC Reading Group Assistant",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "web-dev",
+      "command": "cd web && export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm use >/dev/null && export PATH=\"$(dirname \"$(nvm which current)\"):$PATH\" && npm run dev"
+    }
+  ]
+}

@@ -53,7 +53,10 @@ function buildSb(opts: { meetings: unknown[]; attendance?: unknown[] }): {
       },
       order(col: string, o: unknown) {
         orderCalls.push({ col, opts: o });
-        return Promise.resolve({ data: opts.meetings });
+        const result: any = { data: opts.meetings, error: null };
+        const p: any = Promise.resolve(result);
+        p.returns = () => p;
+        return p;
       },
     };
     return b;
@@ -67,7 +70,10 @@ function buildSb(opts: { meetings: unknown[]; attendance?: unknown[] }): {
       },
       in(col: string, vals: unknown[]) {
         inCalls.push({ col, vals });
-        return Promise.resolve({ data: opts.attendance ?? [] });
+        const result: any = { data: opts.attendance ?? [], error: null };
+        const p: any = Promise.resolve(result);
+        p.returns = () => p;
+        return p;
       },
     };
     return b;

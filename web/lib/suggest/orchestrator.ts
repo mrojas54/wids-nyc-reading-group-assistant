@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/database.types";
 import { TimeoutError } from "./types";
 import { mmr } from "./mmr";
 import type {
@@ -11,10 +12,10 @@ import type {
 
 export type OrchestratorDeps = {
   apiKey: string | null;
-  client?: SupabaseClient;
-  getCached: (client: SupabaseClient | undefined, ids: number[]) => Promise<Map<number, Float32Array>>;
+  client?: SupabaseClient<Database>;
+  getCached: (client: SupabaseClient<Database> | undefined, ids: number[]) => Promise<Map<number, Float32Array>>;
   cacheMany: (
-    client: SupabaseClient | undefined,
+    client: SupabaseClient<Database> | undefined,
     rows: Array<{ paperId: number; vector: Float32Array }>,
   ) => Promise<void>;
   fetchPaperWithEmbedding: (s2PaperId: string, apiKey: string | null) => Promise<S2Result>;

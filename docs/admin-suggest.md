@@ -352,7 +352,9 @@ Operational constraints:
   route intentionally falls back to WASM immediately on 429 instead of retrying
   inside the same rate-limit window.
 - The route uses the service-role Supabase client because it writes
-  `paper_embeddings`; do not expose it to members outside the leader/admin role
+  `paper_embeddings`. After `033` the table is service-role-only: RLS is on
+  with no policies, and `anon` / `authenticated` hold no table privileges.
+  Do not expose the backfill route to members outside the leader/admin role
   gate.
 
 ### Re-quantizing the SPECTER2 model
@@ -572,12 +574,15 @@ them somewhere durable when (not if) you hit them again.
 │   └── arxiv-taxonomy.json                       ← canonical arXiv category snapshot
 ├── migrations/
 │   ├── 010_paper_embeddings.sql                  ← pgvector cache table
-│   └── 011_papers_s2_paper_id.sql                ← canonical S2 ID column
+│   ├── 011_papers_s2_paper_id.sql                ← canonical S2 ID column
+│   └── 033_paper_embeddings_grants.sql           ← service-role-only grants (applied 2026-08-15)
 ├── scripts/
 │   ├── build_arxiv_taxonomy.py                   ← taxonomy scraper + JSON/TS generator
 │   ├── find_paper_suggest.py                     ← old operator-laptop CLI (still works, kept as offline fast path)
 │   ├── export_specter2_onnx.py                   ← one-time model export
 │   ├── collect_specter2_fixtures.py              ← parity-fixture fetcher
+│   ├── specter2_parity.py                        ← fixture schema, input recipe, thresholds (unit-tested)
+│   ├── vecmath.py                                ← the one cosine (ranking + verification)
 │   └── specter2_parity_fixtures.json             ← committed fixture data (~240 KB)
 ├── web/
 │   ├── app/

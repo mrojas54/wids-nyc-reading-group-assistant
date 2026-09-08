@@ -41,12 +41,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from scripts.render_email_previews import (
+    LEFTOVER_MARKER,
     TEMPLATES,
     RenderError,
     find_surviving_placeholders,
-    render,
-    splice_shared_blocks,
-    strip_html_comments,
+    render_body,
 )
 
 STEM = "welcome-availability"
@@ -66,22 +65,13 @@ OPTIONAL_BLOCKS = (
 # is a block like any other and is always stripped.
 _DOC_BLOCK = "_doc"
 
-_HTML_BLOCK = (
-    r"[ \t]*<!-- BEGIN-BLOCK: {name} -->.*?<!-- END-BLOCK: {name} -->[ \t]*\n?"
-)
-_TXT_BLOCK = r"[ \t]*\[\[BEGIN:{name}\]\]\n.*?[ \t]*\[\[END:{name}\]\][ \t]*\n?"
+# The marker grammar, the resolver and the survived-marker check all live in
+# `scripts.render_email_previews` (resolve_blocks / LEFTOVER_MARKER), shared
+# with availability-reminder's paper / paper_pending pair, so the two send
+# paths cannot drift on what a block is.
+__all__ = ["Blocks", "CompositionError", "Content", "LEFTOVER_MARKER", "compose"]
 
 _LEFTOVER_TOKEN = re.compile(r"\{\{[^}]*\}\}")
-
-# Deliberately precise: both templates *document* the marker syntax in their
-# own header comments, writing the placeholder as a literal `<name>`. A loose
-# `"BEGIN-BLOCK" in body` check matches that prose and reports a survived
-# marker on a perfectly composed body. Requiring a real identifier between the
-# delimiters distinguishes an actual marker from prose about markers.
-LEFTOVER_MARKER = re.compile(
-    r"<!--\s*(?:BEGIN|END)-BLOCK:\s*[A-Za-z0-9_]+\s*-->"
-    r"|\[\[(?:BEGIN|END):[A-Za-z0-9_]+\]\]"
-)
 
 
 class CompositionError(RuntimeError):
@@ -110,50 +100,6 @@ class Content:
 
     tokens: dict[str, str]
     blocks: Blocks = field(default_factory=Blocks)
-
-
-def _strip_blocks(body: str, pattern: str, keep: set[str], names: tuple[str, ...]) -> str:
-    """Drop disabled blocks whole; unwrap the markers around enabled ones."""
-    for name in names:
-        block_re = re.compile(pattern.format(name=re.escape(name)), re.S)
-        if name in keep:
-            # Keep the contents, drop only the two marker lines.
-            body = block_re.sub(lambda m: _unwrap(m.group(0), name), body)
-        else:
-            body, _ = block_re.subn("", body)
-    return body
-
-
-def _unwrap(block: str, name: str) -> str:
-    """Remove the BEGIN/END marker lines, preserving the block's body."""
-    for marker in (
-        rf"[ \t]*<!-- BEGIN-BLOCK: {re.escape(name)} -->[ \t]*\n?",
-        rf"[ \t]*<!-- END-BLOCK: {re.escape(name)} -->[ \t]*\n?",
-        rf"[ \t]*\[\[BEGIN:{re.escape(name)}\]\][ \t]*\n?",
-        rf"[ \t]*\[\[END:{re.escape(name)}\]\][ \t]*\n?",
-    ):
-        block = re.sub(marker, "", block)
-    return block
-
-
-# Documentation comments must not ship — this template's header comment alone
-# is ~5 KB of repo file paths, migration numbers, design rationale, and the
-# *alternate* wording of copy the recipient is reading. The stripper (and the
-# reasoning behind its sentinel dance, which is what keeps the Outlook
-# conditionals alive) lives in `scripts.render_email_previews` so this composer
-# and the preview/JSON renderer cannot drift apart on what ships.
-
-
-def _strip_html_comments(body: str) -> str:
-    """Strip doc comments, restating failures as :class:`CompositionError`.
-
-    ``compose()`` promises exactly one failure type, so the shared stripper's
-    :class:`RenderError` is translated rather than allowed to escape.
-    """
-    try:
-        return strip_html_comments(body)
-    except RenderError as exc:
-        raise CompositionError(str(exc)) from exc
 
 
 #: The handoff hard-wraps the plain-text twin at ~68 characters.
@@ -196,7 +142,6 @@ def _compose_one(
     ext: Literal["html", "txt"], content: Content
 ) -> tuple[str, list[str]]:
     src = (TEMPLATES / f"{STEM}.{ext}").read_text(encoding="utf-8")
-    pattern = _HTML_BLOCK if ext == "html" else _TXT_BLOCK
     keep = content.blocks.enabled()
 
     names = OPTIONAL_BLOCKS
@@ -204,21 +149,8 @@ def _compose_one(
         # The twin carries its own doc comment, which never ships.
         names = (_DOC_BLOCK,) + OPTIONAL_BLOCKS
 
-    body = _strip_blocks(src, pattern, keep, names)
     tokens = content.tokens
     if ext == "html":
-        # Splice shared fragments (wordmark, CTA skeleton, footer brand line)
-        # before comment-stripping and before the blanket html.escape() below
-        # — see render_email_previews.SPLICE_BLOCKS for why these can't be
-        # {{ }} tokens (escape() would corrupt the wordmark's raw markup) or
-        # HTML comments (strip_html_comments() would delete them). The {{
-        # cta.* }} tokens embedded inside the spliced CTA skeleton are plain
-        # text/URLs, so they resolve normally through the escaped tokens dict
-        # below along with everything else.
-        body = splice_shared_blocks(body)
-        # Before substitution: the header comment lists token names, and
-        # stripping first keeps them out of the unresolved tally entirely.
-        body = _strip_html_comments(body)
         # render() is a plain string substituter with no escaping, so a token
         # value goes into the markup verbatim. "Michelle & Claudia" then ships
         # a bare ampersand — which browsers forgive, but is invalid, and a name
@@ -226,8 +158,20 @@ def _compose_one(
         # No token in this template is meant to carry markup (unlike
         # availability-reminder's paper.citation, which deliberately holds an
         # <em>), so escaping all of them is safe and closes the whole class.
+        # The shared fragments (wordmark, CTA skeleton, footer brand line) are
+        # spliced by render_body() as raw markup, not tokens, so the escape
+        # never touches them — see render_email_previews.SPLICE_BLOCKS.
         tokens = {k: html.escape(v, quote=True) for k, v in tokens.items()}
-    rendered, unresolved = render(body, tokens)
+    # The send pipeline itself — blocks, marker check, splice, comment strip,
+    # substitute, placeholder check — is render_body(), shared with the
+    # preview renderer and the Gmail draft manifest. compose() promises
+    # exactly one failure type, so its RenderError is translated here.
+    try:
+        rendered, unresolved = render_body(
+            src, ext, {name: name in keep for name in names}, tokens, label=f"{STEM}.{ext}"
+        )
+    except RenderError as exc:
+        raise CompositionError(str(exc)) from exc
     if ext == "txt":
         rendered = _wrap_txt(rendered)
     return rendered, unresolved

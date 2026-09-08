@@ -156,7 +156,13 @@ echo '{"recipient.firstName":"<first>","lead.name":"<lead>","lead.initial":"<X>"
 
 It emits `{"paper_id", "html", "text"}` with every `{{ token }}` resolved, and
 **errors (exit 1) if any token is unresolved** — never create a draft from a
-partial render. Create a Gmail **draft** (never auto-send) to that member:
+partial render.
+
+`render_new_paper_email()` splices `__WORDMARK_BLOCK__` / `__CTA_BLOCK__`
+and errors if either string survives. Refuse to draft if the CLI exits
+non-zero.
+
+Create a Gmail **draft** (never auto-send) to that member:
 
 - **Subject:** `WiDS NYC AI Reading Group - <Month Year>` (e.g. `WiDS NYC AI Reading Group - August 2026`), where the month is the reading-group meeting's month
 - **HTML body:** the `html` field

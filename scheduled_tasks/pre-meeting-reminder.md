@@ -139,17 +139,26 @@ do not draft for this meeting.** Do not write to `meetings` either; resolving
 the disagreement is the operator's call. Log and move on to the next meeting —
 other meetings in this run are unaffected:
 
+Dollar-quote every interpolated text value (`$wids$…$wids$`), never
+single quotes. Venue strings contain apostrophes (`Jack's Wife Freda`).
+If a value itself contains `$wids$`, pick another tag.
+
 ```sql
 INSERT INTO command_log (source, name, status, summary, metadata)
 VALUES ('scheduled_task', 'pre-meeting-reminder', 'failure',
-        'meeting=<id>: reminder held — venue mismatch, DB "<db_location>" vs Calendar "<calendar_location>"',
+        format(
+          'meeting=%s: reminder held — venue mismatch, DB %s vs Calendar %s',
+          <id>,
+          $wids$<db_location>$wids$,
+          $wids$<calendar_location or null>$wids$
+        ),
         jsonb_build_object(
           'event',             'venue_drift',
-          'classification',    '<result.classification or "event_not_found">',
+          'classification',    $wids$<result.classification or "event_not_found">$wids$,
           'meeting_id',        <id>,
-          'calendar_event_id', '<event_id or null>',
-          'db_location',       '<db_location>',
-          'calendar_location', '<calendar_location or null>',
+          'calendar_event_id', $wids$<event_id or null>$wids$,
+          'db_location',       $wids$<db_location>$wids$,
+          'calendar_location', $wids$<calendar_location or null>$wids$,
           'send_held',         true,
           'recipients_held',   <count that would have been drafted>
         ));
@@ -343,12 +352,13 @@ created**, carrying that recipient's bucket key:
 ```sql
 INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
 VALUES ('scheduled_task', 'pre-meeting-reminder', 'needs_action',
-        'Drafted <bucket> meeting=<id> member=<member_id> to=<email> — UNSENT, operator must send',
-        '<the bucket key from Step 2>',
-        jsonb_build_object('kind', '<reminder|thanks>', 'meeting_id', <id>,
-                           'member_id', <member_id>, 'email', '<email>',
+        format('Drafted %s meeting=%s member=%s to=%s — UNSENT, operator must send',
+               $wids$<bucket>$wids$, <id>, <member_id>, $wids$<email>$wids$),
+        $wids$<the bucket key from Step 2>$wids$,
+        jsonb_build_object('kind', $wids$<reminder|thanks>$wids$, 'meeting_id', <id>,
+                           'member_id', <member_id>, 'email', $wids$<email>$wids$,
                            'delivery_mode', 'draft',
-                           'gmail_draft_id', '<draft_id>',
+                           'gmail_draft_id', $wids$<draft_id>$wids$,
                            'operator_action_required', true));
 ```
 

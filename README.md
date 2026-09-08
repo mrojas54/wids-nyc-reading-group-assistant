@@ -33,7 +33,7 @@ Before running `/wids-bootstrap`, the operator must:
 ### 1. Supabase project
 - Sign up at https://supabase.com (free tier).
 - Create a new project (note the project URL and `service_role` key).
-- Apply every file in `migrations/` in numeric order — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool. See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist.
+- Apply every file in `migrations/` in numeric order — paste each into the Supabase SQL Editor, or use the Supabase MCP `apply_migration` tool (omit `BEGIN;` / `COMMIT;`). See [migrations/README.md](migrations/README.md) for what each migration does, the `ensure_rls` event-trigger gotcha, and the post-apply verification checklist. The live project is through `033` as of 2026-08-15.
 
 ### 2. Google Drive root folder
 - Create a folder in your Drive named `WiDS NYC AI Reading Group`.
@@ -108,7 +108,7 @@ Once prerequisites are met, run `/wids-bootstrap` in Claude Code from this direc
 6. **Optional anytime**: `/wids-status` — read-only dashboard showing exactly where you are.
 7. **Optional anytime**: `/wids-add-member <name> | <email> | [phone] | [whatsapp] | [vouched-by]` — someone asks to join between cycles. Inserts the member (email lowercased, phone normalized to E.164, optional `vouched_by` FK), then creates a Gmail **draft** of the welcome-and-availability email for whatever meeting is in `prep`. You open that draft in Gmail and send it yourself — the command cannot send. See [Adding a member mid-cycle](#adding-a-member-mid-cycle) and [docs/welcome-availability-flow.md](docs/welcome-availability-flow.md).
 
-The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). Once the paper and leader are locked, the operator runs the manual [`new-paper-announcement`](scheduled_tasks/new-paper-announcement.md) prompt to create per-member Gmail drafts for review; it never auto-sends. `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. Apply all migrations through the latest file in `migrations/` before going live, and see [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
+The leader (a different person each cycle) handles `/wids-find-paper` and then generates the **Paper Pal companion** for the paper via the portal's operator surface at `/new` (signed in as a member with `role='operator'`, or as the meeting leader). Once the paper and leader are locked, the operator runs the manual [`new-paper-announcement`](scheduled_tasks/new-paper-announcement.md) prompt to create per-member Gmail drafts for review; it never auto-sends. `/new` uploads the paper PDF to the `papers-pdfs` Supabase Storage bucket and POSTs `/functions/v1/analyze-paper`, which streams a 5-stage progress SSE while it parses, calls the provider, and UPSERTs the synthesis into `paper_companions`. Paper Pal supersedes the previous `/wids-make-guide` + `/wids-make-companion` + `/wids-send-packets` chain — those slash commands remain as a fallback but the portal flow is the supported path. Members read the companion live at `/papers/<id>`; no PDF packet is mailed. The live project is through `033`. See [docs/paper-pal-portal.md](docs/paper-pal-portal.md) for the full member, leader, and ops workflow.
 
 ### Adding a member mid-cycle
 
@@ -129,6 +129,8 @@ The email is **drafted only** — and that is the standing rule for every member
 
 This is policy first and capability second. The Gmail MCP happens to expose `create_draft` and no send tool, but even if it did, these commands would still draft. Do not close the gap by wiring Gmail send scope, Composio's `GMAIL_SEND_EMAIL`, Resend, or SMTP — all reachable, none permitted. See [`docs/runbooks/transactional-emails.md`](docs/runbooks/transactional-emails.md).
 
+One caveat on the MCP path: it strips every image, style and class when it writes the draft, so MCP-drafted mail never carries the WiDS mark (verified 2026-09-02, [`docs/runbooks/email-client-behavior.md`](docs/runbooks/email-client-behavior.md)). The drafting path that keeps the mark is [`scripts/gmail_raw_drafts.py`](scripts/gmail_raw_drafts.py), which writes raw MIME through the Gmail REST API under the operator's own OAuth and has no send call — setup in [`docs/runbooks/gmail-raw-drafts.md`](docs/runbooks/gmail-raw-drafts.md). Note that Google's narrowest draft-writing scope (`gmail.compose`) also permits sending; the script does not use that permission, and the rule above still stands.
+
 It renders `assets/emails/template/welcome-availability`, the welcome-and-vouch design ported from the Claude Design handoff. Unlike `availability-reminder` (written for a lapsed regular), this one is written for exactly this moment. It carries **six** optional per-send blocks (`vouch`, `meet_strip`, `availability`, `note`, `paper_card`, `quote`) — turn a block off rather than inventing content for it, particularly the paper card when the companion link doesn't resolve. To check whether a companion link resolves, query `paper_companions.payload` for that paper id — **not** `web/content/papers/<id>.json`, which is the deprecated static-fixture path and is absent for most live papers. Both bodies come from one content object via `scripts/welcome_availability.py`, so a block dropped from the HTML drops from the plain-text twin too. Preview with:
 
 ```bash
@@ -140,6 +142,7 @@ If no meeting is in `prep`, the command adds the member and stops there — they
 ### When something goes wrong
 
 - **DB write failed** → check `/admin/logs` or query `command_log` for the `failure` row with the error message. Server-action failures from the portal are logged with `source='server_action'`. See [docs/admin-logs.md](docs/admin-logs.md) for filters, enrichment fields, and idempotency-key conventions.
+- **Dashboard / `/me/rsvps` looks empty but data should exist** → portal read accessors still return empty UI on PostgREST failure; they now also emit `{"event":"query_failed",…}` to **Vercel / `next dev` server logs** (not `command_log`). Search for that event before treating it as a real empty roster. See [web/README.md](web/README.md#runtime-query-failures-vs-empty-data).
 - **Form responses too low** → `availability-chase` will email you. Reply with what to do, or just nag your members on WhatsApp.
 - **Members can't submit certain dates, or the scheduler skips a window** → those dates fall inside a blackout period (the group is on break). To view, add, extend, or remove windows — and the `range_end`-is-exclusive gotcha — see [docs/runbooks/blackout-periods.md](docs/runbooks/blackout-periods.md).
 - **Leader has gone silent** → the Paper Pal companion flow handles leader follow-up. (The standalone `leader-nudge` task is deprecated; do not register it.)
@@ -192,14 +195,15 @@ The operator-side Python helpers under [scripts/](scripts/) (paper suggestion, Z
 push, arXiv taxonomy, email preview rendering) are managed with
 [uv](https://docs.astral.sh/uv/). Dependencies and tool config live in a single
 [pyproject.toml](pyproject.toml); the resolved set is pinned in the committed
-`uv.lock`.
+`uv.lock`. The project floor is **Python ≥3.13**, and CI runs
+`uv sync --frozen --python 3.13` — keep those two in lockstep.
 
 Install `uv` first if `uv --version` is unavailable; use the
 [official installer](https://docs.astral.sh/uv/getting-started/installation/)
 and restart the shell so its install directory is on `PATH`.
 
 ```sh
-uv sync                  # install the locked dependency set (creates .venv/)
+uv sync --python 3.13    # install the locked dependency set (creates .venv/)
 uv run pytest tests      # run the Python test suite
 uv run ruff check scripts tests
 uv run ty check          # type-check the scripts/ package
@@ -208,7 +212,11 @@ uv run ty check          # type-check the scripts/ package
 `uv sync --frozen` asserts the lockfile is in sync with `pyproject.toml` and is what
 CI runs — re-run `uv lock` after changing a dependency so the lock stays current.
 The optional `ml` extra (`uv sync --extra ml`) pulls the heavy torch/transformers
-stack needed only by the SPECTER2 embedding scripts.
+stack needed only by the SPECTER2 embedding scripts. Those three SPECTER2
+scripts and `.github/workflows/export-specter2.yml` stay on **`--python 3.11`**
+on purpose — on 3.13 uv's resolver can silently pick a wrong 2018 `optimum`
+namesake package. See [docs/admin-suggest.md](docs/admin-suggest.md)
+§ "Python and the ML stack".
 
 ## Repository layout
 
@@ -221,5 +229,13 @@ scripts/             Operator-side Python helpers (uv-managed; see "Python tooli
 docs/                Guides, specs, and plans
 tests/               SQL smoke tests (RLS) + Python unit tests (pytest)
 web/                 Next.js member portal app
+.dvmrc               Deno version pin (CI + Cursor cloud agent; currently 2.9.5)
+web/.nvmrc           Node version pin for the portal (22.22.3)
 pyproject.toml       Python deps + ruff/ty config (single source of truth)
 ```
+
+Deno for `supabase/functions/` is pinned in [`.dvmrc`](.dvmrc). CI
+(`denoland/setup-deno` with `deno-version-file`) and `.cursor/install.sh`
+both read that file so a Deno 3 release cannot silently diverge type-check
+between environments. Bump the pin deliberately; do not install "latest"
+in one place and a range in the other.

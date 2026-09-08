@@ -8,11 +8,18 @@ be the same without you. The horizon is the next 30 days and we're
 looking for a weekday evening that works for most of the group.
 
 
+[[BEGIN:paper]]
 NEXT PAPER
 {{ paper.title }}
 {{ paper.authorsShort }} — {{ paper.citationText }}
 Link: {{ paper.url }}
 {{ paper.metaLine }}
+[[END:paper]]
+[[BEGIN:paper_pending]]
+NEXT PAPER
+Paper Pal coming soon — the paper is being chosen now. I'll send a
+separate note the moment it's picked and the companion page is up.
+[[END:paper_pending]]
 
 
 Tap any weekday evening in the next 30 days you could make it. We'll
@@ -34,9 +41,15 @@ and submit zero days so I know you saw this and I'll stop bugging you.
 Thanks for being part of this,
 — {{ operator.displayName }}
 
+[[BEGIN:paper]]
 PS — your Paper Pal goes live Wednesday morning. I'll send a separate
 note when it's ready. Preview link if you're curious:
 {{ links.companionPreview }}
+[[END:paper]]
+[[BEGIN:paper_pending]]
+PS — Paper Pal is coming soon. I'll send a separate note the moment
+it's ready.
+[[END:paper_pending]]
 
 
 "{{ quote.text }}"
