@@ -55,19 +55,29 @@ For each meeting:
   - Send alert. (Step 3.)
 - Otherwise: skip.
 
-(Cooldown — find the most recent successful operator alert for THIS meeting.
-This is a 5-day cooldown, **not** once-ever: the alert re-fires while the
-meeting stays under-responded. So it keys on an exact structured
-`metadata->>'meeting_id'` match (robust — no `summary LIKE` substring scan) and
-keeps the `MAX(ran_at)` window. It deliberately does **not** use
-`idempotency_key`, which would make the alert once-ever.)
+(Cooldown — find the most recent operator alert for THIS meeting. This is a
+5-day cooldown, **not** once-ever: the alert re-fires while the meeting stays
+under-responded. So it keys on an exact structured `metadata->>'meeting_id'`
+match (robust — no `summary LIKE` substring scan) and keeps the `MAX(ran_at)`
+window. It deliberately does **not** use `idempotency_key`, which would make the
+alert once-ever.)
 ```sql
 SELECT MAX(ran_at) FROM command_log
 WHERE name = 'availability-chase'
-  AND status = 'success'
+  AND status IN ('success', 'needs_action')
   AND metadata->>'kind' = 'operator_alert'
   AND metadata->>'meeting_id' = '<id>';
 ```
+
+**The status list must stay this wide.** Step 4 writes the alert row as
+`needs_action` (see below), so a query filtering on `status = 'success'` alone
+would never match its own writes — the cooldown would silently never fire and
+the alert would re-draft every single day. The `success` arm is not dead either:
+the three operator alerts already logged for meeting 41 (2026-08-26, 2026-08-31,
+2026-09-05) predate this change and are still `success`, so dropping it would
+restart a cooldown that is already running. Both arms are load-bearing; this is
+the same failure mode the `kind` note below describes, reached by a different
+route.
 
 ## Step 3 — Draft alert email
 
@@ -99,11 +109,34 @@ assets/emails/template/availability-reminder.html) to non-responders only.
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, metadata)
-VALUES ('scheduled_task', 'availability-chase', 'success',
-        'Sent low-response alert to operator for meeting=<id>: <responded>/<total>',
+VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+        'Drafted low-response alert for meeting=<id>: <responded>/<total> — UNSENT, operator must send',
         jsonb_build_object('kind', 'operator_alert', 'meeting_id', <id>,
-                           'responded', <responded>, 'total', <total>));
+                           'responded', <responded>, 'total', <total>,
+                           'delivery_mode', 'draft',
+                           'gmail_draft_id', '<draft_id>',
+                           'operator_action_required', true,
+                           'drafts_created', 1, 'emails_sent', 0));
 ```
+`needs_action`, not `success`: the run's own work finished, but the alert has
+reached nobody until a human presses send. It derives to **warn** on
+`/admin/logs` (`deriveSeverity` in [`web/lib/logs.ts:101`](../web/lib/logs.ts)),
+so a forgotten alert draft shows amber instead of hiding inside a green row —
+which is exactly how three alerts for meeting 41 sat unnoticed. Reserve
+`success` for a run that needed nothing from the operator, and for an alert row
+the operator has confirmed sent (see below).
+
+`delivery_mode='draft'` records that the message was composed and queued for a
+human rather than delivered; `operator_action_required` is greppable, and
+`/admin/logs` filters on `metadata` (see
+[`docs/admin-logs.md`](../docs/admin-logs.md)), so pending sends can be listed
+without opening Gmail.
+
+Once the operator confirms the alert was actually sent, that row may be updated
+to `status='success'`. The Step-2 cooldown accepts both statuses, so the 5-day
+window is measured from the same `ran_at` either way and the update cannot
+re-open a cooldown that is already running.
+
 (No `idempotency_key` here — the cooldown above intentionally permits a repeat
 alert after 5 days. The `meeting_id`/`kind` live in `metadata` so the Step-2
 cooldown query can find this row by an exact match.)
@@ -292,12 +325,23 @@ For each non-submitter row:
 
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-   VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent reminder meeting=<meeting_id> member=<member_id> to=<email>',
+   VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+           'Drafted reminder meeting=<meeting_id> member=<member_id> to=<email> — UNSENT, operator must send',
            'availability-chase:meeting=<meeting_id>:member=<member_id>',
            jsonb_build_object('kind', 'member_reminder', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>'));
+                              'member_id', <member_id>, 'email', '<email>',
+                              'delivery_mode', 'draft',
+                              'gmail_draft_id', '<draft_id>',
+                              'operator_action_required', true,
+                              'emails_sent', 0));
    ```
+
+   `needs_action` for the same reason as Step 4: the draft is queued for a human,
+   so it belongs in amber on `/admin/logs`, not in green. The Step 5c.3
+   idempotency check above reads `idempotency_key` **without filtering on
+   status**, so this status change cannot cause a member to be re-drafted — the
+   key is claimed either way. Update the row to `success` once the operator
+   confirms that recipient's draft was sent.
 
 ### 5d — Confirm back to operator
 
@@ -366,12 +410,19 @@ For each submitter row:
 
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-   VALUES ('scheduled_task', 'availability-chase', 'success',
-           'Sent thanks meeting=<meeting_id> member=<member_id> to=<email>',
+   VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+           'Drafted thanks meeting=<meeting_id> member=<member_id> to=<email> — UNSENT, operator must send',
            'availability-chase:thanks:meeting=<meeting_id>:member=<member_id>',
            jsonb_build_object('kind', 'member_thanks', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', '<email>'));
+                              'member_id', <member_id>, 'email', '<email>',
+                              'delivery_mode', 'draft',
+                              'gmail_draft_id', '<draft_id>',
+                              'operator_action_required', true,
+                              'emails_sent', 0));
    ```
+
+   `needs_action` and the `metadata` flags carry the same meaning as in Step 5c,
+   and the Step 5e.3 check is likewise status-agnostic.
 
    Write the key ONLY after that recipient's draft is confirmed created. A
    `create_draft` error gets a KEYLESS `failure` row for that recipient, so the
@@ -395,15 +446,25 @@ of failure for the whole task, and in practice it has been failing:
 Two channels currently carry a waiting draft, and neither pushes:
 
 1. **`/admin/logs`** — the surface that works when nobody opens the mailbox.
-   Note that this task still logs draft-creating runs as `status='success'`,
-   which hides a waiting draft in a green row.
-   [`scheduled_tasks/post-meeting-thanks.md`](post-meeting-thanks.md) switched
-   its draft rows to `needs_action` + `metadata.operator_action_required`
-   (derives to warn, renders amber — `web/lib/logs.ts:101`) for exactly this
-   reason. Adopting that here is the obvious next improvement and is **not**
-   done yet; it is a schema-compatible change (migration 029 added
-   `needs_action` to the live CHECK), so it needs only a spec + prompt edit.
+   As of 2026-09-08 every draft-creating row here is logged `needs_action` +
+   `metadata.operator_action_required` (derives to warn, renders amber —
+   [`web/lib/logs.ts:101`](../web/lib/logs.ts)), matching
+   [`scheduled_tasks/post-meeting-thanks.md`](post-meeting-thanks.md) and
+   [`scheduled_tasks/pre-meeting-reminder.md`](pre-meeting-reminder.md). Before
+   that, draft-creating runs logged `success`, which hid a waiting draft in a
+   green row — that is how three unsent alerts for meeting 41 went unnoticed for
+   two weeks. Schema-compatible: migration 029 had already added `needs_action`
+   to the live CHECK, so this was a spec + prompt edit with no migration.
+
+   **Rows written before 2026-09-08 are still `success`** and will not render
+   amber retroactively; no backfill was run. Read a green `operator_alert` row
+   dated on or before 2026-09-05 as "draft created, send status unknown".
 2. **The draft itself**, sitting in the operator's own mailbox.
+
+Neither channel pushes. Amber on a dashboard is a better trap than green on a
+dashboard, but it still requires someone to look — this narrows the failure, it
+does not close it. Closing it needs a channel the operator drives, and **not** by
+giving the task send capability; see the next section.
 
 Improve the handoff only in ways that do not send mail as the operator.
 
