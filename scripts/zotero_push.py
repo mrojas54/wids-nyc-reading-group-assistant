@@ -47,6 +47,9 @@ from psycopg import Connection
 import requests
 from pyzotero import Zotero
 
+from scripts.env_file import parse_env_file as _parse_env_file
+from scripts.paper_urls import extract_doi_from_url, is_arxiv_host
+
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
 _NY_TZ = ZoneInfo("America/New_York")
@@ -54,7 +57,6 @@ _NY_TZ = ZoneInfo("America/New_York")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
 
-_ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 
 def normalize_url(url: str) -> str:
@@ -84,8 +86,6 @@ def normalize_url(url: str) -> str:
     return urlunparse((scheme, host, path, "", query, ""))
 
 
-_DOI_IN_URL_RE = re.compile(r"/(10\.\d{4,9}/[^?#]+)")
-
 _CITATION_DOI_RE = re.compile(
     rb'<meta\s+name=["\']citation_doi["\']\s+content=["\']([^"\']+)["\']',
     re.IGNORECASE,
@@ -102,10 +102,9 @@ def classify_url(url: str) -> str:
     "needs_meta_lookup" means: try to find a citation_doi <meta> tag by
     fetching the page; if that fails, fall back to DB metadata.
     """
-    parsed = urlparse(url)
-    if parsed.netloc == "arxiv.org":
+    if is_arxiv_host(urlparse(url).netloc):
         return "arxiv"
-    if _DOI_IN_URL_RE.search(parsed.path):
+    if extract_doi_from_url(url):
         return "doi_in_url"
     return "needs_meta_lookup"
 
@@ -159,15 +158,6 @@ def extract_arxiv_metadata(url: str) -> Optional[dict[str, Any]]:
         "arxiv_id": arxiv_id,
         "url": url,
     }
-
-
-def extract_doi_from_url(url: str) -> Optional[str]:
-    """Find a DOI literal embedded in the URL path."""
-    parsed = urlparse(url)
-    if parsed.netloc == "arxiv.org":
-        return None  # arXiv URLs sometimes contain unrelated number patterns
-    m = _DOI_IN_URL_RE.search(parsed.path)
-    return m.group(1) if m else None
 
 
 def extract_doi_from_meta_tag(url: str) -> Optional[str]:
@@ -754,25 +744,6 @@ def record_failure(
         # though it is not a LiteralString to the type checker.
         cur.execute(sql, tuple(params))  # ty: ignore[invalid-argument-type]
     conn.commit()
-
-
-def _parse_env_file(path: Path) -> dict[str, str]:
-    """Tiny .env parser: KEY=VALUE per line, # comments, optional quotes."""
-    out: dict[str, str] = {}
-    if not path.exists():
-        return out
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        m = _ENV_LINE_RE.match(line)
-        if not m:
-            continue
-        key, val = m.group(1), m.group(2)
-        if (val.startswith('"') and val.endswith('"')) or \
-           (val.startswith("'") and val.endswith("'")):
-            val = val[1:-1]
-        out[key] = val
-    return out
 
 
 def _load_env() -> dict[str, str]:

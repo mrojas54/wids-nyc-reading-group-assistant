@@ -15,6 +15,8 @@ from typing import Any
 import httpx
 import numpy as np
 from pydantic import BaseModel
+from scripts.paper_urls import extract_doi_from_url
+from scripts.vecmath import cosine
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -72,10 +74,6 @@ _ARXIV_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Match a DOI: must start with "10." then 4-9 digits, slash, suffix.
-_DOI_RE = re.compile(r"\b(10\.\d{4,9}/[^\s/?#]+)", re.IGNORECASE)
-
-
 def extract_arxiv_id(url: str) -> str | None:
     """Extract a modern arXiv ID (e.g., '2104.05234') from an arXiv URL.
 
@@ -85,20 +83,6 @@ def extract_arxiv_id(url: str) -> str | None:
     if not url:
         return None
     m = _ARXIV_RE.search(url)
-    return m.group(1) if m else None
-
-
-def extract_doi_from_url(url: str) -> str | None:
-    """Extract a DOI of the form '10.NNNN/<suffix>' from a URL.
-
-    Catches Tandfonline-style URLs that embed the full DOI in the path.
-    Returns None for URLs that don't contain a literal DOI string —
-    notably Nature URLs of the form nature.com/articles/<article-id>
-    (where the '10.1038/' prefix is implicit, not in the URL).
-    """
-    if not url:
-        return None
-    m = _DOI_RE.search(url)
     return m.group(1) if m else None
 
 
@@ -115,18 +99,6 @@ def to_s2_paper_id(url: str) -> str | None:
     if doi:
         return f"DOI:{doi}"
     return None
-
-
-def cosine(a: np.ndarray, b: np.ndarray) -> float:
-    """Cosine similarity between two vectors.
-
-    Returns 0.0 if either vector has zero norm (defensive guard against NaN).
-    """
-    norm_a = float(np.linalg.norm(a))
-    norm_b = float(np.linalg.norm(b))
-    if norm_a == 0.0 or norm_b == 0.0:
-        return 0.0
-    return float(np.dot(a, b) / (norm_a * norm_b))
 
 
 def max_cosine_match(

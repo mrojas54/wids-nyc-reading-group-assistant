@@ -66,7 +66,22 @@ uv run python -m scripts.gmail_raw_drafts create \
 | `none` | the mark `<img>` is removed; the 48px cell stays |
 
 `--dry-run DIR` writes `.eml` files instead of touching Gmail — open one in a
-mail client to eyeball it, or `inspect` it after a real run.
+mail client to eyeball it, or `inspect` it after a real run. The `.eml` files
+use the same per-recipient stem as `reminder-manifest`'s body files, so a
+dry run of a manifest names its output exactly as the manifest does.
+
+Gmail calls retry transient failures (transport errors, 429, 5xx) three times
+with a short random backoff — the same policy as `find_paper_suggest`. A
+deterministic refusal (4xx other than 429) is not retried. If a `batch` still
+fails part-way, the error lists which recipients already have a draft, which
+one failed, and which were not attempted; trim the manifest to the last two
+groups and re-run rather than re-running the whole batch, since each draft is
+its own request with nothing to de-duplicate it on Gmail's side.
+
+Malformed inputs (a truncated `client_secret.json`, a hand-edited token, a
+manifest with a stray comma) are reported as `error: … is not valid JSON` and
+exit 1, never as a traceback. A token file that parses but does not match the
+schema this tool writes says so and points at `auth`.
 
 ### The reminder batch (what the chase step does by hand today)
 

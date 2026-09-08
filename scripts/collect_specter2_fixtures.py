@@ -18,7 +18,13 @@ import time
 import urllib.parse
 from pathlib import Path
 
+# Invoked as `python scripts/<this>.py`; the shared fixture schema lives in the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_chain, wait_fixed
+
+from scripts.specter2_parity import FixtureError, validate_fixture
 
 S2_BASE = "https://api.semanticscholar.org/graph/v1"
 OUT = Path(__file__).resolve().parent / "specter2_parity_fixtures.json"
@@ -56,21 +62,83 @@ BASE_DELAY_S = 5         # baseline sleep between successful requests
 RETRY_BACKOFFS_S = [10, 20, 40]   # 429 retries: total ~70s of patience per paper
 
 
+class _RateLimited(Exception):
+    """S2 answered 429; tenacity retries on this and nothing else."""
+
+    def __init__(self, resp: httpx.Response) -> None:
+        super().__init__(f"HTTP {resp.status_code}")
+        self.resp = resp
+
+
+def _log_retry(state) -> None:  # tenacity RetryCallState
+    backoff = RETRY_BACKOFFS_S[min(state.attempt_number - 1, len(RETRY_BACKOFFS_S) - 1)]
+    print(f"  -> 429, retrying in {backoff}s (attempt {state.attempt_number + 1})", flush=True)
+
+
+#: tenacity, like find_paper_suggest and gmail_raw_drafts — one retry idiom in
+#: scripts/. The public S2 tier is slow to forgive, so the waits are the fixed
+#: 10/20/40 s ladder rather than a random exponential.
+_s2_retry = retry(
+    retry=retry_if_exception_type(_RateLimited),
+    wait=wait_chain(*(wait_fixed(s) for s in RETRY_BACKOFFS_S)),
+    stop=stop_after_attempt(len(RETRY_BACKOFFS_S) + 1),
+    before_sleep=_log_retry,
+    reraise=True,
+)
+
+
+@_s2_retry
+def _get_until_not_rate_limited(client: httpx.Client, url: str) -> httpx.Response:
+    resp = client.get(url)
+    if resp.status_code == 429:
+        raise _RateLimited(resp)
+    return resp
+
+
 def fetch_one(client: httpx.Client, s2_id: str) -> tuple[httpx.Response | None, str | None]:
     """Fetch one paper, retrying on 429 with backoff. Returns (response, error_reason)."""
     encoded = urllib.parse.quote(s2_id, safe="")
     url = f"{S2_BASE}/paper/{encoded}?fields=paperId,title,abstract,embedding.specter_v2"
-    for attempt, backoff in enumerate([0, *RETRY_BACKOFFS_S]):
-        if backoff > 0:
-            print(f"  -> 429, retrying in {backoff}s (attempt {attempt + 1})", flush=True)
-            time.sleep(backoff)
-        try:
-            resp = client.get(url)
-        except httpx.HTTPError as e:
-            return None, f"network error: {e}"
-        if resp.status_code != 429:
-            return resp, None
-    return resp, f"HTTP 429 after {len(RETRY_BACKOFFS_S)} retries"
+    try:
+        return _get_until_not_rate_limited(client, url), None
+    except _RateLimited as e:
+        return e.resp, f"HTTP 429 after {len(RETRY_BACKOFFS_S)} retries"
+    except httpx.HTTPError as e:
+        return None, f"network error: {e}"
+
+
+def fixture_from_response(data: object) -> tuple[dict | None, str | None]:
+    """Turn one S2 paper document into a fixture entry, or ``(None, reason)``.
+
+    Pure, so the skip policy (no embedding, empty abstract, malformed) is
+    unit-tested; ``main()`` only adds the pacing sleeps and the log line.
+    """
+    if not isinstance(data, dict):
+        return None, "malformed response"
+    emb = data.get("embedding") or {}
+    vec = emb.get("vector") if isinstance(emb, dict) else None
+    if not vec:
+        return None, "no embedding"
+    raw_abstract = data.get("abstract")
+    abstract = raw_abstract.strip() if isinstance(raw_abstract, str) else ""
+    # Skip empty-abstract papers: SPECTER2 fed only title+SEP produces
+    # a degenerate CLS vector that drifts up to cos ~0.04 between local
+    # FP32 and S2's served vector (any tiny attention-mask or kernel-
+    # order difference compounds on all-padding tokens). Such fixtures
+    # don't exercise the model meaningfully and pollute parity metrics.
+    if not abstract:
+        return None, "empty abstract"
+    entry = {
+        "paperId": data.get("paperId"),
+        "title": raw_title.strip() if isinstance(raw_title := data.get("title"), str) else "",
+        "abstract": abstract,
+        "vector": vec,
+    }
+    try:
+        validate_fixture(entry)
+    except FixtureError as exc:
+        return None, f"invalid fixture: {exc}"
+    return entry, None
 
 
 def main() -> int:
@@ -90,32 +158,14 @@ def main() -> int:
                 skipped.append((s2_id, f"HTTP {resp.status_code}"))
                 time.sleep(BASE_DELAY_S)
                 continue
-            data = resp.json()
-            emb = data.get("embedding") or {}
-            vec = emb.get("vector")
-            if not vec:
-                print("no embedding")
-                skipped.append((s2_id, "no embedding"))
+            entry, reason = fixture_from_response(resp.json())
+            if entry is None:
+                print(reason)
+                skipped.append((s2_id, reason or "unknown"))
                 time.sleep(BASE_DELAY_S)
                 continue
-            abstract = (data.get("abstract") or "").strip()
-            # Skip empty-abstract papers: SPECTER2 fed only title+SEP produces
-            # a degenerate CLS vector that drifts up to cos ~0.04 between local
-            # FP32 and S2's served vector (any tiny attention-mask or kernel-
-            # order difference compounds on all-padding tokens). Such fixtures
-            # don't exercise the model meaningfully and pollute parity metrics.
-            if not abstract:
-                print("empty abstract")
-                skipped.append((s2_id, "empty abstract"))
-                time.sleep(BASE_DELAY_S)
-                continue
-            fixtures.append({
-                "paperId": data["paperId"],
-                "title": (data.get("title") or "").strip(),
-                "abstract": abstract,
-                "vector": vec,
-            })
-            print(f"OK ({len(vec)}-dim, {len(fixtures)} kept)")
+            fixtures.append(entry)
+            print(f"OK ({len(entry['vector'])}-dim, {len(fixtures)} kept)")
             time.sleep(BASE_DELAY_S)
     OUT.write_text(json.dumps(fixtures, indent=2))
     print(f"\nWrote {OUT}: {len(fixtures)} fixtures, {len(skipped)} skipped.")

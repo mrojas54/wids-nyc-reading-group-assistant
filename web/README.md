@@ -177,4 +177,12 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
   ```
 
   Thresholds: median cos ≥ 0.99, min cos ≥ 0.93 across all fixtures in
-  `scripts/specter2_parity_fixtures.json` (which must exist).
+  `scripts/specter2_parity_fixtures.json` (which must exist). They are defined
+  once in `scripts/specter2_parity.py` (`INT8_PARITY`) and a Python unit test
+  asserts the TS test carries the same numbers.
+
+  **In CI this runs on a schedule, not per PR** — `.github/workflows/specter2-parity.yml`
+  (Mondays, plus `workflow_dispatch`). It needs the same two values above as
+  repository secrets (`SPECTER2_MODEL_BLOB_URL`, `BLOB_READ_WRITE_TOKEN`) and
+  fails loudly, rather than skipping, when they are absent. The fixture file's
+  schema is checked on every PR by `tests/specter2_parity_test.py`.

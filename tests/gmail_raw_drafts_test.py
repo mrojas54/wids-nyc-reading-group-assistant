@@ -275,3 +275,291 @@ def test_main_reports_draft_errors_on_stderr(tmp_path: Path, capsys):
     rc = g.main(["batch", "--manifest", str(tmp_path / "missing.json"), "--dry-run", str(tmp_path)])
     assert rc == 1
     assert "error:" in capsys.readouterr().err
+
+
+# ── Error handling: operator-facing failures are DraftErrors, never tracebacks ─
+
+
+def _write_client_secret(path: Path) -> Path:
+    path.write_text(json.dumps({"installed": {"client_id": "id", "client_secret": "sek"}}))
+    return path
+
+
+def _write_token(path: Path, **overrides) -> Path:
+    doc = {"access_token": "at", "refresh_token": "rt", "expires_at": time.time() + 3600, "scope": g.SCOPE}
+    doc.update(overrides)
+    path.write_text(json.dumps(doc))
+    return path
+
+
+@pytest.mark.parametrize("loader, what", [
+    (g.OAuthClient.from_secret_file, "client secret"),
+    (g.load_token, "token"),
+    (g.load_manifest, "manifest"),
+])
+def test_malformed_json_is_a_draft_error_naming_the_file(tmp_path: Path, loader, what):
+    p = tmp_path / "broken.json"
+    p.write_text('{"truncated": ')
+    with pytest.raises(g.DraftError, match=rf"{what} at .*broken\.json is not valid JSON"):
+        loader(p)
+
+
+def test_main_reports_a_malformed_manifest_on_stderr_not_as_a_traceback(tmp_path: Path, capsys):
+    m = tmp_path / "manifest.json"
+    m.write_text("[{")
+    rc = g.main(["batch", "--manifest", str(m), "--dry-run", str(tmp_path / "out")])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "error:" in err and "not valid JSON" in err
+
+
+def test_stale_token_schema_says_run_auth_again(tmp_path: Path):
+    p = tmp_path / "token.json"
+    p.write_text(json.dumps({"access_token": "at", "expiry": "2020-01-01"}))  # old/foreign schema
+    with pytest.raises(g.DraftError, match="run `auth` again"):
+        g.load_token(p)
+    p.write_text(json.dumps(["not", "an", "object"]))
+    with pytest.raises(g.DraftError, match="run `auth` again"):
+        g.load_token(p)
+    _write_token(p, expires_at="soon")
+    with pytest.raises(g.DraftError, match="run `auth` again"):
+        g.load_token(p)
+
+
+def test_client_json_without_the_installed_block_is_a_draft_error(tmp_path: Path):
+    p = tmp_path / "client.json"
+    p.write_text(json.dumps({"something": "else"}))
+    with pytest.raises(g.DraftError, match="Desktop app"):
+        g.OAuthClient.from_secret_file(p)
+    p.write_text(json.dumps({"installed": {"client_id": "only"}}))
+    with pytest.raises(g.DraftError, match="missing 'client_secret'"):
+        g.OAuthClient.from_secret_file(p)
+
+
+@pytest.mark.parametrize("recipients, tokens, needle", [
+    ("[{", '{"a": "b"}', "recipients at"),
+    ('[{"first": "N", "email": "n@x"}]', "{", "tokens at"),
+    ("[]", '{"a": "b"}', "non-empty JSON list"),
+    ('[{"first": "N"}]', '{"a": "b"}', "entry 0 needs string"),
+    ('[{"first": "N", "email": "n@x"}]', '{"a": 1}', "must be a string"),
+])
+def test_reminder_manifest_inputs_are_validated(tmp_path: Path, capsys, recipients, tokens, needle):
+    (tmp_path / "r.json").write_text(recipients)
+    (tmp_path / "t.json").write_text(tokens)
+    rc = g.main([
+        "reminder-manifest", "--recipients", str(tmp_path / "r.json"), "--tokens", str(tmp_path / "t.json"),
+        "--state", "paper_pending", "--out", str(tmp_path / "out"),
+    ])
+    assert rc == 1
+    assert needle in capsys.readouterr().err
+
+
+# ── Token file: private from the first byte ──────────────────────────────────
+
+
+def test_save_token_never_creates_a_world_readable_file(tmp_path: Path, monkeypatch):
+    """The old sequence was write_text (created at the umask default, 0644 under
+    022) followed by chmod. Assert the file is *created* with 0600, not merely
+    tightened afterwards, by spying on the creating call."""
+    modes: list[int] = []
+    real_open = os.open
+
+    def spy(path, flags, mode=0o777, *a, **kw):
+        assert flags & os.O_CREAT
+        modes.append(mode)
+        return real_open(path, flags, mode, *a, **kw)
+
+    monkeypatch.setattr(g.os, "open", spy)
+    old_umask = os.umask(0)  # the worst case: nothing but our explicit mode protects the file
+    try:
+        p = tmp_path / "cfg" / "gmail-token.json"
+        g.save_token(p, g.Token(access_token="a", refresh_token="r", expires_at=1.0))
+    finally:
+        os.umask(old_umask)
+    assert modes == [0o600]
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
+    assert stat.S_IMODE(os.stat(p.parent).st_mode) == 0o700
+
+
+def test_save_token_tightens_a_pre_existing_wider_file(tmp_path: Path):
+    p = tmp_path / "gmail-token.json"
+    p.write_text("{}")
+    os.chmod(p, 0o644)
+    g.save_token(p, g.Token(access_token="a", refresh_token="r", expires_at=1.0))
+    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
+    assert g.load_token(p).access_token == "a"
+
+
+# ── OAuth loopback: no state leaks between authorize() calls ─────────────────
+
+
+def test_authorize_clears_a_stale_loopback_redirect(monkeypatch):
+    class FakeServer:
+        server_address = ("127.0.0.1", 1)
+
+        def __init__(self, *a, **kw):
+            pass
+
+        def handle_request(self):  # the browser never comes back
+            return None
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(g.http.server, "HTTPServer", FakeServer)
+    g._Loopback.query = {"code": ["stale-from-a-previous-call"], "state": ["x"]}
+    with pytest.raises(g.DraftError, match="no redirect received"):
+        g.authorize(g.OAuthClient("id", "sek"), open_browser=False, timeout=0.01)
+    assert g._Loopback.query == {}
+
+
+# ── Gmail REST: one retry policy, and a resumable batch ──────────────────────
+
+
+@pytest.fixture
+def no_backoff(monkeypatch):
+    from tenacity import wait_none
+    for fn in (g.create_draft, g.get_draft_raw):
+        monkeypatch.setattr(fn.retry, "wait", wait_none())
+
+
+@respx.mock
+def test_create_draft_retries_a_transient_5xx_then_succeeds(no_backoff):
+    route = respx.post(f"{g.GMAIL_API}/drafts").mock(
+        side_effect=[httpx.Response(503, text="try later"), httpx.Response(200, json={"id": "r-2"})]
+    )
+    assert g.create_draft("tok", "cmF3")["id"] == "r-2"
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_create_draft_does_not_retry_a_deterministic_refusal(no_backoff):
+    route = respx.post(f"{g.GMAIL_API}/drafts").mock(return_value=httpx.Response(400, text="bad raw"))
+    with pytest.raises(g.DraftError, match="400"):
+        g.create_draft("tok", "cmF3")
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_create_draft_gives_up_after_three_attempts(no_backoff):
+    route = respx.post(f"{g.GMAIL_API}/drafts").mock(return_value=httpx.Response(500, text="down"))
+    with pytest.raises(g.DraftError, match="500"):
+        g.create_draft("tok", "cmF3")
+    assert route.call_count == 3
+
+
+@respx.mock
+def test_get_draft_raw_retries_transport_errors(no_backoff):
+    msg = g.build_mime(to="a@example.com", subject="s", html=HTML, text=TEXT, mark="https")
+    route = respx.get(f"{g.GMAIL_API}/drafts/r-1").mock(
+        side_effect=[httpx.ConnectError("reset"), httpx.Response(200, json={"message": {"raw": g.encode_raw(msg)}})]
+    )
+    assert g.get_draft_raw("tok", "r-1")["Subject"] == "s"
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_batch_failure_reports_created_failed_and_not_attempted(tmp_path: Path, capsys, no_backoff):
+    for who in ("a", "b", "c"):
+        (tmp_path / f"{who}.html").write_text(HTML, encoding="utf-8")
+        (tmp_path / f"{who}.txt").write_text(TEXT, encoding="utf-8")
+    m = tmp_path / "manifest.json"
+    m.write_text(json.dumps([
+        {"to": f"{who}@example.com", "subject": "s", "html": f"{who}.html", "text": f"{who}.txt"}
+        for who in ("a", "b", "c")
+    ]))
+    respx.post(f"{g.GMAIL_API}/drafts").mock(
+        side_effect=[httpx.Response(200, json={"id": "r-a"}), httpx.Response(403, text="quota")]
+    )
+    rc = g.main([
+        "batch", "--manifest", str(m), "--mark", "https",
+        "--client-secret", str(_write_client_secret(tmp_path / "client.json")),
+        "--token", str(_write_token(tmp_path / "token.json")),
+    ])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "created before the failure (1): a@example.com" in err
+    assert "failed: b@example.com" in err
+    assert "not attempted (1): c@example.com" in err
+    assert "re-run" in err
+
+
+# ── Manifest ↔ dry-run correspondence, and state-derived tokens ──────────────
+
+
+def test_manifest_bodies_and_dry_run_eml_share_one_filename_stem(tmp_path: Path):
+    """The dry-run exists to demonstrate the manifest; the two must name files identically."""
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import REMINDER_TOKENS
+
+    email = "Odd Name+tag@Example.com"
+    tokens = {**REMINDER_TOKENS, **quote_tokens(select_quote(load_bundle(), 20617))}
+    manifest = g.write_reminder_manifest(
+        recipients=[{"first": "O", "email": email}], tokens=tokens, state="paper",
+        out_dir=tmp_path / "m", subject="Sub",
+    )
+    [entry] = json.loads(manifest.read_text(encoding="utf-8"))
+    assert entry["html"] == f"{g._slug(email)}.html"
+    rc = g.main(["batch", "--manifest", str(manifest), "--mark", "https", "--dry-run", str(tmp_path / "eml")])
+    assert rc == 0
+    assert (tmp_path / "eml" / f"{g._slug(email)}.eml").exists()
+    assert (tmp_path / "eml" / (Path(entry["html"]).stem + ".eml")).exists()
+
+
+def test_reminder_manifest_pending_state_strips_paper_tokens_before_rendering(tmp_path: Path):
+    """The draft path must be paper-free by construction like the preview is:
+    hand it the *full* token set and the pending body still carries no paper."""
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import REMINDER_TOKENS
+
+    tokens = {**REMINDER_TOKENS, **quote_tokens(select_quote(load_bundle(), 20617))}
+    path = g.write_reminder_manifest(
+        recipients=[{"first": "Niki", "email": "niki@example.com"}],
+        tokens=tokens, state="paper_pending", out_dir=tmp_path, subject="Sub",
+    )
+    [entry] = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("html", "text"):
+        body = (tmp_path / entry[key]).read_text(encoding="utf-8")
+        assert "Paper Pal coming soon" in body
+        assert "Hybrid LSTM" not in body and "doi.org" not in body and "papers/2" not in body
+
+
+def test_reminder_manifest_paper_state_still_needs_the_paper_tokens(tmp_path: Path):
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import REMINDER_PAPER_PENDING_TOKENS
+
+    tokens = {**REMINDER_PAPER_PENDING_TOKENS, **quote_tokens(select_quote(load_bundle(), 20617))}
+    with pytest.raises(g.DraftError, match="unresolved tokens.*paper.title"):
+        g.write_reminder_manifest(
+            recipients=[{"first": "Niki", "email": "niki@example.com"}],
+            tokens=tokens, state="paper", out_dir=tmp_path, subject="Sub",
+        )
+
+
+def test_reminder_manifest_and_preview_render_byte_identical_bodies(tmp_path: Path):
+    """The whole point of sharing render_body: the draft *is* the preview."""
+    from scripts.quotes import load_bundle, quote_tokens, select_quote
+    from scripts.render_email_previews import (
+        REMINDER_PAPER_PENDING_BLOCKS,
+        REMINDER_PAPER_PENDING_TOKENS,
+        REMINDER_TOKENS,
+        TEMPLATES,
+        render_body,
+    )
+
+    q = quote_tokens(select_quote(load_bundle(), 20617))
+    for state, base, blocks in (
+        ("paper", REMINDER_TOKENS, {"paper": True, "paper_pending": False}),
+        ("paper_pending", REMINDER_PAPER_PENDING_TOKENS, REMINDER_PAPER_PENDING_BLOCKS),
+    ):
+        tokens = {**base, **q}
+        path = g.write_reminder_manifest(
+            recipients=[{"first": "Maya", "email": "maya@example.com"}],
+            tokens=tokens, state=state, out_dir=tmp_path / state, subject="Sub",
+        )
+        [entry] = json.loads(path.read_text(encoding="utf-8"))
+        for ext, key in (("html", "html"), ("txt", "text")):
+            src = (TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
+            expected, unresolved = render_body(src, ext, blocks, {**tokens, "recipient.firstName": "Maya"})
+            assert unresolved == []
+            assert (tmp_path / state / entry[key]).read_text(encoding="utf-8") == expected

@@ -581,6 +581,8 @@ them somewhere durable when (not if) you hit them again.
 │   ├── find_paper_suggest.py                     ← old operator-laptop CLI (still works, kept as offline fast path)
 │   ├── export_specter2_onnx.py                   ← one-time model export
 │   ├── collect_specter2_fixtures.py              ← parity-fixture fetcher
+│   ├── specter2_parity.py                        ← fixture schema, input recipe, thresholds (unit-tested)
+│   ├── vecmath.py                                ← the one cosine (ranking + verification)
 │   └── specter2_parity_fixtures.json             ← committed fixture data (~240 KB)
 ├── web/
 │   ├── app/
