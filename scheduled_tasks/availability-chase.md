@@ -1,11 +1,40 @@
 ---
 schedule: daily
-description: Detect low availability-response rates and email operator (operator-first, no auto-send to members)
+description: Detect low availability-response rates and draft an alert to the operator (operator-first; nothing here sends)
 ---
 
 # scheduled_tasks/availability-chase
 
 Runs daily. For any meeting in `status='prep'` more than 7 days old, computes availability-response rate; if low, alerts the operator. Renamed from `form-response-chase` with migration 002 — availability is now collected via the portal at `https://wids-nyc-reading-group-assistant.vercel.app/availability`, not Google Forms.
+
+## Delivery model — read this before Step 3
+
+**This task drafts. It does not send. The operator sends.** That applies to the
+operator alert in Step 3 *and* to every member-facing message in Step 5.
+
+Two independent reasons, and the first one governs:
+
+1. **Policy.** The operator has ruled that nothing in this repo may send email
+   as them (commit `b7acce7`;
+   [`docs/runbooks/transactional-emails.md`](../docs/runbooks/transactional-emails.md)).
+   Every message is drafted for a human to press send. This holds regardless of
+   what tooling is available — see "Do not add a send path" at the end of this
+   spec.
+2. **Capability.** The Gmail MCP in *most* sessions exposes `create_draft`,
+   `update_draft`, `list_drafts`, `get_message`, `get_thread`, `search_threads`
+   and the label tools, and no send tool.
+
+Do not treat #2 as the operative constraint, and do not restate it as absolute.
+**Some sessions do surface `send_message`.** Until 2026-09-07 Steps 5c and 5e of
+this spec asserted that the Gmail MCP "exposes no send tool of any kind" — that
+is false in those sessions, and because this file is the declared source of
+truth for the task, a run that found a send tool could have read the spec's
+stated justification as void. The justification is the policy, not the tool
+inventory. Availability is not permission.
+
+`.claude/commands/wids-add-member.md` Step 6 and
+[`scheduled_tasks/pre-meeting-reminder.md`](pre-meeting-reminder.md) state the
+same limit in the same terms.
 
 ## Step 1 — Find prep meetings needing chase
 
@@ -26,23 +55,34 @@ For each meeting:
   - Send alert. (Step 3.)
 - Otherwise: skip.
 
-(Cooldown — find the most recent successful operator alert for THIS meeting.
-This is a 5-day cooldown, **not** once-ever: the alert re-fires while the
-meeting stays under-responded. So it keys on an exact structured
-`metadata->>'meeting_id'` match (robust — no `summary LIKE` substring scan) and
-keeps the `MAX(ran_at)` window. It deliberately does **not** use
-`idempotency_key`, which would make the alert once-ever.)
+(Cooldown — find the most recent operator alert for THIS meeting. This is a
+5-day cooldown, **not** once-ever: the alert re-fires while the meeting stays
+under-responded. So it keys on an exact structured `metadata->>'meeting_id'`
+match (robust — no `summary LIKE` substring scan) and keeps the `MAX(ran_at)`
+window. It deliberately does **not** use `idempotency_key`, which would make the
+alert once-ever.)
 ```sql
 SELECT MAX(ran_at) FROM command_log
 WHERE name = 'availability-chase'
-  AND status = 'success'
+  AND status IN ('success', 'needs_action')
   AND metadata->>'kind' = 'operator_alert'
   AND metadata->>'meeting_id' = '<id>';
 ```
 
-## Step 3 — Send alert email
+**The status list must stay this wide.** Step 4 writes the alert row as
+`needs_action` (see below), so a query filtering on `status = 'success'` alone
+would never match its own writes — the cooldown would silently never fire and
+the alert would re-draft every single day. The `success` arm is not dead either:
+the three operator alerts already logged for meeting 41 (2026-08-26, 2026-08-31,
+2026-09-05) predate this change and are still `success`, so dropping it would
+restart a cooldown that is already running. Both arms are load-bearing; this is
+the same failure mode the `kind` note below describes, reached by a different
+route.
 
-Recipient: operator.
+## Step 3 — Draft alert email
+
+Recipient: operator. Created as a Gmail **draft** in the operator's own mailbox —
+the operator presses send. See "Delivery model" above.
 
 Subject: `WiDS NYC: availability for <meeting_type> meeting at <responded>/<total> responses`
 
@@ -69,21 +109,46 @@ assets/emails/template/availability-reminder.html) to non-responders only.
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, metadata)
-VALUES ('scheduled_task', 'availability-chase', 'success',
-        'Sent low-response alert to operator for meeting=<id>: <responded>/<total>',
+VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+        'Drafted low-response alert for meeting=<id>: <responded>/<total> — UNSENT, operator must send',
         jsonb_build_object('kind', 'operator_alert', 'meeting_id', <id>,
-                           'responded', <responded>, 'total', <total>));
+                           'responded', <responded>, 'total', <total>,
+                           'delivery_mode', 'draft',
+                           'gmail_draft_id', '<draft_id>',
+                           'operator_action_required', true,
+                           'drafts_created', 1, 'emails_sent', 0));
 ```
+`needs_action`, not `success`: the run's own work finished, but the alert has
+reached nobody until a human presses send. It derives to **warn** on
+`/admin/logs` (`deriveSeverity` in [`web/lib/logs.ts:101`](../web/lib/logs.ts)),
+so a forgotten alert draft shows amber instead of hiding inside a green row —
+which is exactly how three alerts for meeting 41 sat unnoticed. Reserve
+`success` for a run that needed nothing from the operator, and for an alert row
+the operator has confirmed sent (see below).
+
+`delivery_mode='draft'` records that the message was composed and queued for a
+human rather than delivered; `operator_action_required` is greppable, and
+`/admin/logs` filters on `metadata` (see
+[`docs/admin-logs.md`](../docs/admin-logs.md)), so pending sends can be listed
+without opening Gmail.
+
+Once the operator confirms the alert was actually sent, that row may be updated
+to `status='success'`. The Step-2 cooldown accepts both statuses, so the 5-day
+window is measured from the same `ran_at` either way and the update cannot
+re-open a cooldown that is already running.
+
 (No `idempotency_key` here — the cooldown above intentionally permits a repeat
 alert after 5 days. The `meeting_id`/`kind` live in `metadata` so the Step-2
 cooldown query can find this row by an exact match.)
 
-## Step 5 — Operator 'remind' follow-up (member-facing send)
+## Step 5 — Operator 'remind' follow-up (member-facing drafts)
 
 Triggered when the operator replies `remind` (with optional `subject="..."`
-override) to the alert email from Step 3. Splits active members into two
-buckets by submission status and sends a different template to each
-(mirrors the same split-send pattern as
+override) to the alert email from Step 3 — which means the operator must have
+*sent* that alert first. While the Step 3 alert is still sitting unsent in the
+operator's Drafts, no reply is possible and Step 5 cannot trigger. Splits active
+members into two buckets by submission status and drafts a different template to
+each (mirrors the same split pattern as
 `scheduled_tasks/pre-meeting-reminder.md` Steps 4a/4b).
 
 - **Submitters** — active members WITH an `availability` row for this
@@ -96,8 +161,9 @@ buckets by submission status and sends a different template to each
   `assets/emails/template/availability-reminder.{html,txt}` (Step 5c:
   the existing nudge with the magenta CTA).
 
-Both sends use the operator's Gmail via the Gmail MCP, multipart with
-the rendered HTML + plain-text bodies.
+Both buckets are drafted through the operator's Gmail via the Gmail MCP,
+multipart with the rendered HTML + plain-text bodies. Both are drafts; the
+operator sends them.
 
 ### 5a — Resolve subject
 
@@ -189,7 +255,7 @@ Derived values (v2 composition rules — renderer-side, not in DB):
   - location present: `Brooklyn, TBD · ~90 min · Paper Pal drops Wed`
   - location null:    `~90 min · Paper Pal drops Wed`
 
-### 5c — Render + send the REMINDER per non-submitter
+### 5c — Render + draft the REMINDER per non-submitter
 
 For each non-submitter row:
 
@@ -272,10 +338,12 @@ For each non-submitter row:
    rendered plain-text body so clients that strip HTML still read correctly
    (handoff acceptance criterion #2).
 
-   **You cannot send it. The operator has to.** The Gmail MCP exposes no send
-   tool of any kind — see `.claude/commands/wids-add-member.md` Step 6 for the
-   full capability limit. An earlier version of this step read "Send via Gmail
-   MCP", which was unfollowable as written.
+   **You cannot send it. The operator has to.** Do not look for, or use, a send
+   tool — see "Delivery model" above and "Do not add a send path" below.
+   `.claude/commands/wids-add-member.md` Step 6 documents the same limit. An
+   earlier version of this step read "Send via Gmail MCP", which was both
+   unfollowable as written and against policy; the version after that justified
+   the limit as a missing send tool, which is not true in every session.
 
    **The connector strips the mark and every other image at draft creation**
    (verified 2026-09-02 — `docs/runbooks/email-client-behavior.md`). It also
@@ -296,24 +364,38 @@ For each non-submitter row:
 
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-   VALUES ('scheduled_task', 'availability-chase', 'success',
-           format('Sent reminder meeting=%s member=%s to=%s',
+   VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+           format('Drafted reminder meeting=%s member=%s to=%s — UNSENT, operator must send',
                   <meeting_id>, <member_id>, $wids$<email>$wids$),
            format('availability-chase:meeting=%s:member=%s',
                   <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_reminder', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', $wids$<email>$wids$));
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$,
+                              'delivery_mode', 'draft',
+                              'gmail_draft_id', $wids$<draft_id>$wids$,
+                              'operator_action_required', true,
+                              'emails_sent', 0));
    ```
+
+   `needs_action` for the same reason as Step 4: the draft is queued for a human,
+   so it belongs in amber on `/admin/logs`, not in green. The Step 5c.3
+   idempotency check above reads `idempotency_key` **without filtering on
+   status**, so this status change cannot cause a member to be re-drafted — the
+   key is claimed either way. Update the row to `success` once the operator
+   confirms that recipient's draft was sent.
 
 ### 5d — Confirm back to operator
 
 After both per-recipient loops finish (Step 5c reminders, Step 5e
-thank-yous), send a single summary email to the operator:
-`Sent <R> reminders + <T> thank-yous for <meeting_type> meeting #<id>`
+thank-yous), draft a single summary email to the operator:
+`Drafted <R> reminders + <T> thank-yous for <meeting_type> meeting #<id>`
 plus the two recipient first-name lists, separated. No HTML — plain
-text is fine for this confirmation.
+text is fine for this confirmation. Say explicitly that the drafts are
+UNSENT and that the operator must open and send each one. State the same
+counts in the run's own output, so an operator reading the task log sees
+them without opening the mailbox.
 
-### 5e — Render + send the THANK-YOU per submitter
+### 5e — Render + draft the THANK-YOU per submitter
 
 For each submitter row:
 
@@ -358,8 +440,8 @@ For each submitter row:
    ```
 
 4. Create a **Gmail draft** via the Gmail MCP `create_draft` — multipart
-   (HTML + plain-text), single recipient per draft. The operator sends it;
-   the MCP has no send tool. Default subject: `You're in — thanks for the
+   (HTML + plain-text), single recipient per draft. The operator sends it; do
+   not look for a send tool. Default subject: `You're in — thanks for the
    RSVP`. The
    operator's `subject="..."` override from Step 3 applies ONLY to the
    reminder bucket (Step 5c); the thank-you keeps its fixed subject so
@@ -369,11 +451,85 @@ For each submitter row:
 
    ```sql
    INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
-   VALUES ('scheduled_task', 'availability-chase', 'success',
-           format('Sent thanks meeting=%s member=%s to=%s',
+   VALUES ('scheduled_task', 'availability-chase', 'needs_action',
+           format('Drafted thanks meeting=%s member=%s to=%s — UNSENT, operator must send',
                   <meeting_id>, <member_id>, $wids$<email>$wids$),
            format('availability-chase:thanks:meeting=%s:member=%s',
                   <meeting_id>, <member_id>),
            jsonb_build_object('kind', 'member_thanks', 'meeting_id', <meeting_id>,
-                              'member_id', <member_id>, 'email', $wids$<email>$wids$));
+                              'member_id', <member_id>, 'email', $wids$<email>$wids$,
+                              'delivery_mode', 'draft',
+                              'gmail_draft_id', $wids$<draft_id>$wids$,
+                              'operator_action_required', true,
+                              'emails_sent', 0));
    ```
+
+   `needs_action` and the `metadata` flags carry the same meaning as in Step 5c,
+   and the Step 5e.3 check is likewise status-agnostic.
+
+   Write the key ONLY after that recipient's draft is confirmed created. A
+   `create_draft` error gets a KEYLESS `failure` row for that recipient, so the
+   next run retries exactly that recipient. Same rule as Step 5c.
+
+## The alert channel is the weak link in this design
+
+Every path in this spec terminates in an unsent Gmail draft, and the Step 5
+`remind` flow additionally requires the operator to have **sent** the Step 3
+alert and replied to it. That makes the operator's Drafts folder a single point
+of failure for the whole task, and in practice it has been failing:
+
+> All three operator alerts for meeting 41 — 2026-08-26, 2026-08-31,
+> 2026-09-05 — were drafted and never sent; the 2026-08-31 draft was deleted
+> unsent. Across that stretch `search_threads` found no alert thread in sent or
+> received mail. Step 5 has therefore never fired from its documented trigger.
+> The nine reminders that did go out on 2026-09-03 were drafted by a run that
+> skipped the trigger and sent by the operator by hand, which ratified the
+> outcome but is not the designed path.
+
+Two channels currently carry a waiting draft, and neither pushes:
+
+1. **`/admin/logs`** — the surface that works when nobody opens the mailbox.
+   As of 2026-09-08 every draft-creating row here is logged `needs_action` +
+   `metadata.operator_action_required` (derives to warn, renders amber —
+   [`web/lib/logs.ts:101`](../web/lib/logs.ts)), matching
+   [`scheduled_tasks/post-meeting-thanks.md`](post-meeting-thanks.md) and
+   [`scheduled_tasks/pre-meeting-reminder.md`](pre-meeting-reminder.md). Before
+   that, draft-creating runs logged `success`, which hid a waiting draft in a
+   green row — that is how three unsent alerts for meeting 41 went unnoticed for
+   two weeks. Schema-compatible: migration 029 had already added `needs_action`
+   to the live CHECK, so this was a spec + prompt edit with no migration.
+
+   **Rows written before 2026-09-08 are still `success`** and will not render
+   amber retroactively; no backfill was run. Read a green `operator_alert` row
+   dated on or before 2026-09-05 as "draft created, send status unknown".
+2. **The draft itself**, sitting in the operator's own mailbox.
+
+Neither channel pushes. Amber on a dashboard is a better trap than green on a
+dashboard, but it still requires someone to look — this narrows the failure, it
+does not close it. Closing it needs a channel the operator drives, and **not** by
+giving the task send capability; see the next section.
+
+Improve the handoff only in ways that do not send mail as the operator.
+
+## Do not add a send path — this is policy, not a limitation
+
+**The operator has ruled that nothing in this repo may send email as them**
+(commit `b7acce7`;
+[`docs/runbooks/transactional-emails.md`](../docs/runbooks/transactional-emails.md)).
+Every message is drafted and a human presses send. That is the intended design,
+not a capability gap waiting on someone to wire a sender.
+
+The routes are technically reachable, which is exactly why this note exists: the
+Gmail MCP surfaces `send_message` in some sessions, Composio catalogues
+`GMAIL_SEND_EMAIL` and `GMAIL_SEND_DRAFT`, and Resend is already a project
+dependency for auth email
+([`docs/runbooks/smtp-auth-setup.md`](../docs/runbooks/smtp-auth-setup.md)).
+**Reachable is not permitted.** A run that finds a send tool available must not
+read that availability as permission.
+
+The preceding section describes a genuinely weak notification handoff. Do not
+resolve it by acquiring send capability. Make `/admin/logs` louder, add a
+dashboard surface, or have the operator opt into a channel they own and drive
+themselves.
+
+Only the operator can change this, in their own words.
