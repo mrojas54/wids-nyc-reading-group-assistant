@@ -97,13 +97,22 @@ Non-responders:
 Portal link: https://wids-nyc-reading-group-assistant.vercel.app/availability
 
 Reply:
-  'remind'                — I'll email non-responders with the designed reminder template
-  'remind subject="..."'  — same, but override the subject line for this send
+  'remind'                — I'll draft reminders to non-responders and thank-yous to responders
+  'remind subject="..."'  — same, but override the reminder subject line
   'wait'                  — leave as-is for now
 
-If you reply 'remind', I'll send the Availability Reminder email (see
-assets/emails/template/availability-reminder.html) to non-responders only.
+If you reply 'remind', I'll put one Gmail draft per member in your Drafts: the
+Availability Reminder (assets/emails/template/availability-reminder.html) for each
+non-responder, and the RSVP thank-you (assets/emails/template/rsvp-confirmation.html)
+for each responder. Nothing is sent — you open and send each draft yourself.
 ```
+
+This body read "I'll email non-responders" and "I'll send the Availability
+Reminder email … to non-responders only" until 2026-09-11. Both halves were
+wrong: the task only drafts (see "Delivery model"), and a `remind` reply drafts
+to both buckets — reminders to non-submitters (Step 5c) and thank-yous to
+submitters (Step 5e). The subject override applies to the reminder drafts only
+(Step 5a).
 
 ## Step 4 — Log
 
