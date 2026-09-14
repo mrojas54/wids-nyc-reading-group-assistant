@@ -18,7 +18,9 @@ Semi-autonomous workflow plus a member-facing portal for running the WiDS NYC AI
 | Paper Pal portal | [docs/paper-pal-portal.md](docs/paper-pal-portal.md) | [2026-05-17-paper-pal-design.md](docs/superpowers/specs/2026-05-17-paper-pal-design.md) | [2026-05-18-paper-pal-pr2-implementation.md](docs/superpowers/plans/2026-05-18-paper-pal-pr2-implementation.md) |
 | Find-a-paper / suggest | [docs/admin-suggest.md](docs/admin-suggest.md) | [2026-05-06-wids-find-paper-suggest-design.md](docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md), [2026-06-07-arxiv-taxonomy-design.md](docs/superpowers/specs/2026-06-07-arxiv-taxonomy-design.md) | [2026-05-06-wids-find-paper-suggest-implementation.md](docs/superpowers/plans/2026-05-06-wids-find-paper-suggest-implementation.md), [2026-06-07-arxiv-taxonomy.md](docs/superpowers/plans/2026-06-07-arxiv-taxonomy.md) |
 | Pre-meeting reminder email | [docs/pre-meeting-reminder-flow.md](docs/pre-meeting-reminder-flow.md) | [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
+| Availability reminder / chase | [docs/availability-reminder-flow.md](docs/availability-reminder-flow.md), [scheduled_tasks/availability-chase.md](scheduled_tasks/availability-chase.md) | — | — |
 | Welcome + add-member | [docs/welcome-availability-flow.md](docs/welcome-availability-flow.md) | — | — |
+| Raw-MIME Gmail drafts (mark) | [docs/runbooks/gmail-raw-drafts.md](docs/runbooks/gmail-raw-drafts.md) | — | — |
 | Zotero bibliography | [docs/runbooks/zotero-bibliography.md](docs/runbooks/zotero-bibliography.md) | [2026-05-05-wids-zotero-integration-design.md](docs/superpowers/specs/2026-05-05-wids-zotero-integration-design.md) | [2026-05-05-wids-zotero-integration.md](docs/superpowers/plans/2026-05-05-wids-zotero-integration.md) |
 | Operator event log | [docs/admin-logs.md](docs/admin-logs.md) | — | — |
 | Transactional emails | [docs/runbooks/transactional-emails.md](docs/runbooks/transactional-emails.md), [docs/runbooks/email-client-behavior.md](docs/runbooks/email-client-behavior.md) | [2026-06-12-email-quotes-design.md](docs/superpowers/specs/2026-06-12-email-quotes-design.md), [2026-06-18-pre-meeting-reminder-email-design.md](docs/superpowers/specs/2026-06-18-pre-meeting-reminder-email-design.md) | [2026-06-13-email-quotes.md](docs/superpowers/plans/2026-06-13-email-quotes.md), [2026-06-18-pre-meeting-reminder-email.md](docs/superpowers/plans/2026-06-18-pre-meeting-reminder-email.md) |
@@ -217,6 +219,19 @@ scripts and `.github/workflows/export-specter2.yml` stay on **`--python 3.11`**
 on purpose — on 3.13 uv's resolver can silently pick a wrong 2018 `optimum`
 namesake package. See [docs/admin-suggest.md](docs/admin-suggest.md)
 § "Python and the ML stack".
+
+### Shared script helpers
+
+Three tiny modules live under `scripts/` so operator tools do not fork policy:
+
+| Module | Role | Callers |
+|---|---|---|
+| [`scripts/env_file.py`](scripts/env_file.py) | Minimal `KEY=VALUE` reader for `web/.env.local` fallback (no interpolation) | `welcome_availability` / `generate_prerequisites` / `zotero_push` / `pilot_cli` |
+| [`scripts/paper_urls.py`](scripts/paper_urls.py) | One DOI-from-URL policy (path only; arXiv hosts → `None`) | `find_paper_suggest`, `zotero_push` |
+| [`scripts/vecmath.py`](scripts/vecmath.py) | One `cosine` (zero-norm → `0.0`, not `nan`) | ranking + SPECTER2 verify/export |
+
+Tests in `tests/shared_helpers_test.py` pin the import sites so a second local
+copy cannot creep back in.
 
 ## Repository layout
 
