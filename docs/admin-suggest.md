@@ -582,6 +582,8 @@ them somewhere durable when (not if) you hit them again.
 │   ├── export_specter2_onnx.py                   ← one-time model export
 │   ├── collect_specter2_fixtures.py              ← parity-fixture fetcher
 │   ├── specter2_parity.py                        ← fixture schema, input recipe, thresholds (unit-tested)
+│   ├── env_file.py                               ← shared .env.local reader (pilot_cli + zotero + prerequisites)
+│   ├── paper_urls.py                             ← one DOI-from-URL policy (suggest + Zotero)
 │   ├── vecmath.py                                ← the one cosine (ranking + verification)
 │   └── specter2_parity_fixtures.json             ← committed fixture data (~240 KB)
 ├── web/
@@ -610,7 +612,8 @@ them somewhere durable when (not if) you hit them again.
 │   ├── lib/suggest/__tests__/                    ← unit tests (TDD throughout)
 │   └── middleware.ts                             ← gates /admin/* behind login
 └── .github/workflows/
-    └── export-specter2.yml                       ← CI fallback for model export
+    ├── export-specter2.yml                       ← CI fallback for model export
+    └── specter2-parity.yml                       ← weekly WASM INT8 vs S2 parity (not per-PR)
 ```
 
 Two complementary tools coexist:
