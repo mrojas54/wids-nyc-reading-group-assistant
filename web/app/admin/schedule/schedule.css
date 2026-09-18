@@ -1,0 +1,336 @@
+/* ============================================================
+   WiDS NYC — /admin/schedule operator surface
+   "Schedule the next meeting". Desktop-first at 1280, one column
+   under 960. Token-driven; scoped under `.sched` so nothing here
+   reaches the phone-width member shell.
+
+   Where the design's raw hex disagrees with this file's tokens the
+   token wins: the design's fg-3 is the paper-500 step (#7e6f55),
+   which globals.css exposes as --color-paper-500 (#7d7359), and its
+   fg-4 is --color-paper-400. The sage tints, magenta, wheat and the
+   accent shadow are byte-identical between the two.
+   ============================================================ */
+
+.sched, .sched * { box-sizing: border-box; }
+.sched {
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  color: var(--fg-1);
+  background: var(--bg-page);
+}
+.sched button { font-family: inherit; }
+
+.sched .sched-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px 8px;
+}
+.sched .sched-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sched .sched-main {
+  flex: 1;
+  padding: 24px 40px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Page head */
+.sched .sched-head { display: flex; flex-direction: column; gap: 6px; }
+.sched .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-paper-500);
+}
+.sched h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+.sched .sched-lede {
+  margin: 0;
+  max-width: var(--measure-prose);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--fg-2);
+}
+
+/* Two columns: fluid calendar, fixed 400px details rail */
+.sched .sched-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 24px;
+  align-items: start;
+}
+.sched .sched-rail { display: flex; flex-direction: column; gap: 24px; }
+
+@media (max-width: 960px) {
+  .sched .sched-header { padding: 20px 16px 8px; }
+  .sched .sched-main { padding: 16px 16px 40px; }
+  .sched .sched-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Phone: the seven columns are ~40px wide, so the cell keeps its number and
+   count and drops the leader line — the dashed border, the legend and the
+   aria-label still carry it. */
+@media (max-width: 640px) {
+  .sched .cal-week, .sched .cal-days { gap: 4px; }
+  .sched .cal-cell { height: 60px; }
+  .sched .cal-day-lead { display: none; }
+  .sched .cal-day-num { font-size: 15px; }
+  .sched .cal-day-meta { font-size: 11px; }
+  .sched .cal-plain { padding: 10px 0 0 12px; }
+  .sched .ui-card-header, .sched .ui-card-body, .sched .ui-card-footer {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}
+
+/* Card headings */
+.sched .card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.sched .card-title-stack { display: flex; flex-direction: column; gap: 4px; }
+.sched h2.heading {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+.sched h2.heading-sm { font-size: 18px; }
+.sched .meta {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-paper-500);
+}
+.sched .small { font-size: 14px; line-height: 1.4; color: var(--fg-2); }
+.sched .nav-buttons { display: flex; gap: 8px; }
+
+/* Calendar */
+.sched .cal-body { display: flex; flex-direction: column; gap: 16px; }
+.sched .cal-week,
+.sched .cal-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.sched .cal-week span {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: var(--tr-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-paper-500);
+}
+.sched .cal-cell { display: flex; height: 72px; }
+.sched .cal-plain {
+  flex: 1;
+  padding: 12px 0 0 18px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-paper-400);
+}
+.sched .cal-day {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  color: var(--fg-1);
+  cursor: pointer;
+  transition:
+    background var(--duration-2) var(--ease-out),
+    box-shadow var(--duration-2) var(--ease-out),
+    transform var(--duration-1);
+}
+/* The one sanctioned spring: day-cell press, written at the point of use. */
+.sched .cal-day:active {
+  transform: scale(0.96);
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sched .cal-day:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Heat — only when the leader can make it (data-leader != busy). */
+.sched .cal-day[data-tier="1"] { background: var(--color-sage-50); border-color: var(--border-sage); }
+.sched .cal-day[data-tier="2"] { background: var(--color-sage-100); border-color: var(--color-sage-300); }
+.sched .cal-day[data-tier="3"] { background: var(--color-sage-200); border-color: var(--color-sage-400); }
+/* Leader busy — paper and dashed, no tint. */
+.sched .cal-day[data-leader="busy"] {
+  background: var(--bg-surface);
+  border-style: dashed;
+  border-color: var(--color-paper-400);
+}
+/* Selected — magenta is the voice. */
+.sched .cal-day[aria-pressed="true"] {
+  background: var(--state-selected-bg);
+  color: var(--state-selected-fg);
+  border-color: var(--accent-active);
+  box-shadow: var(--shadow-accent);
+}
+.sched .cal-day[aria-pressed="true"]:focus-visible {
+  box-shadow: var(--shadow-accent), var(--focus-ring-accent);
+}
+.sched .cal-day-num { font-size: 16px; line-height: 1.15; font-weight: 500; }
+/* fg-2, not fg-3: fg-3 fails 4.5:1 on the sage tints. */
+.sched .cal-day-meta { font-size: 12px; line-height: 1.4; color: var(--fg-2); }
+.sched .cal-day-lead {
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--color-warning-700);
+}
+.sched .cal-day[aria-pressed="true"] .cal-day-meta,
+.sched .cal-day[aria-pressed="true"] .cal-day-lead { color: var(--color-magenta-50); }
+
+/* Legend */
+.sched .legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-paper-500);
+}
+.sched .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.sched .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-2);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.sched .swatch[data-tier="1"] { background: var(--color-sage-50); border-color: var(--border-sage); }
+.sched .swatch[data-tier="2"] { background: var(--color-sage-100); border-color: var(--color-sage-300); }
+.sched .swatch[data-tier="3"] { background: var(--color-sage-200); border-color: var(--color-sage-400); }
+.sched .swatch-selected { background: var(--state-selected-bg); border-color: var(--accent-active); }
+.sched .swatch-dashed { border-style: dashed; border-color: var(--color-paper-400); }
+
+/* Hero (next paper) */
+.sched .hero-stack { display: flex; flex-direction: column; gap: 12px; }
+.sched .hero-eyebrow-row { display: flex; align-items: center; gap: 10px; }
+.sched .hero-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.sched .hero-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--brand-primary-fg);
+  text-decoration: none;
+}
+.sched .hero-link:hover { color: var(--brand-primary-hover); }
+.sched .hero-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-paper-500);
+}
+
+/* Details */
+.sched .details-stack { display: flex; flex-direction: column; gap: 20px; }
+.sched .field-stack { display: flex; flex-direction: column; gap: 4px; }
+.sched .date-big {
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: var(--tr-tight);
+  color: var(--fg-1);
+}
+/* Wheat note: warm, never hostile. */
+.sched .note-wheat {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-warning-50);
+  border: 1px solid var(--color-warning-200);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-warning-700);
+}
+.sched .dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+}
+.sched .dot-warning { background: var(--color-warning-500); }
+.sched .dot-free { background: var(--color-success-500); }
+.sched .dot-busy { background: var(--color-paper-400); }
+.sched .who { display: flex; flex-direction: column; gap: 8px; }
+.sched .who-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--fg-1);
+}
+.sched .who-row b { font-weight: 500; }
+.sched .who-row .names { color: var(--fg-2); }
+.sched .footer-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.sched .footer-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-danger-700);
+}
+
+/* Empty state reuse at desktop width */
+.sched .empty-state { margin: 0 auto; }
+
+/* Page entrance — one fade, an 8px lift, no staggered children. */
+@media (prefers-reduced-motion: no-preference) {
+  .sched .sched-main {
+    animation: sched-enter var(--duration-3) var(--ease-out) both;
+  }
+}
+@keyframes sched-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
