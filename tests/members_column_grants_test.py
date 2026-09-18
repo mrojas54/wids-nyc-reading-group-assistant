@@ -31,6 +31,10 @@ SERVICE_ROLE_MEMBERS_READERS = frozenset(
     {
         "web/app/actions.ts",
         "web/app/auth/callback/route.ts",
+        # scheduleMeeting reads active members' emails for the calendar
+        # invite; every members read in this file goes through
+        # createSupabaseServiceClient behind requireOperatorRole.
+        "web/app/admin/schedule/actions.ts",
     }
 )
 
