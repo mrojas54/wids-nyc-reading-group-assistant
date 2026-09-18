@@ -4,15 +4,39 @@
 // mark from the design bundle generated 2026-05-05. When `inverted`, the
 // glyph drops to a single-color white "mono" treatment for use on dark
 // surfaces — sage-900, indigo-900, magenta — per the Codex Identity sheet.
-export function Brandmark({ inverted = false }: { inverted?: boolean } = {}) {
+//
+// `variant="codex"` is the design system's product lockup ("Codex" in bold
+// indigo-700 over "WiDS · NYC" at 0.22em tracking, 32px tile, 6px radius)
+// used on operator chrome. The default keeps the chapter wordmark the member
+// portal shipped with.
+export function Brandmark({
+  inverted = false,
+  variant = "chapter",
+}: { inverted?: boolean; variant?: "chapter" | "codex" } = {}) {
+  const cls = [
+    "brandmark",
+    inverted && "brandmark-inverted",
+    variant === "codex" && "brandmark-codex",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <div className={`brandmark${inverted ? " brandmark-inverted" : ""}`}>
+    <div className={cls}>
       <div className="dotmark" aria-hidden>
         {inverted ? <CodexBoardMonoMark /> : <CodexBoardMark />}
       </div>
       <div className="lockup">
-        <span className="name">WiDS NYC</span>
-        <span className="tag">AI Reading Group</span>
+        {variant === "codex" ? (
+          <>
+            <span className="name">Codex</span>
+            <span className="tag">WiDS · NYC</span>
+          </>
+        ) : (
+          <>
+            <span className="name">WiDS NYC</span>
+            <span className="tag">AI Reading Group</span>
+          </>
+        )}
       </div>
     </div>
   );

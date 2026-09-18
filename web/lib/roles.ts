@@ -21,3 +21,10 @@ export function isAdmin(role: RoleInput): boolean {
 export function canFindPaper(role: RoleInput): boolean {
   return role === "operator" || role === "leader" || role === "admin";
 }
+
+// Roles allowed to book the next meeting from the availability poll
+// (/admin/schedule). Narrower than canFindPaper on purpose: a leader picks
+// the paper, but the date, venue and invite are the operator's call.
+export function canScheduleMeeting(role: RoleInput): boolean {
+  return role === "operator" || role === "admin";
+}

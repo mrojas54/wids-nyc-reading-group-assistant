@@ -1666,6 +1666,95 @@
 }
 
 /* ============================================================
+   Design-system primitives (2026-09-18)
+   Card / Badge / Banner action / Codex lockup — composed by props in
+   components/ui, styled here with the role tokens. `.ui-card` is a new
+   name on purpose: a few older components put inline styles on a bare
+   `.card` class this file never defined, and must keep rendering as-is.
+   ============================================================ */
+
+.ui-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-1);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ui-card-hero {
+  border: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+.ui-card-header {
+  padding: var(--space-5) var(--space-6) 0;
+}
+.ui-card-body {
+  padding: var(--space-5) var(--space-6);
+}
+.ui-card-header + .ui-card-body {
+  padding-top: var(--space-4);
+}
+.ui-card-footer {
+  padding: var(--space-4) var(--space-6);
+  background: var(--bg-surface-sunken);
+  border-top: 1px solid var(--border-1);
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.ui-badge-sage {
+  background: var(--brand-primary-bg-soft);
+  color: var(--brand-primary-fg);
+  border-color: var(--border-sage);
+}
+.ui-badge-magenta {
+  background: var(--accent-bg-soft);
+  color: var(--accent-fg);
+  border-color: var(--border-accent);
+}
+.ui-badge-warning {
+  background: var(--color-warning-50);
+  color: var(--color-warning-700);
+  border-color: var(--color-warning-200);
+}
+.ui-badge-neutral {
+  background: var(--bg-page-warm);
+  color: var(--fg-2);
+  border-color: var(--border-1);
+}
+
+.banner .banner-action {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.brandmark.brandmark-codex .dotmark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+.brandmark.brandmark-codex .lockup .name {
+  color: var(--color-indigo-700);
+}
+.brandmark.brandmark-codex .lockup .tag {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+}
+
+/* ============================================================
    Manage RSVPs (/me/rsvps)
    Landing page for the links.rsvpManage token in the transactional
    email footers. Reuses .rsvp-picker / .rsvp-collapsed from the
