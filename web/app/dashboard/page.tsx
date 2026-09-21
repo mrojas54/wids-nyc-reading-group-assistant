@@ -49,8 +49,11 @@ export default async function DashboardPage() {
   const stats = await myStats(sb, submitted, memberId);
   // The banner is a prompt to *choose* a paper, so it stops once the next meeting
   // has one — permission alone would keep nagging leaders to pick a paper that is
-  // already picked. No meeting (or no paper on it) still shows it.
-  const showFindPaper = canFindPaper(member?.role) && !meeting?.paper_id;
+  // already picked. No meeting (or no paper on it) still shows it. Only
+  // reading_group meetings ever have a paper, so an admin meeting or vibe
+  // session in prep must not trigger this — neither one is waiting on a pick.
+  const showFindPaper =
+    canFindPaper(member?.role) && meeting?.type === "reading_group" && !meeting?.paper_id;
   // The operator's way into /admin/schedule: shown only while a reading group
   // is collecting availability, and never to members (see canScheduleMeeting).
   const showSchedule =
