@@ -411,7 +411,8 @@ describe("nextMeeting — companion link", () => {
 
 type MeetingRow = {
   id: number;
-  type: "admin" | "reading_group";
+  type: "admin" | "reading_group" | "vibe_session";
+  type_priority: number;
   status: string;
   scheduled_at: string | null;
   location: string | null;
@@ -504,6 +505,7 @@ const BOOTSTRAP_CREATED_AT = "2026-06-01T19:26:06.456578Z";
 const ADMIN_36: MeetingRow = {
   id: 36,
   type: "admin",
+  type_priority: 0,
   status: "prep",
   scheduled_at: null,
   location: null,
@@ -517,6 +519,7 @@ const ADMIN_36: MeetingRow = {
 const READING_GROUP_37: MeetingRow = {
   id: 37,
   type: "reading_group",
+  type_priority: 2,
   status: "prep",
   scheduled_at: null,
   location: null,
@@ -525,6 +528,24 @@ const READING_GROUP_37: MeetingRow = {
   paper_id: 9,
   members: { name: "Niharika Krishnan" },
   papers: { title: "Meta-Harness", companion_url: null },
+};
+
+// Lower id than READING_GROUP_37 on purpose: the final id-DESC tiebreak would
+// otherwise happen to pick the reading group even if type_priority ordering
+// were silently dropped, masking a regression back to sorting on `type` text
+// (where 'vibe_session' > 'reading_group' alphabetically).
+const VIBE_SESSION_35: MeetingRow = {
+  id: 35,
+  type: "vibe_session",
+  type_priority: 1,
+  status: "prep",
+  scheduled_at: null,
+  location: null,
+  created_at: BOOTSTRAP_CREATED_AT,
+  leader_id: null,
+  paper_id: null,
+  members: null,
+  papers: null,
 };
 
 describe("nextMeeting — tier 2 fallback, admin + reading_group tied on created_at", () => {
@@ -556,6 +577,22 @@ describe("nextMeeting — tier 2 fallback, admin + reading_group tied on created
     // .eq("type", "reading_group"), which would strand the admin meeting.
     const meeting = await nextMeeting(buildMeetingsSb([ADMIN_36]));
     expect(meeting).toMatchObject({ id: 36, type: "admin" });
+  });
+
+  it("prefers the reading group over a vibe session, and a vibe session over admin, when all three tie", async () => {
+    // Regression guard for migration 034: type_priority (reading_group=2 >
+    // vibe_session=1 > admin=0), not the spelling of `type`, decides this.
+    const allThree = [ADMIN_36, READING_GROUP_37, VIBE_SESSION_35];
+    for (const rows of permutations(allThree)) {
+      const meeting = await nextMeeting(buildMeetingsSb(rows));
+      expect(meeting).toMatchObject({ id: 37, type: "reading_group" });
+    }
+
+    const vibeAndAdmin = [ADMIN_36, VIBE_SESSION_35];
+    for (const rows of permutations(vibeAndAdmin)) {
+      const meeting = await nextMeeting(buildMeetingsSb(rows));
+      expect(meeting).toMatchObject({ id: 35, type: "vibe_session" });
+    }
   });
 });
 
