@@ -120,6 +120,9 @@ export function MermaidDiagram({
         startOnLoad: false,
         securityLevel: "strict",
         theme: "base",
+        // Mermaid 12 defaults to ELK; preserve the authored flowchart layout.
+        layout: "dagre",
+        look: "classic",
         fontFamily: THEME_VARIABLES.fontFamily,
         themeVariables: THEME_VARIABLES,
       });
