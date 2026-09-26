@@ -1,42 +1,82 @@
 ---
-schedule: daily
-description: Detect cycles that have stalled and email operator to suggest restart
+schedule: weekly
+description: Detect cycles that have gone quiet and email operator to suggest restart
 ---
 
 # scheduled_tasks/cycle-keep-alive
 
-Runs daily. Notifies operator if no cycle has been started in 28+ days.
+Runs **weekly** (Mondays). Notifies the operator only when the group has been
+quiet for **3+ months** *and* nothing is on the books.
+
+The bar is deliberately high. A month or two of quiet is a normal summer, not a
+stall — this task exists to catch a group that has genuinely gone dormant, not
+to keep pace with the cycle.
 
 > **Note (migration 002):** This task is operator-facing only — it nudges the operator to restart a stalled cycle and never emails members. Member-facing availability collection moved from Google Forms to the portal at `https://wids-nyc-reading-group-assistant.vercel.app/availability` (see `availability-chase` for that path); this task is unaffected by the cutover.
 
-## Step 1 — Check most recent reading_group
+## Step 1 — When did the group last actually meet?
+
+Any completed meeting counts as a meetup, admin or reading_group — an admin
+meeting means the group is alive.
 
 ```sql
-SELECT MAX(scheduled_at) AS last_rg
+SELECT
+  MAX(scheduled_at) FILTER (WHERE type IN ('reading_group','admin')) AS last_meetup,
+  MAX(scheduled_at) FILTER (WHERE type = 'reading_group')            AS last_rg
 FROM meetings
-WHERE type='reading_group' AND status='done';
+WHERE status = 'done';
 ```
 
-## Step 2 — Check for in-progress cycle
+## Step 2 — Is anything on the books?
+
+A meeting counts as on-the-books if it is `scheduled`, or if it is in `prep`
+and genuinely moving — meaning it has a date, or it was created recently enough
+that availability collection is plausibly still underway.
+
+A `prep` row with no `scheduled_at` that has sat untouched for 21+ days is
+**stalled, not in flight**, and must not suppress the nudge.
 
 ```sql
-SELECT count(*) FROM meetings
-WHERE status IN ('prep','scheduled') AND type IN ('admin','reading_group');
+SELECT count(*) AS on_the_books
+FROM meetings
+WHERE type IN ('admin','reading_group')
+  AND (
+        status = 'scheduled'
+     OR (status = 'prep' AND (
+              scheduled_at IS NOT NULL
+           OR created_at > now() - interval '21 days'
+        ))
+  );
 ```
 
 ## Step 3 — Decide
 
-- If `last_rg` is NULL (no completed reading group ever) AND no in-progress cycle:
-  - This is the kickoff state. Don't nag — bootstrap should have started cycle 1.
-  - Log `no_action`. Exit.
-- If `last_rg` >= 28 days ago AND no in-progress cycle:
-  - Send email. (Step 4.)
-- Otherwise:
-  - Log `no_action`. Exit.
+Nudge only if **both** are true. Anything else logs `no_action` and exits.
+
+| Condition | Action |
+|---|---|
+| `last_meetup` IS NULL and `on_the_books` = 0 | `no_action` — kickoff state, bootstrap owns cycle 1. Don't nag. |
+| `on_the_books` > 0 | `no_action` — something is already moving. |
+| `last_meetup` >= `now() - interval '3 months'` | `no_action` — the group met recently enough. |
+| `on_the_books` = 0 **and** `last_meetup` < `now() - interval '3 months'` | Send the nudge (Step 4). |
+
+## Step 3.5 — Idempotency
+
+Once the group is dormant the trigger stays true every week, so cap the nudge
+rate independently of the check rate: **check weekly, nudge at most every 28
+days.**
+
+```sql
+SELECT MAX(ran_at) AS last_nudge FROM command_log
+WHERE name = 'cycle-keep-alive' AND status = 'success'
+  AND summary LIKE '%Sent nudge%';
+```
+
+If `last_nudge > now() - interval '28 days'` → log `no_action` and exit.
 
 ## Step 4 — Send nudge email
 
-Recipient: operator (`SELECT email FROM members WHERE role='operator'`)
+Recipient: operator (`SELECT name, email FROM members WHERE role='operator'`)
 
 Subject: "WiDS NYC: time to start the next cycle?"
 
@@ -44,25 +84,36 @@ Body:
 ```
 Hi <operator_name>,
 
-It's been 28+ days since the last reading group on <last_rg date>. No new
-cycle is in progress.
+The last WiDS NYC meetup was on <last_meetup date>, about <N> months ago, and
+there's nothing on the calendar right now.
 
-If you'd like to start the next one, run `/wids-meeting-start admin` in
-Claude Code. Or just reply 'snooze' here and I'll wait another week.
+If you'd like to start the next cycle, run `/wids-meeting-start admin` in
+Claude Code. No reply needed — if you're just taking a break, ignore this and
+I'll check again in four weeks.
 ```
+
+Don't promise a reply-based snooze. Nothing reads replies to this address; the
+28-day cap in Step 3.5 *is* the snooze.
 
 ## Step 5 — Log
 
+`command_log.metadata` is `jsonb NOT NULL` **with no default** — an insert that
+omits it fails. Always supply it, on both the nudge and `no_action` paths.
+
 ```sql
-INSERT INTO command_log (source, name, status, summary)
-VALUES ('scheduled_task', 'cycle-keep-alive', 'success', 'Sent nudge to operator');
+INSERT INTO command_log (source, name, status, summary, metadata)
+VALUES (
+  'scheduled_task', 'cycle-keep-alive', 'success',
+  'Sent nudge to operator',
+  jsonb_build_object(
+    'last_meetup', <last_meetup>,
+    'months_since_last_meetup', <n>,
+    'on_the_books', 0,
+    'decision', 'nudged',
+    'emails_sent', 1
+  )
+);
 ```
 
-## Idempotency
-
-Tracks last sent timestamp by querying:
-```sql
-SELECT MAX(ran_at) FROM command_log
-WHERE name='cycle-keep-alive' AND status='success' AND summary LIKE '%Sent nudge%';
-```
-If last successful nudge was <7 days ago, skip (don't re-spam). Log `no_action`.
+For a `no_action` run, record which gate stopped it — `reason` should be one of
+`kickoff`, `on_the_books_nonzero`, `met_within_3_months`, or `nudge_within_28_days`.

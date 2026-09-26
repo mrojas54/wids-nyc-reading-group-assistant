@@ -4,9 +4,10 @@ import type { NextMeeting, RsvpStatus } from "@/lib/queries";
 import { Icon } from "@/components/ui";
 import { RsvpButtons } from "@/components/RsvpButtons";
 
-const TYPE_LABEL: Record<NextMeeting["type"], string> = {
+export const TYPE_LABEL: Record<NextMeeting["type"], string> = {
   admin: "admin",
   reading_group: "reading group",
+  vibe_session: "vibe session",
 };
 
 export type AvailabilityStatus = "needed" | "submitted" | null;
@@ -51,7 +52,15 @@ export function NextMeetingCard({
   // Reading-group is ~95% of meetings — only badge the exceptions.
   const showBadge = meeting.type !== "reading_group";
   const title =
-    meeting.paper_title ?? (meeting.type === "admin" ? "Admin meeting" : "Next meeting");
+    meeting.paper_title ??
+    (meeting.type === "admin"
+      ? "Admin meeting"
+      : meeting.type === "vibe_session"
+        ? "Vibe session"
+        : "Next meeting");
+  // Vibe sessions have no discussion leader — showing "Led by Leader TBD"
+  // would read as a gap rather than the by-design absence it is.
+  const showLeader = meeting.type !== "vibe_session";
 
   return (
     <article className="card-hero">
@@ -77,7 +86,7 @@ export function NextMeetingCard({
           <Icon name="mapPin" size={13} />
           {place}
         </span>
-        <span className="hero-meta-soft">Led by {leader}</span>
+        {showLeader && <span className="hero-meta-soft">Led by {leader}</span>}
       </div>
 
       {meeting.status === "scheduled" && (
