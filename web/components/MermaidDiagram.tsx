@@ -123,6 +123,8 @@ export function MermaidDiagram({
         // Mermaid 12 defaults to ELK; preserve the authored flowchart layout.
         layout: "dagre",
         look: "classic",
+        // Let the frame scroll instead of scaling labels below their font size.
+        flowchart: { useMaxWidth: false },
         fontFamily: THEME_VARIABLES.fontFamily,
         themeVariables: THEME_VARIABLES,
       });
