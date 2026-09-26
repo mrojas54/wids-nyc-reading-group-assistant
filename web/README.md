@@ -69,6 +69,26 @@ The app is intentionally forced onto Webpack for Next commands (`next dev --webp
 setting `"type": "module"` on `package.json`), so Vite upgrades affect tests
 rather than the production bundle.
 
+## Mermaid rendering and upgrades
+
+The portal uses Mermaid 12 with the WiDS `base` theme, explicit `layout: dagre`
+and `look: classic`. Flowcharts retain their intrinsic dimensions; wide
+figures scroll horizontally so labels stay readable on narrow screens.
+
+The `chevrotain` → `lodash-es: 4.18.1` override addresses vulnerable parser
+pins without downgrading Mermaid. Keep it scoped, and remove it only when the
+resolved upstream graph audits clean without it. Check the installed graph
+with `npm ls lodash-es chevrotain --all`; a manifest override alone does not
+prove that a stale lockfile was refreshed.
+
+For upgrades, run the portal gates above and inspect both desktop and narrow
+browser views. Confirm labels, tier colors, arrows, and both ends of horizontal
+scrolling. [The Mermaid 12 verification record](../docs/verification/mermaid-12.md)
+contains the tested versions, RED/GREEN evidence, acceptance criteria and
+remaining coverage limits. The upstream runtime floor is ES2024 / Safari
+17.4+ / Node 22.12+; the recorded WebKit test is not certification of older
+Safari releases or physical iPhones.
+
 ## Typed Supabase accessors
 
 `createClient` in `lib/supabase/{server,browser,service}.ts` is constructed as
