@@ -26,5 +26,6 @@ it("keeps authored flowcharts on Dagre with the WiDS base theme after initializa
     look: "classic",
     theme: "base",
     securityLevel: "strict",
+    flowchart: { useMaxWidth: false },
   });
 });
