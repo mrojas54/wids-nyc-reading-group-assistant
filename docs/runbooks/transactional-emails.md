@@ -168,6 +168,7 @@ link; unsubscribe is a human reply, documented inline).
 | `rsvp-confirmation.{html,txt}` | `scheduled_tasks/pre-meeting-reminder.md` Step 4a and `scheduled_tasks/availability-chase.md` Step 5e | Live for attending RSVPs 2 days before a meeting, and for availability submitters during the operator-triggered chase follow-up. |
 | `welcome-availability.{html,txt}` | `.claude/commands/wids-add-member.md` Step 5, via `scripts/welcome_availability.py` | Welcome-and-vouch email for a new member. Flow: [`docs/welcome-availability-flow.md`](../welcome-availability-flow.md). **Not driven by `render_email_previews` CLI** — per-send block toggles go through `compose()`, which calls the shared `resolve_blocks()` / `LEFTOVER_MARKER` from that module (same grammar as availability-reminder). Both bodies come from one `Content` object; a block toggled off drops from the HTML and the `.txt` twin together. `compose()` raises rather than returning a body with an unresolved token or a surviving marker. One header, no header toggle — the "court" variant was removed as not part of the Claude design. Preview with `uv run python -m scripts.welcome_availability`. |
 | `availability-thanks.{html,txt}` | `scripts/render_email_previews.py` | Previewed and tested, but no current scheduled-task spec references it. Verify the send path before wiring it into a live workflow. |
+| `meeting-thanks.{html,txt}` | Operator-directed; `scripts/render_email_previews.py` | Post-meeting thanks to **attendees only**, any meeting type. First used for vibe_session #41 (2026-09-29, draft `r4948173521769847118`), which `post-meeting-thanks.md` has no path for — the spec's admin/reading_group bodies are still inline plain text. Built for the Gmail MCP `create_draft` path: Unicode glyphs instead of SVG, `bgcolor` on every tint; drop the empty 48px mark cell when drafting through the connector (`email-client-behavior.md`, option 3). **Drafted** — operator sends. |
 | `pre-meeting-reminder.{html,txt}` | `scripts/render_email_previews.py` | Preview-only. The live `pre-meeting-reminder` task still sends `rsvp-confirmation` to attending members and a plain-text reminder to tentative/no-response members. |
 | `new-paper-announcement.{html,txt}` | `scheduled_tasks/new-paper-announcement.md` | Court/queens announcement, **operator-triggered** per new cycle. Per-member Gmail **drafts** — never auto-send. Paper-card fields and prerequisites come from `papers.prerequisites` (JSONB) via `scripts/generate_prerequisites.py` (`--mode gather` then `render`); each prerequisite item may be a string or `{text, url}`, and malformed or blank values fail rendering. Per-send tokens (`recipient.firstName`, `lead.*`, `signoff.names`, `links.*`) are operator-supplied; `quote.*` rotates from the shared pool. `render_new_paper_email()` splices shared fragments and fails on survivors. Full field list under Token contracts below. |
 
@@ -217,6 +218,22 @@ Optional, with fallbacks:
                               (see Step 5b note in availability-chase.md)
     quote.text / quote.by / quote.role
                               fallback to the seed Grace Hopper quote
+
+### `meeting-thanks`
+
+Required — refuse to send if any is unresolved:
+
+    preheader
+    recipient.greeting        one name, or "Niki and Rosa" for a group draft
+    meeting.kindLabel         "Vibe session" / "Reading group" / "Admin meeting"
+    meeting.headline
+    meeting.dateLine          e.g. "Sat, Sep 26"
+    meeting.place             short neighbourhood, never the street address
+    body.lede, body.next
+    operator.displayName
+    links.portalBase
+    quote.text / quote.by / quote.role
+                              rotate with select_quote(load_bundle(), today's day number)
 
 ### `rsvp-confirmation`
 
