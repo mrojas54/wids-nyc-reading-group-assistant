@@ -407,7 +407,8 @@ Current keys:
 | Availability thank-you to one submitter | `availability-chase:thanks:meeting=<meeting_id>:member=<member_id>` |
 | Pre-meeting reminder run for one meeting | `pre-meeting-reminder:meeting=<id>` |
 | Post-meeting thanks — leader draft queued (reading_group, first run) | `post-meeting-thanks:leader-draft:meeting=<id>` |
-| Post-meeting thanks — members draft ready (admin, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
+| Post-meeting thanks — members draft ready (admin, vibe_session, second reading_group run, or fallback) | `post-meeting-thanks:meeting=<id>` |
+| Post-meeting thanks — meeting type has no path in the spec (halted, no draft; does not block Step 1) | `post-meeting-thanks:unhandled-type:meeting=<id>` |
 | New-paper announcement drafts for one paper | `new-paper-announcement:paper=<paper_id>` |
 
 `post-meeting-thanks` for `reading_group` meetings spans **two daily runs**.
