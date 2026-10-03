@@ -29,9 +29,39 @@ const allowedChain = {
   },
 };
 
+function normalizeList(values) {
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  return values
+    .map((value) =>
+      value && typeof value === "object"
+        ? `object:${JSON.stringify(
+            Object.keys(value)
+              .sort()
+              .map((key) => [key, value[key]]),
+          )}`
+        : `${typeof value}:${value}`,
+    )
+    .sort();
+}
+
+function sameList(actual, expected) {
+  return JSON.stringify(normalizeList(actual)) ===
+    JSON.stringify(normalizeList(expected));
+}
+
 function evaluateAudit(report, now = Date.now()) {
-  if (!report.vulnerabilities || typeof report.vulnerabilities !== "object") {
-    throw new Error("npm audit did not return a vulnerability report");
+  if (
+    !report ||
+    !report.vulnerabilities ||
+    typeof report.vulnerabilities !== "object"
+  ) {
+    const detail = report.error
+      ? JSON.stringify(report.error)
+      : "missing vulnerabilities field";
+    throw new Error(`npm audit did not return a vulnerability report: ${detail}`);
   }
 
   const blocking = Object.entries(report.vulnerabilities).filter(
@@ -60,30 +90,29 @@ function evaluateAudit(report, now = Date.now()) {
       continue;
     }
 
-    const via = vulnerability.via.map((item) =>
-      typeof item === "string"
-        ? item
-        : { url: item.url, range: item.range },
-    );
-    if (JSON.stringify(via) !== JSON.stringify(expected.via)) {
+    const via = Array.isArray(vulnerability.via)
+      ? vulnerability.via.map((item) =>
+          typeof item === "string"
+            ? item
+            : item && typeof item === "object"
+              ? { url: item.url, range: item.range }
+              : item,
+        )
+      : vulnerability.via;
+    if (!sameList(via, expected.via)) {
       failures.push(
-        `${name}: advisory/dependency path mismatch; received ${JSON.stringify(via)}`,
+        `${name}: advisory/dependency path mismatch; received ${JSON.stringify(vulnerability.via)}`,
       );
       continue;
     }
-    if (
-      JSON.stringify(vulnerability.effects) !==
-      JSON.stringify(expected.effects)
-    ) {
+    if (!sameList(vulnerability.effects, expected.effects)) {
       failures.push(
         `${name}: dependency effects mismatch; received ${JSON.stringify(vulnerability.effects)}`,
       );
       continue;
     }
     const expectedNodes = [`node_modules/${name}`];
-    if (
-      JSON.stringify(vulnerability.nodes) !== JSON.stringify(expectedNodes)
-    ) {
+    if (!sameList(vulnerability.nodes, expectedNodes)) {
       failures.push(
         `${name}: installed package path mismatch; received ${JSON.stringify(vulnerability.nodes)}`,
       );
