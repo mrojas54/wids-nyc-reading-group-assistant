@@ -11,9 +11,9 @@ to `supabase_migrations.schema_migrations`. A SQL Editor paste does
 not. Do not treat a missing history row as "not applied" — check the
 object itself (see post-migration verification).
 
-The live project is through `033` as of 2026-08-15 (MCP history names
+The live project is through `034` as of 2026-09-21 (MCP history names
 `031_members_column_grants`, `032_replace_my_availability`,
-`033_paper_embeddings_grants`).
+`033_paper_embeddings_grants`, `034_meetings_vibe_session_type`).
 
 **Do not edit a migration that has already been applied** — not even
 its comments. Changing a landed file updates the repository but not
@@ -57,6 +57,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `031_members_column_grants.sql` | Restores the `members` column lock. `REVOKE ALL` from `anon`/`authenticated`, then `GRANT SELECT (id, name, role, auth_user_id)` to `authenticated` — the four columns the portal session client actually reads (`auth_user_id` is what `007` needed; `007`'s table-level `SELECT` had re-opened `email` / `phone` / `whatsapp` / `active` / `vouched_by`). Also drops leftover default write grants and the unused `members_id_seq` USAGE, matching `030`'s meetings posture. No row rewrite. **Applied 2026-08-15** via MCP. Re-check: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/members_column_grants_test.sql`. |
 | `032_replace_my_availability.sql` | Adds `replace_my_availability(meeting_id, range_starts[], range_ends[])` — a `SECURITY DEFINER` RPC that deletes and re-inserts the caller's availability rows in one transaction, bound to `current_member_id()` and `meetings.status = 'prep'`. Also adds `UNIQUE (meeting_id, member_id, range_start)` so overlapping submits cannot duplicate a day. Replaces the two-round-trip delete-then-insert in `web/app/availability/actions.ts`. Duplicate-day preview was empty on apply. **Applied 2026-08-15** via MCP. Re-check: `psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f tests/replace_my_availability_test.sql`. |
 | `033_paper_embeddings_grants.sql` | Pins `paper_embeddings` to service-role-only: `REVOKE ALL` from `anon`/`authenticated`, no re-grant. Matches how `embedding-cache.ts` already reads and writes (service client) and how `ensure_rls` already hides the table from browser roles (RLS on, no policies). Forwards the table comment so it no longer claims SELECT-only + RLS off. **Applied 2026-08-15** via MCP. |
+| `034_meetings_vibe_session_type.sql` | Adds `'vibe_session'` to the `meetings_type_check` CHECK — a purely social meeting with no paper and no discussion leader, alongside `admin` and `reading_group`. Also adds a generated `meetings.type_priority` column (`reading_group`=2, `vibe_session`=1, `admin`=0) and repoints `orderNewestPrep()`'s (`web/lib/queries.ts`) same-created_at tiebreak at it instead of `ORDER BY type DESC` — that trick only worked because `'reading_group'` happens to sort after `'admin'`, and `'vibe_session'` sorting after `'reading_group'` would have silently inverted the intended precedence. Additive: widens a CHECK, adds one generated column, no row rewrite. **Applied 2026-09-21** via MCP. |
 
 ## `ensure_rls` event trigger
 

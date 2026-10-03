@@ -8,7 +8,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | --- | --- |
 | `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
 | `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `paper_companions` row; legacy papers can fall back to `papers.companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
-| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via middleware (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries.ts`. |
+| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via proxy (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries.ts`. |
 | `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting via the `replace_my_availability` RPC from migration `032` (one transaction; selected 6–9 PM ET windows; live as of 2026-08-15). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
 | `/papers` | Paper Pal inbox. Shows reading now, upcoming lead picks, member-proposed "want to lead" suggestions, and recently discussed papers. Signed-in roster members can propose catalog papers or volunteer for proposed meetings. See [../docs/paper-pal-portal.md](../docs/paper-pal-portal.md). |
 | `/new` | Paper Pal synthesis upload page (`/new?paperId=<id>`). Gated by the `can_synthesize_paper_pal` RPC — only operator/admin or the paper's meeting leader sees the upload form. `NewPaperForm` uploads the PDF to the `papers-pdfs` bucket and POSTs `/functions/v1/analyze-paper`, streaming a 5-stage SSE progress flow. |
@@ -22,8 +22,9 @@ Next.js portal for the WiDS NYC AI Reading Group.
 - **Single CSS file:** all tokens and component classes live in [`app/globals.css`](app/globals.css). Sage-led palette (`--color-sage-*` for brand surfaces), warm paper neutrals (`--color-paper-*`), magenta accent (`--color-magenta-*`) used sparingly for the selected-state day-toggle, history badges, and the Companion eyebrow.
 - **Tailwind v4 is CSS-first.** There is no `tailwind.config.*`; PostCSS loads Tailwind through [`@tailwindcss/postcss`](postcss.config.mjs), and `globals.css` starts with `@import 'tailwindcss'`. Keep custom theme tokens in the `@theme inline` block so generated utilities resolve to the runtime CSS variables defined later in `:root`.
 - **Border-color compatibility is intentional.** Tailwind v4 changed the default border color to `currentcolor`; the base-layer shim in `globals.css` preserves the v3 visual default. Remove it only after adding explicit border color utilities anywhere that depended on the old default.
-- **Mobile-first.** The `.shell` is `max-width: 480px` and pages stack in one column. No two-column desktop layouts.
-- **No icon library.** Inline 1.5-px-stroke SVG paths live in [`components/ui/Icon.tsx`](components/ui/Icon.tsx) (`arrowRight`, `check`, `calendar`, `clock`, `mapPin`, `external`, `chevronDown`, `chevronRight`, `mail`).
+- **Mobile-first.** The `.shell` is `max-width: 480px` and member pages stack in one column. Operator surfaces (`/admin/logs`, `/admin/schedule`) are desktop-first with their own page-scoped stylesheet and collapse to one column under 960px; members never see them.
+- **No icon library.** Inline 1.5-px-stroke SVG paths live in [`components/ui/Icon.tsx`](components/ui/Icon.tsx) (`arrowRight`, `check`, `calendar`, `clock`, `mapPin`, `external`, `chevronDown`, `chevronRight`, `chevronLeft`, `mail`).
+- **Primitives compose by props.** `Button`, `Input`, `Banner` (with an `action` slot), `Badge`, `MeetingTypeBadge`, `Card`/`CardHeader`/`CardBody`/`CardFooter` and `Brandmark` (`variant="codex"` for operator chrome) live in [`components/ui/`](components/ui/). Pass `variant`/`tone`/`size`; don't restyle their chrome through `className`.
 - **Design system source of truth:** the upstream Claude Design export (`wids-nyc-design-system`, `ui_kits/member-portal/v2/`). Key v2 classes added in the May 2026 redesign: `card-hero`, `hero-nudge`, `companion-card`, `section-h-soft`, `stats-v2`, `empty-state`, `skel`, `cal-stack` / `cal-month` / `cal-grid` / `day` / `cal-summary`.
 
 ## Local dev
@@ -75,6 +76,26 @@ The app is intentionally forced onto Webpack for Next commands (`next dev --webp
 (`vitest.config.mts`; the `.mts` extension keeps the config real ESM without
 setting `"type": "module"` on `package.json`), so Vite upgrades affect tests
 rather than the production bundle.
+
+## Mermaid rendering and upgrades
+
+The portal uses Mermaid 12 with the WiDS `base` theme, explicit `layout: dagre`
+and `look: classic`. Flowcharts retain their intrinsic dimensions; wide
+figures scroll horizontally so labels stay readable on narrow screens.
+
+The `chevrotain` → `lodash-es: 4.18.1` override addresses vulnerable parser
+pins without downgrading Mermaid. Keep it scoped, and remove it only when the
+resolved upstream graph audits clean without it. Check the installed graph
+with `npm ls lodash-es chevrotain --all`; a manifest override alone does not
+prove that a stale lockfile was refreshed.
+
+For upgrades, run the portal gates above and inspect both desktop and narrow
+browser views. Confirm labels, tier colors, arrows, and both ends of horizontal
+scrolling. [The Mermaid 12 verification record](../docs/verification/mermaid-12.md)
+contains the tested versions, RED/GREEN evidence, acceptance criteria and
+remaining coverage limits. The upstream runtime floor is ES2024 / Safari
+17.4+ / Node 22.12+; the recorded WebKit test is not certification of older
+Safari releases or physical iPhones.
 
 ## Typed Supabase accessors
 

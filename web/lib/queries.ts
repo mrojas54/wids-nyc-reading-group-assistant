@@ -40,7 +40,7 @@ export type RsvpStatus = "attending" | "declined" | "tentative" | "no_response";
 
 export type NextMeeting = {
   id: number;
-  type: "admin" | "reading_group";
+  type: "admin" | "reading_group" | "vibe_session";
   status: MeetingStatus;
   scheduled_at: string | null;
   location: string | null;
@@ -124,13 +124,22 @@ export async function nextMeeting(sb: SupabaseClient<Database>): Promise<NextMee
  * Shared by every "current prep meeting" lookup on purpose. If the dashboard
  * and /availability ordered differently, the dashboard could nudge a member
  * toward one meeting while the form it deep-links to resolved to the other.
+ *
+ * `type` itself is no longer the sort key. It used to be — TEXT with a CHECK,
+ * not an enum, DESC happened to put 'reading_group' ahead of 'admin' — but
+ * that only worked by coincidence of spelling. Adding a third type,
+ * 'vibe_session', broke it silently: 'vibe_session' > 'reading_group'
+ * alphabetically, which would have promoted a vibe session over a paper
+ * discussion. `type_priority` (migration 034) is an explicit generated
+ * column — reading_group=2, vibe_session=1, admin=0 — so precedence reads
+ * from a number, not from how the type happens to be spelled.
  */
 function orderNewestPrep<Q extends { order(col: string, opts: { ascending: boolean }): Q }>(
   q: Q,
 ): Q {
   return q
     .order("created_at", { ascending: false })
-    .order("type", { ascending: false })
+    .order("type_priority", { ascending: false })
     .order("id", { ascending: false });
 }
 

@@ -106,15 +106,15 @@ WITH slots AS (
         AND av.range_start + interval '90 minutes' > bp.range_start
     )
 ),
-overlaps AS ( ... unchanged ... )
+slot_overlap AS ( ... unchanged ... )
 SELECT ... unchanged ...
 ```
 
 **Alias required:** `availability` must be aliased (`av`) and the correlated column
 qualified as `av.range_start`. `blackout_periods` also has a `range_start` column, so an
 *unqualified* `range_start` inside the subquery would bind to `blackout_periods` (innermost
-scope) and drop every slot whenever any blackout row exists. The existing `overlaps` CTE
-already aliases availability as `a`; `av` avoids clashing with it.
+scope) and drop every slot whenever any blackout row exists. The existing `slot_overlap`
+CTE already aliases availability as `a`; `av` avoids clashing with it.
 
 Overlap test: a slot `[av.range_start, av.range_start + 90min)` is blocked iff it overlaps a
 blackout `[bp.range_start, bp.range_end)`, i.e.

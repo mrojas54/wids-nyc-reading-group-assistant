@@ -129,6 +129,20 @@ AVAIL_TOKENS = {
     "operator.displayName": "Michelle Rojas",
 }
 
+# Real send: vibe_session #41 (2026-09-26), attendees Niki + Rosa.
+MEETING_THANKS_TOKENS = {
+    "preheader": "Thanks for spending Saturday building with us.",
+    "recipient.greeting": "Niki and Rosa",
+    "meeting.kindLabel": "Vibe session",
+    "meeting.headline": "Thanks for building with us",
+    "meeting.dateLine": "Sat, Sep 26",
+    "meeting.place": "Greenpoint",
+    "body.lede": "Thank you both for coming out on Saturday. A small table made for a really good afternoon of building, and I'm glad you two were at it.",
+    "body.next": "I'll share what's next for the group soon.",
+    "links.portalBase": "https://wids-nyc-reading-group-assistant.vercel.app",
+    "operator.displayName": "Michelle Rojas",
+}
+
 REMINDER_TOKENS = {
     "recipient.firstName": "Maya",
     "paper.title": "Hybrid LSTM–Transformer Architecture with Multi-Scale Feature Fusion for High-Accuracy Gold Futures Price Forecasting",
@@ -490,6 +504,7 @@ def main() -> int:
     qtokens = question_tokens(load_questions())
     rsvp, u_rsvp = render_pair("rsvp-confirmation", {**RSVP_TOKENS, **q})
     thanks, u_thanks = render_pair("availability-thanks", {**AVAIL_TOKENS, **q})
+    meeting_thanks, u_meeting = render_pair("meeting-thanks", {**MEETING_THANKS_TOKENS, **q})
     reminder, u_reminder = render_pair(
         "availability-reminder", {**REMINDER_TOKENS, **q}, blocks=REMINDER_BLOCKS
     )
@@ -507,7 +522,7 @@ def main() -> int:
         "new-paper-announcement", {**NEW_PAPER_TOKENS, **q, **pq}
     )
     unresolved = sorted(
-        set(u_rsvp + u_thanks + u_reminder + u_pending + u_pre + u_new)
+        set(u_rsvp + u_thanks + u_meeting + u_reminder + u_pending + u_pre + u_new)
     )
     if unresolved:
         print(f"ERROR: unresolved tokens in rendered output: {unresolved}", file=sys.stderr)
@@ -516,6 +531,7 @@ def main() -> int:
         {
             "rsvp_confirmation": {"html": rsvp["html"], "text": rsvp["txt"]},
             "availability_thanks": {"html": thanks["html"], "text": thanks["txt"]},
+            "meeting_thanks": {"html": meeting_thanks["html"], "text": meeting_thanks["txt"]},
             "availability_reminder": {"html": reminder["html"], "text": reminder["txt"]},
             "availability_reminder_paper_pending": {
                 "html": reminder_pending["html"],

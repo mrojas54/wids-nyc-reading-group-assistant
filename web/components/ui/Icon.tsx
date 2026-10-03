@@ -35,6 +35,7 @@ const ICONS: Record<string, React.ReactNode> = {
   ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
   chevronRight: <path d="m9 18 6-6-6-6" />,
+  chevronLeft: <path d="m15 18-6-6 6-6" />,
   mail: (
     <>
       <rect x="3" y="5" width="18" height="14" rx="2" />
