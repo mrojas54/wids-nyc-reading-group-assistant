@@ -17,6 +17,10 @@ const reviewedChain = {
     severity: "high",
     via: [
       {
+        source: 1240992,
+        name: "braces",
+        dependency: "braces",
+        severity: "high",
         url: `https://github.com/advisories/${ADVISORY_ID}`,
         range: "<=3.0.3",
       },
@@ -68,7 +72,16 @@ test("matches advisory object fields regardless of key order", () => {
     vulnerabilities: {
       braces: {
         ...reviewedChain.braces,
-        via: [{ range: "<=3.0.3", url: reviewedChain.braces.via[0].url }],
+        via: [
+          {
+            range: "<=3.0.3",
+            severity: "high",
+            dependency: "braces",
+            name: "braces",
+            source: 1240992,
+            url: reviewedChain.braces.via[0].url,
+          },
+        ],
       },
     },
   });
@@ -88,6 +101,27 @@ test("rejects an unexpected advisory path", () => {
 
   assert.equal(result.ok, false);
   assert.match(result.failures[0], /advisory\/dependency path mismatch/);
+});
+
+test("rejects advisory source, package, dependency, and severity mismatches", () => {
+  for (const [field, value] of [
+    ["source", 123],
+    ["name", "another-package"],
+    ["dependency", "another-package"],
+    ["severity", "critical"],
+  ]) {
+    const result = evaluateAudit({
+      vulnerabilities: {
+        braces: {
+          ...reviewedChain.braces,
+          via: [{ ...reviewedChain.braces.via[0], [field]: value }],
+        },
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.failures[0], /advisory\/dependency path mismatch/);
+  }
 });
 
 test("rejects mismatched dependency effects and install locations", () => {

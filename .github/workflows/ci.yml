@@ -53,9 +53,10 @@ jobs:
       # Temporary exception: GHSA-vfj7-8cjw-p6xm affects braces@3.0.3 in the
       # dev-only eslint-config-next -> @next/eslint-plugin-next -> fast-glob ->
       # micromatch chain. There is no patched braces 3.x release yet. The checker
-      # permits only this exact advisory and dependency chain until 2026-10-10
-      # 00:00 UTC; it fails closed after then. Remove the exception sooner if the
-      # chain no longer reports it or a patched release lands.
+      # permits only this exact advisory and dependency chain until the UTC
+      # deadline defined in web/scripts/audit-policy.js; it fails closed after
+      # then. Remove the exception sooner if the chain no longer reports it or a
+      # patched release lands.
       - name: Test audit policy
         run: node --test scripts/check-audit.test.js
 

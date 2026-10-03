@@ -10,6 +10,10 @@ const allowedChain = {
   braces: {
     via: [
       {
+        source: 1240992,
+        name: "braces",
+        dependency: "braces",
+        severity: "high",
         url: `https://github.com/advisories/${ADVISORY_ID}`,
         range: "<=3.0.3",
       },
@@ -114,7 +118,14 @@ function evaluateAudit(report, now = Date.now()) {
           typeof item === "string"
             ? item
             : item && typeof item === "object"
-              ? { url: item.url, range: item.range }
+              ? {
+                  source: item.source,
+                  name: item.name,
+                  dependency: item.dependency,
+                  severity: item.severity,
+                  url: item.url,
+                  range: item.range,
+                }
               : item,
         )
       : vulnerability.via;
@@ -138,6 +149,7 @@ function evaluateAudit(report, now = Date.now()) {
     }
   }
 
+  // Keep structural mismatch diagnostics focused; the expiry applies to an otherwise valid exception match.
   if (failures.length === 0 && now >= EXCEPTION_EXPIRES_AT) {
     failures.push(
       `temporary ${ADVISORY_ID} exception expired at ${EXCEPTION_EXPIRES_AT_ISO}`,
