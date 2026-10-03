@@ -1,5 +1,6 @@
 const EXCEPTION_EXPIRES_AT_ISO = "2026-10-10T00:00:00Z";
 const EXCEPTION_EXPIRES_AT = Date.parse(EXCEPTION_EXPIRES_AT_ISO);
+const ADVISORY_ID = "GHSA-vfj7-8cjw-p6xm";
 
 const allowedChain = {
   "@next/eslint-plugin-next": {
@@ -9,7 +10,7 @@ const allowedChain = {
   braces: {
     via: [
       {
-        url: "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+        url: `https://github.com/advisories/${ADVISORY_ID}`,
         range: "<=3.0.3",
       },
     ],
@@ -58,7 +59,7 @@ function evaluateAudit(report, now = Date.now()) {
     !report.vulnerabilities ||
     typeof report.vulnerabilities !== "object"
   ) {
-    const detail = report.error
+    const detail = report?.error
       ? JSON.stringify(report.error)
       : "missing vulnerabilities field";
     throw new Error(`npm audit did not return a vulnerability report: ${detail}`);
@@ -121,7 +122,7 @@ function evaluateAudit(report, now = Date.now()) {
 
   if (failures.length === 0 && now >= EXCEPTION_EXPIRES_AT) {
     failures.push(
-      `temporary GHSA-vfj7-8cjw-p6xm exception expired at ${EXCEPTION_EXPIRES_AT_ISO}`,
+      `temporary ${ADVISORY_ID} exception expired at ${EXCEPTION_EXPIRES_AT_ISO}`,
     );
   }
 
@@ -133,4 +134,8 @@ function evaluateAudit(report, now = Date.now()) {
   };
 }
 
-module.exports = { evaluateAudit, EXCEPTION_EXPIRES_AT_ISO };
+module.exports = {
+  evaluateAudit,
+  EXCEPTION_EXPIRES_AT_ISO,
+  ADVISORY_ID,
+};

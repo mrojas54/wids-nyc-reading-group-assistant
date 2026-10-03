@@ -1,16 +1,29 @@
 const { execFileSync } = require("node:child_process");
-const { evaluateAudit } = require("./audit-policy.js");
+const { ADVISORY_ID, evaluateAudit } = require("./audit-policy.js");
+
+let stdout;
+let commandError;
+try {
+  stdout = execFileSync("npm", ["audit", "--json"], { encoding: "utf8" });
+} catch (error) {
+  commandError = error;
+  stdout = error.stdout?.toString();
+}
+
+const stderr = commandError?.stderr?.toString().trim();
+if (!stdout) {
+  throw new Error(
+    `npm audit command failed: ${commandError?.message ?? "no output"}${stderr ? `\n${stderr}` : ""}`,
+  );
+}
 
 let report;
 try {
-  report = JSON.parse(
-    execFileSync("npm", ["audit", "--json"], { encoding: "utf8" }),
-  );
+  report = JSON.parse(stdout);
 } catch (error) {
-  if (!error.stdout) {
-    throw error;
-  }
-  report = JSON.parse(error.stdout);
+  throw new Error(
+    `npm audit returned invalid JSON: ${error.message}${commandError ? `; command failed: ${commandError.message}` : ""}${stderr ? `\n${stderr}` : ""}`,
+  );
 }
 
 const result = evaluateAudit(report);
@@ -20,7 +33,7 @@ if (result.ok) {
     console.log("No high or critical npm audit findings.");
   } else {
     console.warn(
-      `npm audit: temporarily allowing only GHSA-vfj7-8cjw-p6xm via the documented dev dependency chain until ${result.expiresAt}.`,
+      `npm audit: temporarily allowing only ${ADVISORY_ID} via the documented dev dependency chain until ${result.expiresAt}.`,
     );
   }
   process.exit(0);

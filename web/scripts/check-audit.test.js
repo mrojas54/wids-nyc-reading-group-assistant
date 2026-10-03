@@ -3,6 +3,7 @@ const test = require("node:test");
 const {
   evaluateAudit,
   EXCEPTION_EXPIRES_AT_ISO,
+  ADVISORY_ID,
 } = require("./audit-policy.js");
 
 const reviewedChain = {
@@ -16,7 +17,7 @@ const reviewedChain = {
     severity: "high",
     via: [
       {
-        url: "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+        url: `https://github.com/advisories/${ADVISORY_ID}`,
         range: "<=3.0.3",
       },
     ],
@@ -147,4 +148,13 @@ test("includes npm audit error payloads in malformed report diagnostics", () => 
     () => evaluateAudit({ error: { code: "ECONNRESET", summary: "registry unavailable" } }),
     /ECONNRESET/,
   );
+});
+
+test("handles null and undefined npm audit reports", () => {
+  for (const report of [null, undefined]) {
+    assert.throws(
+      () => evaluateAudit(report),
+      /npm audit did not return a vulnerability report/,
+    );
+  }
 });
