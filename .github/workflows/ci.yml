@@ -50,22 +50,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Full-tree audit. The `--omit=dev` narrowing that lived here from
-      # 2026-07-27 (e80db7a) has been removed: its own REVERT WHEN condition is
-      # now satisfied. brace-expansion backported the GHSA-mh99-v99m-4gvg fix in
-      # 1.1.18, so the eslint-config-next -> minimatch@3 -> brace-expansion@1
-      # chain resolves clean, and `npm audit` reports 0 at every severity across
-      # the whole tree. The gate no longer needs an exemption.
-      #
-      # Correction worth keeping: the old note said the fix "arrives via a plain
-      # `npm install` — the caret ranges float". It does not. `npm install`
-      # preserves any locked version that already satisfies its range, so the
-      # patched 1.1.18 was never picked up. `npm update` is what refreshes
-      # in-range and is what actually unblocked this. If a transitive advisory
-      # ever looks stuck again, check whether the lockfile is simply behind its
-      # own declared ranges before concluding there is no upstream fix.
+      # Temporary exception: GHSA-vfj7-8cjw-p6xm affects braces@3.0.3 in the
+      # dev-only eslint-config-next -> @next/eslint-plugin-next -> fast-glob ->
+      # micromatch chain. There is no patched braces 3.x release yet. The checker
+      # permits only this exact advisory and dependency chain; remove the
+      # exception when the chain no longer reports it or a patched release lands.
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: node scripts/check-audit.js
 
       - name: Lint
         run: npm run lint
