@@ -43,8 +43,8 @@ flowchart TD
     direction TB
     chase["Steps 1–2<br/>SELECT prep meetings &gt; 7d old<br/>compute responded / total"]
     chase_decide{response &lt; 50%<br/>AND last alert &gt; 5d ago?}
-    alert["Step 3 — alert OPERATOR<br/>Gmail MCP<br/>body points at the templated reminder"]
-    log_alert[(command_log<br/>metadata.kind=operator_alert<br/>no idempotency_key — 5d cooldown)]
+    alert["Step 3 — alert OPERATOR<br/>Gmail MCP create_draft<br/>body says draft, not send"]
+    log_alert[(command_log needs_action<br/>metadata.kind=operator_alert<br/>no idempotency_key — 5d cooldown)]
     chase --> chase_decide
     chase_decide -->|no| chase_skip([skip until tomorrow])
     chase_decide -->|yes| alert --> log_alert
@@ -64,7 +64,7 @@ flowchart TD
     render["5c.1–2 read templates<br/>splice shared fragments<br/>strip HTML comments<br/>substitute tokens"]
     idem{5c.3 already logged<br/>this meeting × member?}
     draft["5c.4 Gmail MCP create_draft<br/>OR gmail_raw_drafts batch<br/>HTML + plain-text — never sends"]
-    log_draft[(command_log<br/>idempotency_key<br/>'availability-chase:meeting=…:member=…')]
+    log_draft[(command_log needs_action<br/>idempotency_key<br/>'availability-chase:meeting=…:member=…')]
     summary["5d summary to operator<br/>list draft ids; note mark if MCP path"]
     step5 --> foreach --> blocks --> render --> idem
     idem -->|yes| skip_member([skip this member])
@@ -94,8 +94,8 @@ flowchart TD
 |---|---|
 | `/wids-meeting-start` | Opens `prep`; Day-0 availability notification (Gmail MCP draft; operator sends) |
 | `web/app/availability/page.tsx` | Portal where members submit days |
-| `scheduled_tasks/availability-chase.md` Steps 1–4 | Daily low-response alert to the operator (5-day cooldown via `metadata`) |
-| `scheduled_tasks/availability-chase.md` Step 5 | Per-recipient render + **draft** after `remind` |
+| `scheduled_tasks/availability-chase.md` Steps 1–4 | Daily low-response alert to the operator (5-day cooldown via `metadata`; alert row is `needs_action`) |
+| `scheduled_tasks/availability-chase.md` Step 5 | Per-recipient render + **draft** after `remind` (member rows are `needs_action`) |
 | `assets/emails/template/availability-reminder.{html,txt}` | Templated reminder; `paper` / `paper_pending` block pair |
 | `scripts/render_email_previews.py` | Shared `resolve_blocks()`, `splice_shared_blocks()`, `strip_html_comments()`, `render_pair()`; previews both states |
 | `scripts/gmail_raw_drafts.py` | Optional raw-MIME path that keeps the WiDS mark (`reminder-manifest` + `batch`) |
@@ -130,7 +130,9 @@ JSON keys: `availability_reminder` and `availability_reminder_paper_pending`.
 
 Standing policy (`transactional-emails.md`): nothing in this repo sends as the
 operator. Step 5c.4 creates one Gmail **draft** per non-responder (HTML +
-plain-text). The operator presses Send.
+plain-text). The operator presses Send. A `remind` reply also drafts thank-yous
+to submitters (Step 5e); the subject override applies to reminder drafts only
+(Step 5a).
 
 Two drafting paths:
 
@@ -144,8 +146,29 @@ Two drafting paths:
    only; a test fails if a send path is added. Setup:
    [`docs/runbooks/gmail-raw-drafts.md`](runbooks/gmail-raw-drafts.md).
 
-Do not log the chase idempotency key for an unsent draft — that silences the
-chase for a member who never got mail (same rule as welcome).
+### `needs_action` on waiting drafts
+
+As of 2026-09-08 every draft-creating chase row is logged
+`status='needs_action'` with `metadata.delivery_mode='draft'` and
+`metadata.operator_action_required=true`. That derives to **warn** (amber) on
+[`/admin/logs`](admin-logs.md) — the same pattern as
+`pre-meeting-reminder` and `post-meeting-thanks`. Logging `success` for an
+unsent draft hides it in a green row (how three operator alerts for meeting 41
+went unnoticed for two weeks).
+
+- Operator-alert cooldown (Step 2) accepts `status IN ('success', 'needs_action')`
+  so confirmed-sent rows and waiting drafts share the same 5-day window.
+- Member-reminder idempotency (Step 5c.3) reads the key **without** a status
+  filter — claiming the key as `needs_action` cannot cause a re-draft.
+- Update a row to `success` once the operator confirms that draft was sent.
+- Rows written before 2026-09-08 may still be `success`; treat a green
+  `operator_alert` dated on or before 2026-09-05 as "draft created, send
+  status unknown".
+
+Do not log the chase idempotency key for an unsent draft that was never
+created — that silences the chase for a member who never got mail (same rule
+as welcome). The key *is* claimed when the draft row is written; the amber
+status is what keeps the human handoff visible.
 
 ## Why operator-in-the-loop
 
