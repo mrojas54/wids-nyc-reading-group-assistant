@@ -11,8 +11,8 @@ cd "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 # Python: locked deps + dev group (pytest, ruff, ty). Python 3.13 is the CI version.
 uv sync --python 3.13
 
-# Web: npm install (not ci) so the cached container state can be reused.
-(cd web && npm install --no-audit --no-fund)
+# Web: npm ci installs exactly what package-lock.json pins and never rewrites it.
+(cd web && npm ci --no-audit --no-fund)
 
 # Enforce the repo's push-to-main guard.
 git config core.hooksPath .githooks
