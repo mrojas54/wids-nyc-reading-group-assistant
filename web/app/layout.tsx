@@ -2,6 +2,18 @@ import "./globals.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+const geistSans = localFont({
+  src: [{ path: "./fonts/GeistVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const geistMono = localFont({
+  src: [{ path: "./fonts/GeistMonoVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-mono",
+  display: "swap",
+});
+
 // Bundled (latin subset, from @fontsource/newsreader) so builds don't depend on
 // the Google Fonts loader.
 const newsreader = localFont({
@@ -25,7 +37,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={newsreader.variable}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}
+    >
       <body>{children}</body>
     </html>
   );
