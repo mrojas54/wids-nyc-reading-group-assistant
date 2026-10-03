@@ -42,6 +42,8 @@ specter2_int8.onnx
 # Agent tool scratch (per-developer, not part of the repo)
 # claude-mem auto-injects empty CLAUDE.md context markers on directory reads
 CLAUDE.md
+# ...except the root one, which is the tracked project guide.
+!/CLAUDE.md
 # Firecrawl CLI / MCP scratch dir
 .firecrawl/
 # Serena MCP scratch dir
