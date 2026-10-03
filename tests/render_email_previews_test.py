@@ -12,6 +12,8 @@ def test_module_imports():
     assert callable(main)
 
 
+import re
+
 import pytest
 
 from scripts.render_email_previews import render
@@ -103,6 +105,24 @@ def test_availability_thanks_carries_quote_tokens(ext):
     assert "{{ quote.text }}" in text
     assert "{{ quote.by }}" in text
     assert "{{ quote.role }}" in text
+
+
+@pytest.mark.parametrize("ext", ["html", "txt"])
+def test_meeting_thanks_carries_quote_tokens(ext):
+    text = (_TEMPLATES / f"meeting-thanks.{ext}").read_text(encoding="utf-8")
+    assert "{{ quote.text }}" in text
+    assert "{{ quote.by }}" in text
+    assert "{{ quote.role }}" in text
+
+
+def test_meeting_thanks_survives_the_create_draft_sanitiser():
+    """Gmail MCP create_draft drops every <svg> and every CSS-only background
+    (email-client-behavior.md, VERIFIED 2026-09-02). This template is built for
+    that path: glyphs are Unicode, and every painted background has a bgcolor."""
+    html = (_TEMPLATES / "meeting-thanks.html").read_text(encoding="utf-8")
+    assert "<svg" not in html
+    for m in re.finditer(r"<(?:table|td)\b[^>]*background-color:[^>]*>", html):
+        assert "bgcolor=" in m.group(0), m.group(0)
 
 
 def test_preview_main_resolves_quotes_from_pool(capsys):
@@ -198,11 +218,15 @@ def test_preview_main_resolves_new_paper_announcement(capsys):
 _ALL_STEMS = (
     "rsvp_confirmation",
     "availability_thanks",
+    "meeting_thanks",
     "availability_reminder",
     "availability_reminder_paper_pending",
     "pre_meeting_reminder",
     "new_paper_announcement",
 )
+
+# Templates with no primary CTA, so no VML button / downlevel-revealed pair.
+_NO_CTA_STEMS = ("availability_thanks", "meeting_thanks")
 
 
 def _payload(capsys):
@@ -239,6 +263,7 @@ def test_head_comment_prose_never_ships(capsys):
     leaks = {
         "rsvp_confirmation": ("Claude Design handoff", "Template tokens are Mustache-style"),
         "availability_thanks": ("Acknowledgement counterpart", "availability-chase.md"),
+        "meeting_thanks": ("Post-meeting thank-you", "create_draft sanitiser"),
         "availability_reminder": ("v2 deltas vs v1", "availability-chase.md"),
         "pre_meeting_reminder": ("Email-safety deltas", "browser prototype"),
         "new_paper_announcement": ("court/queens voice branch", "ReadingGroupEmail.dc.html"),
@@ -269,8 +294,7 @@ def test_outlook_conditionals_survive_stripping(capsys):
         html = payload[stem]["html"]
         assert "<!--[if mso]>" in html, stem
         assert "<![endif]-->" in html, stem
-    # availability-thanks has no VML button, so no downlevel-revealed pair.
-    for stem in (s for s in _ALL_STEMS if s != "availability_thanks"):
+    for stem in (s for s in _ALL_STEMS if s not in _NO_CTA_STEMS):
         html = payload[stem]["html"]
         assert "<!--[if !mso]><!-- -->" in html, stem
         assert "<!--<![endif]-->" in html, stem
@@ -336,6 +360,7 @@ def test_strip_runs_before_substitution(capsys):
 WORDMARK_TEMPLATE_STEMS = (
     "availability-reminder",
     "availability-thanks",
+    "meeting-thanks",
     "pre-meeting-reminder",
     "rsvp-confirmation",
     "new-paper-announcement",
