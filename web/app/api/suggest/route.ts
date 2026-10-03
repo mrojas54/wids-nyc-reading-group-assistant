@@ -45,7 +45,7 @@ const TIMEOUT_MS = 55_000;
 export async function GET() {
   // Auth first. prewarmModel() starts the SPECTER2 blob fetch + WASM compile
   // (15–25s, large memory). Doing that before requireLeaderRole() let any
-  // unauthenticated GET burn the Lambda — /api/* is not in the middleware
+  // unauthenticated GET burn the Lambda — /api/* is not in the proxy
   // matcher. Authorized callers still overlap load with ensureModelLoaded()
   // below; they just cannot be used as a free warmup trigger.
   try {

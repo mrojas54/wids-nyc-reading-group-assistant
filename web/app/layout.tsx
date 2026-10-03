@@ -1,18 +1,23 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Newsreader } from "next/font/google";
+import localFont from "next/font/local";
 
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
+const geistSans = localFont({
+  src: [{ path: "./fonts/GeistVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const geistMono = localFont({
+  src: [{ path: "./fonts/GeistMonoVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+const serifFallback = localFont({
+  src: [{ path: "./fonts/GeistVF.woff", weight: "100 900", style: "normal" }],
   variable: "--font-newsreader",
   display: "swap",
-  // Newsreader isn't in next/font's static metric-override table (Next 14.2.x),
-  // so the CLS-prevention fallback pass logs `Failed to find font override
-  // values for font Newsreader`. Opting out silences the warning; the trade-off
-  // is a brief CLS on first paint, mitigated by `display: swap` already.
-  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -22,7 +27,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={newsreader.variable}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${serifFallback.variable}`}
+    >
       <body>{children}</body>
     </html>
   );
