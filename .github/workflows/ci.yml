@@ -56,6 +56,9 @@ jobs:
       # permits only this exact advisory and dependency chain until 2026-10-10
       # 00:00 UTC; it fails closed after then. Remove the exception sooner if the
       # chain no longer reports it or a patched release lands.
+      - name: Test audit policy
+        run: node --test scripts/check-audit.test.js
+
       - name: Audit dependencies
         run: node scripts/check-audit.js
 
