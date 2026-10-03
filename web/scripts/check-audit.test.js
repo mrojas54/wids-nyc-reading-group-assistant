@@ -143,6 +143,57 @@ test("rejects the reviewed advisory at its expiry instant", () => {
   assert.match(result.failures[0], /exception expired/);
 });
 
+test("rejects the full reviewed chain at expiry", () => {
+  const result = evaluateAudit(
+    { vulnerabilities: reviewedChain },
+    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /exception expired/);
+});
+
+test("rejects a remaining non-braces chain entry at expiry", () => {
+  const result = evaluateAudit(
+    {
+      vulnerabilities: {
+        "@next/eslint-plugin-next": reviewedChain["@next/eslint-plugin-next"],
+      },
+    },
+    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /exception expired/);
+});
+
+test("reports an invalid chain mismatch without masking it as an expiry", () => {
+  const result = evaluateAudit(
+    {
+      vulnerabilities: {
+        braces: {
+          ...reviewedChain.braces,
+          via: [{ url: "https://example.test/advisory", range: "<=3.0.3" }],
+        },
+      },
+    },
+    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
+  );
+
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /advisory\/dependency path mismatch/);
+  assert.doesNotMatch(result.failures.join("\n"), /exception expired/);
+});
+
+test("rejects malformed vulnerability entries with a clear diagnostic", () => {
+  const result = evaluateAudit({
+    vulnerabilities: { braces: null },
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.failures[0], /braces: malformed audit entry/);
+});
+
 test("includes npm audit error payloads in malformed report diagnostics", () => {
   assert.throws(
     () => evaluateAudit({ error: { code: "ECONNRESET", summary: "registry unavailable" } }),

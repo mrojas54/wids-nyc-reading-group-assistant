@@ -65,6 +65,24 @@ function evaluateAudit(report, now = Date.now()) {
     throw new Error(`npm audit did not return a vulnerability report: ${detail}`);
   }
 
+  const malformed = Object.entries(report.vulnerabilities).filter(
+    ([, vulnerability]) =>
+      !vulnerability ||
+      typeof vulnerability !== "object" ||
+      Array.isArray(vulnerability) ||
+      !["info", "low", "moderate", "high", "critical"].includes(
+        vulnerability.severity,
+      ),
+  );
+  if (malformed.length > 0) {
+    return {
+      ok: false,
+      blocking: [],
+      failures: malformed.map(([name]) => `${name}: malformed audit entry`),
+      expiresAt: EXCEPTION_EXPIRES_AT_ISO,
+    };
+  }
+
   const blocking = Object.entries(report.vulnerabilities).filter(
     ([, vulnerability]) =>
       ["high", "critical"].includes(vulnerability.severity),
