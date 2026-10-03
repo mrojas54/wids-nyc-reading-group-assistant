@@ -1,10 +1,14 @@
-const assert = require("node:assert/strict");
-const test = require("node:test");
-const {
+/**
+ * Unit tests for the audit-policy.mts allowlist, failure cases, and expiry.
+ * Run with `node --experimental-strip-types --test scripts/check-audit.test.mts`.
+ */
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  ADVISORY_ID,
   evaluateAudit,
   EXCEPTION_EXPIRES_AT_ISO,
-  ADVISORY_ID,
-} = require("./audit-policy.js");
+} from "./audit-policy.mts";
 
 const reviewedChain = {
   "@next/eslint-plugin-next": {
@@ -109,7 +113,7 @@ test("rejects advisory source, package, dependency, and severity mismatches", ()
     ["name", "another-package"],
     ["dependency", "another-package"],
     ["severity", "critical"],
-  ]) {
+  ] as const) {
     const result = evaluateAudit({
       vulnerabilities: {
         braces: {
@@ -128,7 +132,7 @@ test("rejects mismatched dependency effects and install locations", () => {
   for (const [field, value, expectedMessage] of [
     ["effects", ["different-parent"], /dependency effects mismatch/],
     ["nodes", ["node_modules/other-location"], /installed package path mismatch/],
-  ]) {
+  ] as const) {
     const result = evaluateAudit({
       vulnerabilities: {
         braces: { ...reviewedChain.braces, [field]: value },
@@ -252,7 +256,10 @@ test("expiry constant parses to a finite timestamp", () => {
 
 test("includes npm audit error payloads in malformed report diagnostics", () => {
   assert.throws(
-    () => evaluateAudit({ error: { code: "ECONNRESET", summary: "registry unavailable" } }),
+    () =>
+      evaluateAudit({
+        error: { code: "ECONNRESET", summary: "registry unavailable" },
+      }),
     /ECONNRESET/,
   );
 });

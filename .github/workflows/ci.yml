@@ -54,14 +54,14 @@ jobs:
       # dev-only eslint-config-next -> @next/eslint-plugin-next -> fast-glob ->
       # micromatch chain. There is no patched braces 3.x release yet. The checker
       # permits only this exact advisory and dependency chain until the UTC
-      # deadline defined in web/scripts/audit-policy.js; it fails closed after
+      # deadline defined in web/scripts/audit-policy.mts; it fails closed after
       # then. Remove the exception sooner if the chain no longer reports it or a
       # patched release lands.
       - name: Test audit policy
-        run: node --test scripts/check-audit.test.js
+        run: node --experimental-strip-types --test scripts/check-audit.test.mts
 
       - name: Audit dependencies
-        run: node scripts/check-audit.js
+        run: node --experimental-strip-types scripts/check-audit.mts
 
       - name: Lint
         run: npm run lint
