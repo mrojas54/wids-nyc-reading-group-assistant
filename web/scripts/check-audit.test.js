@@ -228,6 +228,28 @@ test("rejects malformed vulnerability entries with a clear diagnostic", () => {
   assert.match(result.failures[0], /braces: malformed audit entry/);
 });
 
+test("rejects audit entries without a recognized severity", () => {
+  for (const severity of [undefined, "unknown"]) {
+    const vulnerability = { ...reviewedChain.braces };
+    if (severity === undefined) {
+      delete vulnerability.severity;
+    } else {
+      vulnerability.severity = severity;
+    }
+
+    const result = evaluateAudit({
+      vulnerabilities: { braces: vulnerability },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.failures[0], /braces: malformed audit entry/);
+  }
+});
+
+test("expiry constant parses to a finite timestamp", () => {
+  assert.ok(Number.isFinite(Date.parse(EXCEPTION_EXPIRES_AT_ISO)));
+});
+
 test("includes npm audit error payloads in malformed report diagnostics", () => {
   assert.throws(
     () => evaluateAudit({ error: { code: "ECONNRESET", summary: "registry unavailable" } }),

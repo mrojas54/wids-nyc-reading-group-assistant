@@ -2,6 +2,10 @@ const EXCEPTION_EXPIRES_AT_ISO = "2026-10-10T00:00:00Z";
 const EXCEPTION_EXPIRES_AT = Date.parse(EXCEPTION_EXPIRES_AT_ISO);
 const ADVISORY_ID = "GHSA-vfj7-8cjw-p6xm";
 
+if (!Number.isFinite(EXCEPTION_EXPIRES_AT)) {
+  throw new Error(`Invalid audit exception expiry: ${EXCEPTION_EXPIRES_AT_ISO}`);
+}
+
 const allowedChain = {
   "@next/eslint-plugin-next": {
     via: ["fast-glob"],
@@ -74,6 +78,7 @@ function evaluateAudit(report, now = Date.now()) {
       !vulnerability ||
       typeof vulnerability !== "object" ||
       Array.isArray(vulnerability) ||
+      // npm audit v2 vulnerability entries include a severity; reject unknown schema values.
       !["info", "low", "moderate", "high", "critical"].includes(
         vulnerability.severity,
       ),

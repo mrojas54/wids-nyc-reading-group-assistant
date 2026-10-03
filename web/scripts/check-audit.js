@@ -1,10 +1,24 @@
 const { execFileSync } = require("node:child_process");
 const { ADVISORY_ID, evaluateAudit } = require("./audit-policy.js");
 
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const auditCommandOptions = {
+  encoding: "utf8",
+  maxBuffer: 32 * 1024 * 1024,
+};
+if (process.platform === "win32") {
+  // The command and arguments are fixed; Windows needs a shell to invoke npm.cmd.
+  auditCommandOptions.shell = true;
+}
+
 let stdout;
 let commandError;
 try {
-  stdout = execFileSync("npm", ["audit", "--json"], { encoding: "utf8" });
+  stdout = execFileSync(
+    npmCommand,
+    ["audit", "--json"],
+    auditCommandOptions,
+  );
 } catch (error) {
   commandError = error;
   stdout = error.stdout?.toString();
