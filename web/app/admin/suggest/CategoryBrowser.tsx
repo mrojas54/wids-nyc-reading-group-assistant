@@ -18,7 +18,12 @@ export function CategoryBrowser() {
         <select
           aria-label="arXiv category"
           value={code}
-          onChange={e => setCode(e.target.value)}
+          onChange={e => {
+            // Resolve DOM input back to the trusted taxonomy before storing it.
+            const selected = groups.flatMap(g => g.options)
+              .find(option => option.code === e.target.value);
+            setCode(selected?.code ?? "");
+          }}
           className="rounded-sm border px-2 py-1 text-sm"
         >
           <option value="">Select a category…</option>
@@ -34,7 +39,7 @@ export function CategoryBrowser() {
         </select>
         {code && (
           <a
-            href={`https://arxiv.org/list/${code}/recent`}
+            href={`https://arxiv.org/list/${encodeURIComponent(code)}/recent`}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-emerald-700 underline"
