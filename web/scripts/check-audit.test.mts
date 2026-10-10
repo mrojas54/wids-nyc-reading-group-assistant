@@ -1,16 +1,15 @@
 /**
- * Unit tests for the audit-policy.mts allowlist, failure cases, and expiry.
+ * Unit tests for audit-policy.mts: high/critical findings always block, lower
+ * severities pass, and malformed reports fail closed.
  * Run with `node --experimental-strip-types --test scripts/check-audit.test.mts`.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  ADVISORY_ID,
-  evaluateAudit,
-  EXCEPTION_EXPIRES_AT_ISO,
-} from "./audit-policy.mts";
+import { evaluateAudit } from "./audit-policy.mts";
 
-const reviewedChain = {
+// The chain that GHSA-vfj7-8cjw-p6xm was temporarily allowed through until
+// 2026-10-10. It must now be rejected like any other high finding.
+const formerBracesChain = {
   "@next/eslint-plugin-next": {
     severity: "high",
     via: ["fast-glob"],
@@ -25,7 +24,7 @@ const reviewedChain = {
         name: "braces",
         dependency: "braces",
         severity: "high",
-        url: `https://github.com/advisories/${ADVISORY_ID}`,
+        url: "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
         range: "<=3.0.3",
       },
     ],
@@ -52,189 +51,82 @@ const reviewedChain = {
   },
 };
 
-test("allows the exact reviewed chain before expiry", () => {
-  const result = evaluateAudit(
-    { vulnerabilities: reviewedChain },
-    Date.parse("2026-10-09T23:59:59Z"),
-  );
+test("passes an empty report", () => {
+  const result = evaluateAudit({ vulnerabilities: {} });
 
   assert.equal(result.ok, true);
-  assert.equal(result.expiresAt, EXCEPTION_EXPIRES_AT_ISO);
+  assert.deepEqual(result.blocking, []);
+  assert.deepEqual(result.failures, []);
 });
 
-test("allows a verified subset if the dependency chain shrinks", () => {
-  const result = evaluateAudit(
-    { vulnerabilities: { braces: reviewedChain.braces } },
-    Date.parse("2026-10-09T23:59:59Z"),
-  );
-
-  assert.equal(result.ok, true);
-});
-
-test("matches advisory object fields regardless of key order", () => {
+test("passes info, low, and moderate findings", () => {
   const result = evaluateAudit({
     vulnerabilities: {
-      braces: {
-        ...reviewedChain.braces,
-        via: [
-          {
-            range: "<=3.0.3",
-            severity: "high",
-            dependency: "braces",
-            name: "braces",
-            source: 1240992,
-            url: reviewedChain.braces.via[0].url,
-          },
-        ],
-      },
+      a: { severity: "info", via: [], effects: [], nodes: [] },
+      katex: { severity: "low", via: [], effects: ["mermaid"], nodes: [] },
+      c: { severity: "moderate", via: [], effects: [], nodes: [] },
     },
   });
 
   assert.equal(result.ok, true);
+  assert.deepEqual(result.failures, []);
 });
 
-test("rejects an unexpected advisory path", () => {
-  const result = evaluateAudit({
-    vulnerabilities: {
-      braces: {
-        ...reviewedChain.braces,
-        via: [{ url: "https://example.test/advisory", range: "<=3.0.3" }],
-      },
-    },
-  });
+test("rejects the formerly allowed braces chain", () => {
+  const result = evaluateAudit({ vulnerabilities: formerBracesChain });
 
   assert.equal(result.ok, false);
-  assert.match(result.failures[0], /advisory\/dependency path mismatch/);
+  assert.deepEqual(
+    result.failures.sort(),
+    Object.keys(formerBracesChain)
+      .map((name) => `${name}: high severity finding`)
+      .sort(),
+  );
 });
 
-test("rejects advisory source, package, dependency, and severity mismatches", () => {
-  for (const [field, value] of [
-    ["source", 123],
-    ["name", "another-package"],
-    ["dependency", "another-package"],
-    ["severity", "critical"],
-  ] as const) {
+test("rejects any single entry of the former braces chain", () => {
+  for (const [name, entry] of Object.entries(formerBracesChain)) {
+    const result = evaluateAudit({ vulnerabilities: { [name]: entry } });
+
+    assert.equal(result.ok, false, name);
+    assert.deepEqual(result.failures, [`${name}: high severity finding`]);
+  }
+});
+
+test("rejects high and critical findings outside any chain", () => {
+  for (const severity of ["high", "critical"]) {
     const result = evaluateAudit({
       vulnerabilities: {
-        braces: {
-          ...reviewedChain.braces,
-          via: [{ ...reviewedChain.braces.via[0], [field]: value }],
+        katex: { severity: "low", via: [], effects: [], nodes: [] },
+        sharp: {
+          severity,
+          via: [],
+          effects: ["@xenova/transformers"],
+          nodes: ["node_modules/sharp"],
         },
       },
     });
 
     assert.equal(result.ok, false);
-    assert.match(result.failures[0], /advisory\/dependency path mismatch/);
+    assert.deepEqual(result.failures, [`sharp: ${severity} severity finding`]);
+    assert.deepEqual(result.blocking.map(([name]) => name), ["sharp"]);
   }
-});
-
-test("rejects mismatched dependency effects and install locations", () => {
-  for (const [field, value, expectedMessage] of [
-    ["effects", ["different-parent"], /dependency effects mismatch/],
-    ["nodes", ["node_modules/other-location"], /installed package path mismatch/],
-  ] as const) {
-    const result = evaluateAudit({
-      vulnerabilities: {
-        braces: { ...reviewedChain.braces, [field]: value },
-      },
-    });
-
-    assert.equal(result.ok, false);
-    assert.match(result.failures[0], expectedMessage);
-  }
-});
-
-test("rejects findings outside the approved dependency chain", () => {
-  const result = evaluateAudit({
-    vulnerabilities: {
-      other: {
-        severity: "high",
-        via: [],
-        effects: [],
-        nodes: ["node_modules/other"],
-      },
-    },
-  });
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /not part of the reviewed advisory chain/);
-});
-
-test("rejects critical findings even when the chain matches", () => {
-  const result = evaluateAudit({
-    vulnerabilities: {
-      braces: { ...reviewedChain.braces, severity: "critical" },
-    },
-  });
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /expected high severity, got critical/);
-});
-
-test("rejects the reviewed advisory at its expiry instant", () => {
-  const result = evaluateAudit(
-    { vulnerabilities: { braces: reviewedChain.braces } },
-    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
-  );
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /exception expired/);
-});
-
-test("rejects the full reviewed chain at expiry", () => {
-  const result = evaluateAudit(
-    { vulnerabilities: reviewedChain },
-    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
-  );
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /exception expired/);
-});
-
-test("rejects a remaining non-braces chain entry at expiry", () => {
-  const result = evaluateAudit(
-    {
-      vulnerabilities: {
-        "@next/eslint-plugin-next": reviewedChain["@next/eslint-plugin-next"],
-      },
-    },
-    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
-  );
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /exception expired/);
-});
-
-test("reports an invalid chain mismatch without masking it as an expiry", () => {
-  const result = evaluateAudit(
-    {
-      vulnerabilities: {
-        braces: {
-          ...reviewedChain.braces,
-          via: [{ url: "https://example.test/advisory", range: "<=3.0.3" }],
-        },
-      },
-    },
-    Date.parse(EXCEPTION_EXPIRES_AT_ISO),
-  );
-
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /advisory\/dependency path mismatch/);
-  assert.doesNotMatch(result.failures.join("\n"), /exception expired/);
 });
 
 test("rejects malformed vulnerability entries with a clear diagnostic", () => {
-  const result = evaluateAudit({
-    vulnerabilities: { braces: null },
-  });
+  for (const entry of [null, "high", [], 1]) {
+    const result = evaluateAudit({ vulnerabilities: { braces: entry } });
 
-  assert.equal(result.ok, false);
-  assert.match(result.failures[0], /braces: malformed audit entry/);
+    assert.equal(result.ok, false);
+    assert.deepEqual(result.failures, ["braces: malformed audit entry"]);
+  }
 });
 
 test("rejects audit entries without a recognized severity", () => {
-  for (const severity of [undefined, "unknown"]) {
-    const vulnerability = { ...reviewedChain.braces };
+  for (const severity of [undefined, "unknown", "HIGH"]) {
+    const vulnerability: Record<string, unknown> = {
+      ...formerBracesChain.braces,
+    };
     if (severity === undefined) {
       delete vulnerability.severity;
     } else {
@@ -250,10 +142,6 @@ test("rejects audit entries without a recognized severity", () => {
   }
 });
 
-test("expiry constant parses to a finite timestamp", () => {
-  assert.ok(Number.isFinite(Date.parse(EXCEPTION_EXPIRES_AT_ISO)));
-});
-
 test("includes npm audit error payloads in malformed report diagnostics", () => {
   assert.throws(
     () =>
@@ -264,8 +152,17 @@ test("includes npm audit error payloads in malformed report diagnostics", () => 
   );
 });
 
-test("handles null and undefined npm audit reports", () => {
-  for (const report of [null, undefined]) {
+test("rejects reports whose vulnerabilities field is not an object", () => {
+  for (const vulnerabilities of [undefined, null, [], "none"]) {
+    assert.throws(
+      () => evaluateAudit({ vulnerabilities }),
+      /npm audit did not return a vulnerability report/,
+    );
+  }
+});
+
+test("handles null, undefined, and non-object npm audit reports", () => {
+  for (const report of [null, undefined, [], "report"]) {
     assert.throws(
       () => evaluateAudit(report),
       /npm audit did not return a vulnerability report/,
