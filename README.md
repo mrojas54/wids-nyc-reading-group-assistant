@@ -222,12 +222,13 @@ namesake package. See [docs/admin-suggest.md](docs/admin-suggest.md)
 
 ### Shared script helpers
 
-Three tiny modules live under `scripts/` so operator tools do not fork policy:
+Four small modules live under `scripts/` so operator tools do not fork policy:
 
 | Module | Role | Callers |
 |---|---|---|
 | [`scripts/env_file.py`](scripts/env_file.py) | Minimal `KEY=VALUE` reader for `web/.env.local` fallback (no interpolation) | `welcome_availability` / `generate_prerequisites` / `zotero_push` / `pilot_cli` |
-| [`scripts/paper_urls.py`](scripts/paper_urls.py) | One DOI-from-URL policy (path only; arXiv hosts → `None`) | `find_paper_suggest`, `zotero_push` |
+| [`scripts/paper_urls.py`](scripts/paper_urls.py) | One DOI-from-URL policy (path only; arXiv hosts → `None`) | `find_paper_suggest`, `paper_metadata` |
+| [`scripts/paper_metadata.py`](scripts/paper_metadata.py) | URL normalization plus arXiv / CrossRef / `citation_doi` / DB-fallback metadata lookup | `zotero_push` |
 | [`scripts/vecmath.py`](scripts/vecmath.py) | One `cosine` (zero-norm → `0.0`, not `nan`) | ranking + SPECTER2 verify/export |
 
 Tests in `tests/shared_helpers_test.py` pin the import sites so a second local

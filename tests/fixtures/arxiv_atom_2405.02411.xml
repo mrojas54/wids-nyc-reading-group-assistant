@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2405.02411v1</id>
+    <updated>2024-05-04T00:00:00Z</updated>
+    <published>2024-05-03T00:00:00Z</published>
+    <title>The Call for Socially Aware Language Technologies</title>
+    <summary>Some abstract text here. Multiple sentences.</summary>
+    <author><name>Diyi Yang</name></author>
+    <author><name>Dirk Hovy</name></author>
+    <author><name>David Jurgens</name></author>
+    <category term="cs.CL" />
+  </entry>
+</feed>
