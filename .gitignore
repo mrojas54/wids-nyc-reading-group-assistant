@@ -50,3 +50,7 @@ CLAUDE.md
 .serena/
 # `remember` skill session-handoff scratch dir
 .remember/
+
+# Deno writes this on `deno check`. Not tracked: CI and Supabase deploys have
+# never used one, and nothing (Dependabot included) would keep it fresh.
+supabase/functions/deno.lock
