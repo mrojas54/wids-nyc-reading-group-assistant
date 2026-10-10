@@ -1,11 +1,11 @@
 /**
  * Runs `npm audit --json` in the web package and applies audit-policy.mts.
- * Exits 0 for a clean report or the exact temporary exception; otherwise
- * prints findings/errors and exits 1. CI usage: `node --experimental-strip-types
+ * Exits 0 when there are no high or critical findings; otherwise prints
+ * findings/errors and exits 1. CI usage: `node --experimental-strip-types
  * scripts/check-audit.mts`.
  */
 import { execFileSync } from "node:child_process";
-import { ADVISORY_ID, evaluateAudit } from "./audit-policy.mts";
+import { evaluateAudit } from "./audit-policy.mts";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const auditCommandOptions: {
@@ -65,13 +65,7 @@ try {
 const result = evaluateAudit(report);
 
 if (result.ok) {
-  if (result.blocking.length === 0) {
-    console.log("No high or critical npm audit findings.");
-  } else {
-    console.warn(
-      `npm audit: temporarily allowing only ${ADVISORY_ID} via the documented dev dependency chain until ${result.expiresAt}.`,
-    );
-  }
+  console.log("No high or critical npm audit findings.");
   process.exit(0);
 }
 

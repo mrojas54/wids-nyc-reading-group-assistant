@@ -65,7 +65,12 @@ that file are met. Python stays uv-locked (`uv lock --check`); there is no
 Dependabot `pip` entry yet.
 
 The `overrides` block pins transitive advisories (`protobufjs`, `sharp`, and
-`postcss`). **`postcss` must stay a direct `devDependency` and the override
+`postcss`). It also aliases `@next/eslint-plugin-next`'s `fast-glob` to
+`tinyglobby`, which drops the fast-glob → micromatch → `braces@3.0.3` chain
+(GHSA-vfj7-8cjw-p6xm has no patched `braces` release). The plugin only calls
+`globSync(…, { onlyDirectories: true })`, and only when `settings.next.rootDir`
+is set; `scripts/__tests__/eslint-glob-override.test.ts` guards both. Drop the
+alias once the plugin stops depending on fast-glob. **`postcss` must stay a direct `devDependency` and the override
 must read `"$postcss"`** (npm alias to that direct version), not a hard-coded
 range. Dependabot only rewrites declared dependencies; a bare
 `"postcss": "^8.x"` override is invisible to it, so the pin freezes while
