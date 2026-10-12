@@ -185,7 +185,7 @@ suite. Configure `.env.paperpal.local` for the intended project and credential,
 then from `web/` run:
 
 ```sh
-node --conditions=react-server --env-file=.env.paperpal.local scripts/evaluate-passage-retrieval.mts
+node --experimental-strip-types --conditions=react-server --env-file=.env.paperpal.local scripts/evaluate-passage-retrieval.mts
 ```
 
 The fixed evaluation fixture pins October's source version and checks that known
@@ -200,7 +200,7 @@ CPU contention without relaxing test timeouts.
 From `web/`, with the intended read credentials configured:
 
 ```sh
-node --conditions=react-server --env-file=.env.paperpal.local scripts/benchmark-passage-retrieval.mts
+node --experimental-strip-types --conditions=react-server --env-file=.env.paperpal.local scripts/benchmark-passage-retrieval.mts
 ```
 
 This read-only benchmark repeats the five source-pinned questions three times,

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const web = resolve(import.meta.dirname, '../..');
 function run(args: string[], overrides: Record<string, string> = {}) {
-  return spawnSync(process.execPath, ['--conditions=react-server', 'scripts/paperpal-search.mts', ...args], {
+  return spawnSync(process.execPath, ['--experimental-strip-types', '--conditions=react-server', 'scripts/paperpal-search.mts', ...args], {
     cwd: web, encoding: 'utf8', timeout: 10_000,
     env: { ...process.env, PAPERPAL_RETRIEVAL_BACKEND: 'supabase',
       PAPERPAL_SUPABASE_URL: 'http://127.0.0.1:54321', PAPERPAL_SUPABASE_KEY: 'fake-offline-secret',

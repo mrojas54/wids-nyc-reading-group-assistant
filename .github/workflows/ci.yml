@@ -68,6 +68,36 @@ jobs:
       - name: Test
         run: npm run test
 
+  web-min-node:
+    # package.json engines allows Node >=22.12.0, but CI otherwise runs .nvmrc.
+    # Smoke the TypeScript CLIs on the minimum so a flag only newer Node
+    # versions imply (type stripping) can't slip through.
+    name: web (min Node CLI smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke CLIs
+        run: |
+          npm run paperpal:search -- --help
+          npm run turbopuffer -- --help
+
   python:
     # Display name kept as "python (pytest)" to match the required status check
     # in main's branch protection. The job now also runs ruff + ty (below).

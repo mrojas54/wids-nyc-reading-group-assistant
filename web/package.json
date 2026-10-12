@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "turbopuffer": "node --experimental-strip-types --conditions=react-server --env-file-if-exists=.env.turbopuffer.local scripts/turbopuffer.mts",
-    "paperpal:search": "node --conditions=react-server --env-file-if-exists=.env.paperpal.local scripts/paperpal-search.mts"
+    "paperpal:search": "node --experimental-strip-types --conditions=react-server --env-file-if-exists=.env.paperpal.local scripts/paperpal-search.mts"
   },
   "engines": {
     "node": ">=22.12.0"
