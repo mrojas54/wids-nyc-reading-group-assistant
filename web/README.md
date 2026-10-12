@@ -220,3 +220,9 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
   repository secrets (`SPECTER2_MODEL_BLOB_URL`, `BLOB_READ_WRITE_TOKEN`) and
   fails loudly, rather than skipping, when they are absent. The fixture file's
   schema is checked on every PR by `tests/specter2_parity_test.py`.
+
+## Turbopuffer local passage retrieval
+
+See [local setup and commands](../docs/turbopuffer-local.md) for the Paper Pal
+PDF preparation, native embedding, and hybrid-search CLI. This is the local
+retrieval foundation for discussion mode; member-facing integration is pending.
