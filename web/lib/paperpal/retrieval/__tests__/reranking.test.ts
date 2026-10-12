@@ -11,6 +11,10 @@ describe('answer-oriented passage ranking', () => {
     expect(rankPassages('Which model families were evaluated?',rows,[3,-2],1)[0].id).toBe('answer');
     expect(rankPassages('What is the faithfulness gap?',rows,[3,-2],1)[0].id).toBe('answer');
   });
+  it('does not let a weak definition mention outrank a much stronger answer', () => {
+    const rows = [hit('answer','The faithfulness gap is measured on held-out prompts.'), hit('aside','Faithfulness here refers to the model card.')];
+    expect(rankPassages('What is the faithfulness gap?', rows, [9, 0.01], 2).map(x=>x.id)).toEqual(['answer','aside']);
+  });
   it('preserves canonical excerpts and rejects malformed scorer results', () => {
     const rows=[hit('canonical','Exact\n  source text.')];
     expect(rankPassages('Why?',rows,[2],1)[0]).toMatchObject({text:rows[0].text,start:0,end:rows[0].end});

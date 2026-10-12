@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { scorePassages, type ScorePassages } from './local-reranker.mts';
 import { rankPassages } from './reranking.mts';
 import { lexicalQuery } from './candidates.mts';
+import { isServiceCredential, type SupabaseSearchConfig } from './supabase-config.mts';
 
 export const PASSAGE_MODEL = 'gte-small-93b36ff-mean-normalized-v1';
 export type EmbedPassages = (texts: string[]) => Promise<number[][]>;
-export type SupabaseSearchConfig = { url: string; apiKey: string; accessToken: string };
+export type { SupabaseSearchConfig } from './supabase-config.mts';
 const sourceSchema = z.object({ paperId: z.number().int().positive().safe(), sourceVersionId: z.string().regex(/^[a-f0-9]{64}$/) });
 const vectorSchema = z.array(z.number().finite()).length(384).refine(v => v.some(n => n !== 0));
 const passageSchema = z.object({ id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
@@ -60,21 +61,23 @@ export function createSupabasePassageIndex(config: SupabaseSearchConfig, inputSo
     async retrievePassages(input: { question: string; limit?: number }) {
       const parsed = z.object({ question: z.string().trim().min(1).max(4000), limit: z.number().int().min(1).max(100).default(8) }).safeParse(input);
       if (!parsed.success) throw new Error('Invalid passage query');
+      // Fail closed: a key as the bearer would read without (or around) member RLS.
+      if (config.accessToken === config.apiKey || isServiceCredential(config.accessToken)) {
+        throw new Error('Passage search requires a member access token, not an API or service-role key');
+      }
       const keywords = lexicalQuery(parsed.data.question);
       const candidateLimit = keywords ? Math.max(8, parsed.data.limit)
         : Math.min(100, Math.max(64, parsed.data.limit * 4));
       const lexicalLimit = keywords ? Math.min(8, 100-candidateLimit) : 0;
       // Both paths use the same caller token and exact paper/source scope.
       // Keyword lookup overlaps query embedding work; no response cache bypasses RLS.
+      // The RPC returns the best keyword matches by ts_rank_cd, not the earliest pages.
       const [vectors, lexicalResult] = await Promise.all([
         embeddings([parsed.data.question]),
-        lexicalLimit ? request(`paper_passages?${new URLSearchParams({
-          paper_id: `eq.${paperId}`, source_version: `eq.${sourceVersionId}`,
-          select: 'id,paper_id,source_version,page,text,start_offset,end_offset',
-          fts: `wfts(english).${keywords}`, order: 'page.asc,start_offset.asc', limit: String(lexicalLimit),
-        })}`, 'GET') : Promise.resolve([]),
+        lexicalLimit ? rpc('match_paper_passage_keywords', { p_paper_id: paperId, p_source_version: sourceVersionId,
+          p_query: keywords, p_limit: lexicalLimit }) : Promise.resolve([]),
       ]);
-      const lexical = z.array(hitSchema.omit({ score: true })).max(lexicalLimit).safeParse(lexicalResult);
+      const lexical = z.array(hitSchema).max(lexicalLimit).safeParse(lexicalResult);
       if (!lexical.success) throw new Error('Invalid Supabase lexical response');
       const result = z.array(hitSchema).max(candidateLimit).safeParse(await rpc('match_paper_passages', {
         p_paper_id: paperId, p_source_version: sourceVersionId, p_question: parsed.data.question,

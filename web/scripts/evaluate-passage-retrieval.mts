@@ -7,7 +7,7 @@ const fixture = z.object({ paperId: z.number().int().positive(), sourceVersionId
 async function main() {
   if (retrievalBackend(process.env) !== 'supabase') throw new Error('Evaluation requires Supabase');
   const input = fixture.parse(JSON.parse(readFileSync(new URL('./fixtures/october-retrieval.json', import.meta.url), 'utf8')));
-  const index = await createConfiguredPassageIndex(process.env, input);
+  const index = await createConfiguredPassageIndex(process.env, input, 'search');
   let passed = 0;
   for (const item of input.cases) {
     const started = performance.now();

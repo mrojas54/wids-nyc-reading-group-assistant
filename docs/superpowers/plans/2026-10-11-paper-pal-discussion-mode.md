@@ -5,7 +5,7 @@ Status: proposed implementation plan, revised against live reads on October 11,
 
 Local implementation update (October 12): **Supabase is the default retrieval
 backend; Turbopuffer is retained for later.** The [Supabase setup guide](../../supabase-passage-search.md)
-covers the Node 24 CLI, locally computed GTE-small embeddings, canonical passages,
+covers the Node CLI, locally computed GTE-small embeddings, canonical passages,
 and hybrid search. Migration 035 and its access policies passed disposable
 Postgres tests. Migration 035 was applied to the live project on October 12;
 paper 41 now has 119 passages across 26 pages and its Drive link is populated.
@@ -20,7 +20,7 @@ hosted connectivity is still unverified.
 
 ## Verified starting point
 
-Live Supabase project: `dmyulakudbdegwkqgelx`. Read through authenticated,
+Live Supabase project: production. Read through authenticated,
 service-role PostgREST GET requests; credentials were not printed or saved here.
 
 | Artifact | Observed state |
@@ -29,7 +29,7 @@ service-role PostgREST GET requests; credentials were not printed or saved here.
 | Canonical URL | `https://arxiv.org/abs/2609.15533` |
 | Semantic Scholar identifier | `ARXIV:2609.15533` |
 | Database Drive link | `papers.pdf_drive_url IS NULL` |
-| Drive PDF | [paper.pdf](https://drive.google.com/file/d/1ow5nbrsflTHuxqXKlWFlQ_FrCynMPiIX/view), 714,722 bytes, `application/pdf` |
+| Drive PDF | In the Drive folder below, 714,722 bytes, `application/pdf` |
 | Drive folder | `WiDS NYC AI Reading Group/cycles/2026-10-meeting/` |
 | PDF identity | Readable PDF text identifies the same title and arXiv `2609.15533v1` |
 | Cached embeddings | GET `paper_embeddings` filtered to `paper_id=41`, without a model filter, returned **zero rows** |

@@ -13,7 +13,7 @@
     "paperpal:search": "node --conditions=react-server --env-file-if-exists=.env.paperpal.local scripts/paperpal-search.mts"
   },
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=22.12.0"
   },
   "overrides": {
     "protobufjs": "^7.6.5",

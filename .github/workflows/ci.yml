@@ -1,4 +1,4 @@
-# Continuous integration — runs the web and Python test suites on every PR
+# Continuous integration — runs the web, Python, and SQL test suites on every PR
 # and on pushes to main.
 #
 # Security note: every run: block references only static strings; no
@@ -134,3 +134,34 @@ jobs:
 
       - name: Lint Edge Functions
         run: deno lint
+
+  sql:
+    # Loads every migration in order into a throwaway Postgres with pgvector,
+    # then runs the passage-search RLS, grant, and ranking checks.
+    name: sql (passage search)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run passage-search SQL tests
+        run: tests/paper_passage_search_run.sh

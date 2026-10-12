@@ -9,7 +9,7 @@ import { resolve } from "node:path";
 // this directory (eslint.config.mjs, next.config.mjs, postcss.config.mjs).
 //
 // Consequence of being real ESM: `__dirname` does not exist here. Use
-// `import.meta.dirname` (Node >= 20.11; package.json pins engines >= 24.0.0).
+// `import.meta.dirname` (Node >= 20.11; package.json pins engines >= 22.12.0).
 //
 // Path alias mirrors tsconfig.json `paths: { "@/*": ["./*"] }` so test imports
 // like `@/components/...` resolve the same way Next.js resolves them.
