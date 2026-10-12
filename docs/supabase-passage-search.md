@@ -130,3 +130,48 @@ Regenerate the project's database types when the application starts using the
 new tables through typed Supabase accessors; this adapter uses validated REST.
 
 Reference: [Supabase hybrid search](https://supabase.com/docs/guides/ai/hybrid-search).
+
+## Answer-oriented reranking
+
+The Node Supabase adapter now requests at least 64 hybrid candidates (up to 100
+for larger result limits), validates all paper/source memberships, and then
+reranks locally before returning the requested number. The database RPC remains
+the first-stage hybrid search; callers that bypass the Node adapter do not get
+reranking. No passage migration or reindex is required.
+
+The additional model is quantized
+[`Xenova/ms-marco-MiniLM-L-6-v2`](https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2),
+pinned to revision `a09144355adeed5f58c8ed011d209bf8ee5a1fec`. It scores question /
+passage pairs in batches of eight. Its first use downloads model artifacts to the
+same local cache as GTE; questions and excerpts are not sent to an inference API.
+Model download or inference failure is surfaced as an error, not silently treated
+as a successful reranked response.
+
+For ranking only, repeated whitespace is collapsed and each pair is limited to
+512 tokens. Canonical excerpts, IDs, page numbers, and offsets remain unchanged.
+A narrow definition rule promotes explicit definitions when the question asks
+for a definition, the cross-encoder logit is positive, and a substantive question
+term appears in the passage. This is a relevance heuristic, not a guarantee of
+support. It contains no paper IDs, passage IDs, or paper-specific keywords.
+
+Returned `score` is now the cross-encoder logit, not a probability; `hybridScore`
+preserves the first-stage fusion score. Definition priority precedes logit order,
+so consumers should retain the returned order rather than sorting on `score`.
+The extra model adds CPU, memory, and latency; measure it on the intended server
+before enabling interactive discussion. Long pairs can lose tail context for
+ranking, although the returned canonical passage remains complete.
+
+The opt-in live evaluation is read-only and is separate from the offline test
+suite. Configure `.env.paperpal.local` for the intended project and credential,
+then from `web/` run:
+
+```sh
+node --conditions=react-server --env-file=.env.paperpal.local scripts/evaluate-passage-retrieval.mts
+```
+
+The fixed evaluation fixture pins October's source version and checks that known
+supporting passage IDs occur in the top three for five questions. It includes
+two paraphrases and a training-question regression. A passing result is bounded
+evidence for those questions, not a broad retrieval benchmark or member-RLS test.
+For the offline suite on a busy workstation, `npm test -- --maxWorkers=2` limits
+CPU contention without relaxing test timeouts.

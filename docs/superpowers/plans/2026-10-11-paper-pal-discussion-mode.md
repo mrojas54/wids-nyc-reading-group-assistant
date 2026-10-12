@@ -10,7 +10,9 @@ and hybrid search. Migration 035 and its access policies passed disposable
 Postgres tests. Migration 035 was applied to the live project on October 12;
 paper 41 now has 119 passages across 26 pages and its Drive link is populated.
 [Live verification](../../paper-41-index-verification.md) confirms canonical
-readback and RLS, but retrieval spot checks found ranking weaknesses. Member UI,
+readback and RLS. Follow-up local reranking now finds the definition and complete
+model list in the top three, including paraphrases; interactive latency and
+broader retrieval quality still need evaluation. Member UI,
 complete source provenance, grounded generation, and broader evaluation remain planned. The [Turbopuffer adapter](../../turbopuffer-local.md) remains optional and
 hosted connectivity is still unverified.
 

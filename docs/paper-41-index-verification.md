@@ -61,3 +61,38 @@ Local PDF, manifest, vectors, and retrieval probe output are retained under the
 ignored `web/.paperpal-local/` directory. They are not committed to Git. The
 existing companion, SPECTER2 recommendation cache, and Turbopuffer setup were not
 changed. Member discussion and understanding-check UI remain planned.
+
+
+## Retrieval tuning after the initial import
+
+The Node Supabase adapter now reranks a wider scoped candidate set with a pinned,
+local MiniLM cross-encoder. Definition questions also prioritize an explicit
+numbered definition when the model finds it relevant and it shares a substantive
+question term. Canonical passages and the existing live source version remain
+unchanged; no reindex or database migration was needed. Direct calls to the
+Supabase hybrid RPC still return first-stage rankings.
+
+| Question | Before: top three | After: supporting evidence |
+| --- | --- | --- |
+| How is the faithfulness gap defined? | Chart fragments on pages 24–26 | Formal definition on page 4 at rank 1; bound/gap explanation on page 5 at rank 3. |
+| Which model families were evaluated? | Related prose without the complete list | Complete five-model list on page 1 at rank 2; also present in the page-9 conclusion at rank 3. |
+| What does verification-aware training improve? | Useful page-6 evidence | Relevant page-6 evidence remains rank 1. |
+| What is the definition of faithfulness? | Not measured | Formal definition on page 4 at rank 1. |
+| Which language model families does the paper study? | Not measured | Complete list on page 2 at rank 2. |
+
+The evaluation accepts the abstract, contributions, or conclusion list as valid
+model-family evidence; requiring only the abstract would incorrectly reject the
+complete list on page 2. These labels are evaluation data, never runtime ranking
+rules. The runtime has no paper IDs or paper-specific terms.
+
+Offline verification: 384 tests passed, 1 skipped with two workers; ESLint and
+TypeScript checks passed. Earlier full-concurrency runs hit five-second timeouts
+under host load; no test timeouts were relaxed. The five-case opt-in evaluation
+is in `web/scripts/evaluate-passage-retrieval.mts` with a source-pinned fixture.
+The final live run passed **5/5** checks.
+
+Local CPU timings in the first five-query run ranged from about 12 to 31 seconds
+per query. That is a material interactive-latency limitation; benchmark and
+optimize the model-serving path before member rollout. The small evaluation
+establishes supporting evidence in the top three for these questions, not broad
+answer accuracy or consistently correct rank-one results.
