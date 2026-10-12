@@ -32,6 +32,7 @@ dist/
 build/
 .vercel
 .env*.local
+.paperpal-local/
 
 # ONNX model artifacts (large binary, stored in Vercel Blob)
 specter2_int8.onnx

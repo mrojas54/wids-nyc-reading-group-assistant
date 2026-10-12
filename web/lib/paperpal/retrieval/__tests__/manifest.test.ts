@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { prepareManifest } from '../manifest';
+import { prepareManifest } from '../manifest.mts';
 
 const input = { paperId: 41, pdfSha256: 'a'.repeat(64), extractionVersion: 'test-v1',
   pages: [{ page: 1, text: 'First page.' }, { page: 2, text: 'Second page.' }] };

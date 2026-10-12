@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-import { createPassageIndex, readTurbopufferConfig } from '../turbopuffer';
+import { createPassageIndex, readTurbopufferConfig } from '../turbopuffer.mts';
 
 const env = { TURBOPUFFER_API_KEY: 'test-key', TURBOPUFFER_NAMESPACE_PREFIX: 'paperpal-local-test' };
 const source = { paperId: 41, sourceVersionId: 'a'.repeat(64) };
