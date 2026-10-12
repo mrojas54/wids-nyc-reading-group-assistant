@@ -3,12 +3,14 @@
 Status: proposed implementation plan, revised against live reads on October 11,
 2026 at approximately 11:02 PM America/New_York. No production writes performed.
 
-Local implementation update: the [Turbopuffer setup guide](../../turbopuffer-local.md)
-now covers a Node/server-only adapter and CLI for PDF preparation, native
-embeddings, and scoped hybrid search. Offline verification passes; hosted
-verification awaits a configured key. Supabase source persistence, member UI,
-and grounded generation remain planned. The local model is an evaluation
-candidate, not a finalized retrieval-quality decision.
+Local implementation update (October 12): **Supabase is the default retrieval
+backend; Turbopuffer is retained for later.** The [Supabase setup guide](../../supabase-passage-search.md)
+covers the Node 24 CLI, locally computed GTE-small embeddings, canonical passages,
+and hybrid search. Migration 035 and its access policies passed disposable
+Postgres tests; it has not been applied to the live project. Member UI, source
+association, grounded generation, and October-paper retrieval evaluation remain
+planned. The [Turbopuffer adapter](../../turbopuffer-local.md) remains optional and
+hosted connectivity is still unverified.
 
 ## Verified starting point
 
@@ -48,9 +50,9 @@ from the downloaded bytes during indexing.
   embeds title plus abstract, truncates at 512 tokens, and outputs 768-dimensional
   vectors. Its parity checks test agreement with Semantic Scholar embeddings,
   not question-to-passage retrieval quality.
-- Use Turbopuffer for passage search, reflecting the operator's preference.
-  Supabase remains the canonical store for sources, page-linked passages,
-  citation provenance, member access, and conversation/assessment state.
+- Use the existing Supabase project for canonical passages and pgvector + keyword
+  search now. Keep Turbopuffer behind the backend selector for a later decision.
+  Supabase also owns citation provenance, member access, and conversation state.
 - Keep passage vectors in a new, versioned index. Do not place them in the
   whole-paper `paper_embeddings` cache or compare incompatible model spaces.
 
@@ -61,15 +63,19 @@ The exact proposed database correction is one `papers` row: set
 value still being NULL. Re-read before applying; preserve any subsequently
 populated link. This plan records the correction; it has not applied it.
 
-Add source/version and passage records with explicit grants and RLS:
+Migration 035 adds source/version and passage records with explicit grants and RLS:
 
-- `paper_sources`: paper ID, Drive file ID, canonical link, PDF SHA-256,
-  extraction version, readiness status, extraction coverage, timestamps.
-- `paper_source_passages`: immutable passage ID, source ID, physical PDF page,
-  optional printed page label/heading, exact extracted text and offsets.
-- A separate Turbopuffer passage index keyed by immutable passage ID, carrying
-  paper/source IDs and embedding/chunking versions. Record vector dimensions
-  and index readiness in Supabase alongside the source metadata.
+- `paper_passage_sources`: paper ID, immutable source version, embedding model,
+  passage count, and indexing timestamp. The source version hashes PDF bytes,
+  exact extracted pages, and extraction/chunking versions.
+- `paper_passages`: immutable passage ID, source version, physical PDF page,
+  exact extracted text and offsets, 384-dimensional vectors, and English full-text
+  search. An atomic service-role RPC inserts the complete source; authenticated
+  search uses caller RLS for attendees, the meeting leader, and operators/admins.
+- Still needed: a durable source association containing Drive file ID, canonical
+  link, PDF SHA-256, extraction coverage/readiness, and an active-version pointer.
+  Preserve the prepared manifest; the minimal indexed source row does not store
+  the complete extraction provenance. Conversation sessions must pin a version.
 
 Begin with an explicit indexing operation for this known file. Download via an
 authorized backend connection, hash bytes, extract text page by page, and keep
@@ -78,20 +84,20 @@ around hyphenation and formulas: test normalization and inspect those pages.
 Unsupported figure/table-only evidence must be marked as a coverage limitation.
 
 Unchanged bytes and extraction/model versions should reuse the existing index.
-Publish a new source version only after extraction and Turbopuffer indexing succeed; pin
-conversations to that version. Keep canonical excerpts independent of the search
-index so citations survive reindexing. Authorize access through Paper Pal before
-returning excerpts or links; ingestion-account access alone is not member access.
-Track index jobs and retries in Supabase so a partial search-index write cannot
-mark a source ready. Keep search credentials server-side. Verify current
-Turbopuffer API, region, filtering, and lexical-search configuration before
-implementation; define source deletion and index cleanup together.
+The current Supabase RPC imports a complete source atomically, treats its text
+and passage boundaries as immutable, and makes identical retries idempotent.
+Publish the active version only after extraction, indexing, and coverage review
+succeed. Authorize member access before returning excerpts or links. Keep search
+credentials server-side; define retention and source deletion before production.
 
-Evaluate a passage-retrieval embedding model on questions with known supporting
-passages from this PDF. An ONNX model can reuse the runtime/loading pattern, but
-requires its own tokenizer, pooling, query/document format, integrity pin, and
-evaluation. Do not assume the SPECTER2 proximity adapter is suitable. Select the
-model before fixing vector dimensions in the Turbopuffer index configuration.
+The implemented local model is quantized `Supabase/gte-small`, pinned to revision
+`93b36ff09519291b77d6000d2e86bd8565378086`, with mean pooling, normalization,
+and 384 dimensions. The CLI chunks at 1,000 characters and rejects input over the
+512-token window rather than silently truncating. Evaluate it on questions with
+known supporting passages from this PDF; SPECTER2 parity is not retrieval quality
+evidence. A different embedding model requires a new versioned schema/index.
+If Turbopuffer is activated later, keep canonical passages in Supabase and add
+external indexing jobs/readiness before routing member queries to it.
 
 The missing `specter_v2` cache entry is a separate recommendation-cache task.
 Existing admin backfill code can be reviewed for a bounded paper-41 operation;
@@ -105,15 +111,18 @@ idempotent. No companion regeneration.
 ## 2. Add cited discussion
 
 Add `Discuss this paper` to the existing dashboard and an `analyze-discussion`
-Edge Function. Use a retrieval contract such as
-`retrievePassages({paperId, sourceVersionId, question, limit})` with a Turbopuffer
-adapter. Combine lexical and vector retrieval, then add neighboring
+handler. The implemented Node/ONNX adapter fits a Node server route; if the
+handler runs in a Supabase Edge Function, add a tested runtime-compatible
+embedding boundary rather than importing the Node adapter into Deno. Use a
+retrieval contract such as
+`retrievePassages({paperId, sourceVersionId, question, limit})` with the Supabase
+adapter by default and optional Turbopuffer selection. Combine lexical and vector retrieval, then add neighboring
 passages within a bounded context budget. Apply paper/source filters on both
 retrieval paths. For broad summary questions on a short paper, bounded full-source
 context is also possible.
 
 Authorize the member before searching. Resolve returned passage IDs against
-Supabase and revalidate paper/source membership before building model context
+Supabase (already returned by the Supabase adapter) and revalidate paper/source membership before building model context
 or citations; search results do not establish access rights or provenance.
 
 The server loads authorized source passages and persisted history. The browser
@@ -186,8 +195,9 @@ must not be reported as a successfully saved/resumable turn.
 
 ## Delivery and verification
 
-1. **Sources PR:** source association, canonical passages, Turbopuffer indexing
-   and retry/readiness handling, retrieval evaluation, migration/RLS tests.
+1. **Sources PR:** source association, apply and verify migration 035, Supabase
+   indexing and active-version readiness, and October-paper retrieval evaluation.
+   Local adapters, atomic ingestion, and migration/RLS tests are implemented.
    Review the single-row link correction separately.
 2. **Discussion PR:** model adapter, sessions, retrieval, citation renderer,
    authorization/transport and error tests.

@@ -1,5 +1,8 @@
 # Local Turbopuffer development
 
+Status: retained for later. [Supabase is the default](supabase-passage-search.md);
+no Turbopuffer subscription or key is required for that workflow.
+
 Paper Pal now has a server-only passage adapter and a local CLI. The CLI can
 extract a PDF into page-linked passages, index them, and run hybrid retrieval.
 It does not yet connect the member discussion UI, Supabase source tables, or
@@ -7,7 +10,7 @@ answer generation. The existing SPECTER2 recommendation pipeline is unchanged.
 
 ## Setup
 
-Use Node >=22.12, install web dependencies with `npm ci`, and have Poppler's
+Use Node >=24.0.0, install web dependencies with `npm ci`, and have Poppler's
 `pdftotext` on PATH (`brew install poppler` on macOS if missing).
 Run all commands below from the repository's `web/` directory.
 
@@ -88,9 +91,9 @@ An API failure is an error, not an empty result. See the official
   passages and validate citations. Do not expose the raw adapter as an unauthenticated
   route. The proposed Supabase Edge Function needs a runtime-compatible transport
   boundary; do not directly import this Next/Node module into Deno.
-- Production source readiness/jobs, canonical Supabase storage, index garbage
-  collection, and PDF-source database association are still in the discussion
-  plan. Local manifests serve as the canonical evidence for this local prototype.
+- Production source readiness/jobs, index garbage collection, and PDF-source
+  database association remain planned. Migration 035 adds canonical Supabase
+  passage storage but is not yet applied to production. Local manifests serve as the canonical evidence for this local prototype.
   Persistent local index namespaces are retained; only smoke namespaces are
   automatically removed.
 

@@ -30,7 +30,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
-2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
+2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`24.16.0`; package metadata requires `>=24.0.0`).
 3. `npm ci`
 4. `npm run dev` — opens http://localhost:3000
 
@@ -221,8 +221,9 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
   fails loudly, rather than skipping, when they are absent. The fixture file's
   schema is checked on every PR by `tests/specter2_parity_test.py`.
 
-## Turbopuffer local passage retrieval
+## Paper Pal local passage retrieval
 
-See [local setup and commands](../docs/turbopuffer-local.md) for the Paper Pal
-PDF preparation, native embedding, and hybrid-search CLI. This is the local
-retrieval foundation for discussion mode; member-facing integration is pending.
+[Supabase setup and commands](../docs/supabase-passage-search.md) cover the default
+passage store, local embeddings, and hybrid-search CLI on Node 24. The
+[Turbopuffer integration](../docs/turbopuffer-local.md) is retained as an optional
+backend. Member-facing discussion and understanding checks remain planned.
