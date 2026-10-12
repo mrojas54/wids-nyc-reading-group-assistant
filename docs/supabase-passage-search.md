@@ -133,9 +133,19 @@ Reference: [Supabase hybrid search](https://supabase.com/docs/guides/ai/hybrid-s
 
 ## Answer-oriented reranking
 
-The Node Supabase adapter now requests at least 64 hybrid candidates (up to 100
-for larger result limits), validates all paper/source memberships, and then
-reranks locally before returning the requested number. The database RPC remains
+The Node Supabase adapter normally combines eight hybrid candidates with up to
+eight keyword candidates from the canonical passage table, deduplicates them,
+validates all paper/source memberships and excerpts, and reranks locally before
+returning the requested number. Larger result limits increase the hybrid pool;
+the combined pool is capped at 100 candidates. Keyword lookup runs concurrently
+with query embedding and uses the same caller token and paper/source filters.
+It removes question boilerplate and searches adjacent content-word phrases,
+ordered by page and offset to retain early definitions and complete lists.
+The full original question still drives embeddings, hybrid search, and reranking.
+Negated questions, questions without content terms, and questions with more than
+12 content terms retain the wider 64–100 candidate path. Those queries may be slower.
+Authorization or malformed-response errors fail the request; no response cache
+bypasses live access checks. The database RPC remains
 the first-stage hybrid search; callers that bypass the Node adapter do not get
 reranking. No passage migration or reindex is required.
 
@@ -155,7 +165,7 @@ term appears in the passage. This is a relevance heuristic, not a guarantee of
 support. It contains no paper IDs, passage IDs, or paper-specific keywords.
 
 Returned `score` is now the cross-encoder logit, not a probability; `hybridScore`
-preserves the first-stage fusion score. Definition priority precedes logit order,
+preserves the first-stage fusion score (zero for lexical-only candidates). Definition priority precedes logit order,
 so consumers should retain the returned order rather than sorting on `score`.
 The extra model adds CPU, memory, and latency; measure it on the intended server
 before enabling interactive discussion. Long pairs can lose tail context for
@@ -175,3 +185,25 @@ two paraphrases and a training-question regression. A passing result is bounded
 evidence for those questions, not a broad retrieval benchmark or member-RLS test.
 For the offline suite on a busy workstation, `npm test -- --maxWorkers=2` limits
 CPU contention without relaxing test timeouts.
+
+## Interactive retrieval benchmark
+
+From `web/`, with the intended read credentials configured:
+
+```sh
+node --conditions=react-server --env-file=.env.paperpal.local scripts/benchmark-passage-retrieval.mts
+```
+
+This read-only benchmark repeats the five source-pinned questions three times,
+checks supporting evidence in the top three, and reports candidate counts,
+stage durations, cold-process latency, and warm p50/p95. It exits unsuccessfully
+on a quality regression. Stage durations overlap because embedding and keyword
+lookup run concurrently; network stage timers measure fetch completion, not
+response JSON parsing. It does not generate answers or test member RLS when run
+with a service-role key.
+
+The October 12 local run passed 15/15 checks with 11–15 reranked candidates.
+Across 14 warm requests, median latency was 1.025 seconds and p95 was 4.593
+seconds. The first request was 1.710 seconds with model files already cached.
+These are small-sample workstation measurements, not a production latency SLA;
+fresh model downloads and concurrent server load need separate measurement.

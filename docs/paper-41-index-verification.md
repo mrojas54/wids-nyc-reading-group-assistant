@@ -96,3 +96,45 @@ per query. That is a material interactive-latency limitation; benchmark and
 optimize the model-serving path before member rollout. The small evaluation
 establishes supporting evidence in the top three for these questions, not broad
 answer accuracy or consistently correct rank-one results.
+
+
+## Interactive retrieval performance follow-up
+
+Profiling identified local cross-encoder reranking as the main cost. A fresh
+five-question baseline took 4.94–11.95 seconds end to end, of which
+4.79–9.23 seconds was reranking 64 candidates. The earlier 12–31-second timings
+above were a separate run and illustrate the sensitivity to host conditions.
+
+The adapter now combines eight hybrid results with up to eight scoped keyword
+results before reranking. In these five cases the union contained 11–15 unique
+passages. Keyword lookup overlaps embedding; the original question and pinned
+models remain unchanged. No migration, reindex, or stored-passage change was
+required. Canonical scope and excerpt validation covers both candidate sources,
+and both requests use the same caller credentials.
+
+The read-only benchmark ran each question three times against the live Supabase
+index using operator credentials. **15/15 evidence checks passed.**
+
+| Measurement | Observed local result |
+| --- | --- |
+| First request, fresh process with cached model files | 1.710 seconds |
+| Warm median, 14 requests | 1.025 seconds |
+| Warm p95, 14 requests | 4.593 seconds |
+| Warm range | 0.906–4.593 seconds |
+
+The definition remains rank 1 on page 4, with the gap explanation on page 5 at
+rank 2. The direct model-family question finds the complete list on page 1 at
+rank 2 and page 2 at rank 3; its paraphrase now finds page 2 at rank 1. The
+training question keeps page-6 evidence at rank 1, and the definition paraphrase
+keeps page 4 at rank 1. All three rounds retained these results.
+
+Offline verification: **390 tests passed, one skipped**, plus ESLint and
+TypeScript checks. New tests cover phrase construction, negation fallback,
+scoped caller authorization, overlapping candidate deduplication, conflicting
+canonical excerpts, and lexical authorization failures.
+
+This supports interactive use of the measured questions locally, with remaining
+tail latency in model inference. It does not establish a production SLA or broad
+retrieval recall. Negated and long questions use the wider, slower candidate
+path; fresh model downloads and concurrent server requests remain unmeasured.
+The discussion UI is still planned.
