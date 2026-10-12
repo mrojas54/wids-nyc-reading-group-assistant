@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
-import stat
 import time
 from pathlib import Path
 
@@ -16,6 +14,7 @@ import httpx
 import pytest
 import respx
 
+from scripts import gmail_oauth as oauth
 from scripts import gmail_raw_drafts as g
 
 PNG = (
@@ -102,86 +101,6 @@ def test_prepare_html_counts_hits_per_mode():
     assert g.prepare_html("<p>x</p>", "cid")[1] == 0
 
 
-# ── OAuth ────────────────────────────────────────────────────────────────────
-
-
-def test_client_from_desktop_app_json(tmp_path: Path):
-    doc = {"installed": {"client_id": "id.apps", "client_secret": "sek", "token_uri": "https://t/x"}}
-    p = tmp_path / "client_secret.json"
-    p.write_text(json.dumps(doc))
-    c = g.OAuthClient.from_secret_file(p)
-    assert (c.client_id, c.client_secret, c.token_uri) == ("id.apps", "sek", "https://t/x")
-    assert c.auth_uri.startswith("https://accounts.google.com/")
-
-
-def test_client_missing_file_says_where_to_get_one(tmp_path: Path):
-    with pytest.raises(g.DraftError, match="Desktop app"):
-        g.OAuthClient.from_secret_file(tmp_path / "nope.json")
-
-
-def test_pkce_pair_is_s256_of_the_verifier():
-    import hashlib
-    v, c = g.pkce_pair()
-    expect = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).decode().rstrip("=")
-    assert c == expect and "=" not in v and len(v) >= 43
-
-
-def test_auth_url_requests_offline_compose_scope_with_pkce():
-    c = g.OAuthClient("id", "sek")
-    url = g.build_auth_url(c, "http://127.0.0.1:5/", "chal", "st")
-    q = dict(httpx.URL(url).params)
-    assert q["scope"] == g.SCOPE and q["code_challenge"] == "chal" and q["state"] == "st"
-    assert q["access_type"] == "offline" and q["code_challenge_method"] == "S256"
-    assert q["redirect_uri"] == "http://127.0.0.1:5/"
-
-
-@respx.mock
-def test_exchange_code_posts_pkce_verifier_and_builds_token():
-    c = g.OAuthClient("id", "sek", token_uri="https://oauth2.googleapis.com/token")
-    route = respx.post("https://oauth2.googleapis.com/token").mock(
-        return_value=httpx.Response(200, json={"access_token": "at", "refresh_token": "rt", "expires_in": 3600})
-    )
-    tok = g.exchange_code(c, "the-code", "http://127.0.0.1:9/", "verif")
-    sent = dict(httpx.QueryParams(route.calls.last.request.content.decode()))
-    assert sent["code"] == "the-code" and sent["code_verifier"] == "verif"
-    assert sent["grant_type"] == "authorization_code"
-    assert tok.access_token == "at" and tok.refresh_token == "rt"
-    assert tok.expires_at > time.time() + 3000 and not tok.expiring()
-
-
-@respx.mock
-def test_refresh_keeps_the_original_refresh_token():
-    c = g.OAuthClient("id", "sek", token_uri="https://oauth2.googleapis.com/token")
-    respx.post("https://oauth2.googleapis.com/token").mock(
-        return_value=httpx.Response(200, json={"access_token": "at2", "expires_in": 3600})
-    )
-    old = g.Token(access_token="at", refresh_token="rt", expires_at=time.time() - 1)
-    assert old.expiring()
-    new = g.refresh(c, old)
-    assert new.access_token == "at2" and new.refresh_token == "rt"
-
-
-@respx.mock
-def test_exchange_failure_is_a_draft_error_not_a_traceback():
-    c = g.OAuthClient("id", "sek", token_uri="https://oauth2.googleapis.com/token")
-    respx.post("https://oauth2.googleapis.com/token").mock(return_value=httpx.Response(400, text="bad"))
-    with pytest.raises(g.DraftError, match="400"):
-        g.exchange_code(c, "x", "http://127.0.0.1:1/", "v")
-
-
-def test_token_is_saved_owner_only_and_round_trips(tmp_path: Path):
-    p = tmp_path / "sub" / "gmail-token.json"
-    tok = g.Token(access_token="a", refresh_token="r", expires_at=1.0)
-    g.save_token(p, tok)
-    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
-    assert g.load_token(p) == tok
-
-
-def test_load_token_missing_points_at_auth(tmp_path: Path):
-    with pytest.raises(g.DraftError, match="run `auth`"):
-        g.load_token(tmp_path / "none.json")
-
-
 # ── Gmail REST ───────────────────────────────────────────────────────────────
 
 
@@ -207,11 +126,18 @@ def test_get_draft_raw_decodes_the_stored_mime():
     assert g.survivors(g.html_body_of(back))["img"] == 1
 
 
-def test_no_send_endpoint_anywhere_in_the_module():
-    """Policy guard: this file must never grow a send path."""
-    src = Path(g.__file__).read_text(encoding="utf-8")
+@pytest.mark.parametrize("module", [g, oauth], ids=["gmail_raw_drafts", "gmail_oauth"])
+def test_no_send_endpoint_anywhere_in_the_module(module):
+    """Policy guard: neither the drafts tool nor its sign-in module may grow a send path."""
+    src = Path(module.__file__).read_text(encoding="utf-8")
     assert "/send" not in src and "messages.send" not in src.replace("``messages.send``", "")
     assert "drafts/send" not in src
+
+
+def test_cli_catches_sign_in_failures_as_draft_errors():
+    """`main` reports DraftError on stderr; sign-in raises the same class, so a
+    failed `auth` stays an error message rather than a traceback."""
+    assert g.DraftError is oauth.DraftError
 
 
 # ── Manifest + CLI ───────────────────────────────────────────────────────────
@@ -286,15 +212,15 @@ def _write_client_secret(path: Path) -> Path:
 
 
 def _write_token(path: Path, **overrides) -> Path:
-    doc = {"access_token": "at", "refresh_token": "rt", "expires_at": time.time() + 3600, "scope": g.SCOPE}
+    doc = {"access_token": "at", "refresh_token": "rt", "expires_at": time.time() + 3600, "scope": oauth.SCOPE}
     doc.update(overrides)
     path.write_text(json.dumps(doc))
     return path
 
 
 @pytest.mark.parametrize("loader, what", [
-    (g.OAuthClient.from_secret_file, "client secret"),
-    (g.load_token, "token"),
+    (oauth.OAuthClient.from_secret_file, "client secret"),
+    (oauth.load_token, "token"),
     (g.load_manifest, "manifest"),
 ])
 def test_malformed_json_is_a_draft_error_naming_the_file(tmp_path: Path, loader, what):
@@ -317,23 +243,23 @@ def test_stale_token_schema_says_run_auth_again(tmp_path: Path):
     p = tmp_path / "token.json"
     p.write_text(json.dumps({"access_token": "at", "expiry": "2020-01-01"}))  # old/foreign schema
     with pytest.raises(g.DraftError, match="run `auth` again"):
-        g.load_token(p)
+        oauth.load_token(p)
     p.write_text(json.dumps(["not", "an", "object"]))
     with pytest.raises(g.DraftError, match="run `auth` again"):
-        g.load_token(p)
+        oauth.load_token(p)
     _write_token(p, expires_at="soon")
     with pytest.raises(g.DraftError, match="run `auth` again"):
-        g.load_token(p)
+        oauth.load_token(p)
 
 
 def test_client_json_without_the_installed_block_is_a_draft_error(tmp_path: Path):
     p = tmp_path / "client.json"
     p.write_text(json.dumps({"something": "else"}))
     with pytest.raises(g.DraftError, match="Desktop app"):
-        g.OAuthClient.from_secret_file(p)
+        oauth.OAuthClient.from_secret_file(p)
     p.write_text(json.dumps({"installed": {"client_id": "only"}}))
     with pytest.raises(g.DraftError, match="missing 'client_secret'"):
-        g.OAuthClient.from_secret_file(p)
+        oauth.OAuthClient.from_secret_file(p)
 
 
 @pytest.mark.parametrize("recipients, tokens, needle", [
@@ -352,65 +278,6 @@ def test_reminder_manifest_inputs_are_validated(tmp_path: Path, capsys, recipien
     ])
     assert rc == 1
     assert needle in capsys.readouterr().err
-
-
-# ── Token file: private from the first byte ──────────────────────────────────
-
-
-def test_save_token_never_creates_a_world_readable_file(tmp_path: Path, monkeypatch):
-    """The old sequence was write_text (created at the umask default, 0644 under
-    022) followed by chmod. Assert the file is *created* with 0600, not merely
-    tightened afterwards, by spying on the creating call."""
-    modes: list[int] = []
-    real_open = os.open
-
-    def spy(path, flags, mode=0o777, *a, **kw):
-        assert flags & os.O_CREAT
-        modes.append(mode)
-        return real_open(path, flags, mode, *a, **kw)
-
-    monkeypatch.setattr(g.os, "open", spy)
-    old_umask = os.umask(0)  # the worst case: nothing but our explicit mode protects the file
-    try:
-        p = tmp_path / "cfg" / "gmail-token.json"
-        g.save_token(p, g.Token(access_token="a", refresh_token="r", expires_at=1.0))
-    finally:
-        os.umask(old_umask)
-    assert modes == [0o600]
-    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
-    assert stat.S_IMODE(os.stat(p.parent).st_mode) == 0o700
-
-
-def test_save_token_tightens_a_pre_existing_wider_file(tmp_path: Path):
-    p = tmp_path / "gmail-token.json"
-    p.write_text("{}")
-    os.chmod(p, 0o644)
-    g.save_token(p, g.Token(access_token="a", refresh_token="r", expires_at=1.0))
-    assert stat.S_IMODE(os.stat(p).st_mode) == 0o600
-    assert g.load_token(p).access_token == "a"
-
-
-# ── OAuth loopback: no state leaks between authorize() calls ─────────────────
-
-
-def test_authorize_clears_a_stale_loopback_redirect(monkeypatch):
-    class FakeServer:
-        server_address = ("127.0.0.1", 1)
-
-        def __init__(self, *a, **kw):
-            pass
-
-        def handle_request(self):  # the browser never comes back
-            return None
-
-        def server_close(self):
-            pass
-
-    monkeypatch.setattr(g.http.server, "HTTPServer", FakeServer)
-    g._Loopback.query = {"code": ["stale-from-a-previous-call"], "state": ["x"]}
-    with pytest.raises(g.DraftError, match="no redirect received"):
-        g.authorize(g.OAuthClient("id", "sek"), open_browser=False, timeout=0.01)
-    assert g._Loopback.query == {}
 
 
 # ── Gmail REST: one retry policy, and a resumable batch ──────────────────────
