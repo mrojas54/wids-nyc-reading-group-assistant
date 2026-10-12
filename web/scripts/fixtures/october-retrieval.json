@@ -1,0 +1,58 @@
+{
+  "paperId": 41,
+  "sourceVersionId": "4c8ac0dba78dafdda3238847e67e1b812e4c474a19ac16272e327c50fc5a38b6",
+  "cases": [
+    {
+      "name": "definition",
+      "question": "How is the faithfulness gap defined?",
+      "expectedGroups": [
+        [
+          "a2bbaf2a28f11aa302500ed0c34f74606573ae07ee6fc23501da8e8e87cc2880"
+        ],
+        [
+          "4e6bad910756ecba9f0e50e0792796448c4a84c7761a162930041b2ee2b28ec7"
+        ]
+      ]
+    },
+    {
+      "name": "models",
+      "question": "Which model families were evaluated?",
+      "expectedGroups": [
+        [
+          "fb632c827cf51a3b554380e8f38c59d54756144bba7d6898bbef2b01ce18e2c3",
+          "f82e5e60b0673cb45be255165da1cec185f35bc2c667af5cd65306ce3cc21658",
+          "80df1a7682cc1e531ee0223c528b73f5905f7931bfff54888fbf491b7d4bfca5"
+        ]
+      ]
+    },
+    {
+      "name": "training",
+      "question": "What does verification-aware training improve?",
+      "expectedGroups": [
+        [
+          "58ce52c5230bb2925be7fed5d3e26f4857b94edffee6b5fb58d463a4c779d11f"
+        ]
+      ]
+    },
+    {
+      "name": "definition-paraphrase",
+      "question": "What is the definition of faithfulness?",
+      "expectedGroups": [
+        [
+          "a2bbaf2a28f11aa302500ed0c34f74606573ae07ee6fc23501da8e8e87cc2880"
+        ]
+      ]
+    },
+    {
+      "name": "models-paraphrase",
+      "question": "Which language model families does the paper study?",
+      "expectedGroups": [
+        [
+          "fb632c827cf51a3b554380e8f38c59d54756144bba7d6898bbef2b01ce18e2c3",
+          "f82e5e60b0673cb45be255165da1cec185f35bc2c667af5cd65306ce3cc21658",
+          "80df1a7682cc1e531ee0223c528b73f5905f7931bfff54888fbf491b7d4bfca5"
+        ]
+      ]
+    }
+  ]
+}
