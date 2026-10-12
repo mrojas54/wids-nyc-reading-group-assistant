@@ -1,16 +1,16 @@
 # October paper: live Supabase indexing verification
 
-Completed October 12, 2026 (America/New_York) in Supabase project
-`dmyulakudbdegwkqgelx`, following explicit operator authorization to apply
+Completed October 12, 2026 (America/New_York) in the production Supabase
+project, following explicit operator authorization to apply
 migration 035 and index the October Drive paper.
 
 ## Applied and indexed
 
 - Applied the unchanged `migrations/035_paper_passage_search.sql` using
-  `supabase db query --linked --project-ref dmyulakudbdegwkqgelx --file ...`.
+  `supabase db query --linked --project-ref <production ref> --file ...`.
   This executes the transaction without adding a migration-history row. Check
   the actual objects before attempting any future replay.
-- Downloaded [paper.pdf](https://drive.google.com/file/d/1ow5nbrsflTHuxqXKlWFlQ_FrCynMPiIX/view)
+- Downloaded the paper's PDF
   from Drive after account access was resolved. PDF metadata confirms **The Misery
   of Mechanistic Interpretability: A Formal Perspective**, 26 pages, 714,722 bytes.
 - Filled `papers.pdf_drive_url` for paper 41, conditional on the value still being

@@ -10,7 +10,7 @@ answer generation. The existing SPECTER2 recommendation pipeline is unchanged.
 
 ## Setup
 
-Use Node >=24.0.0, install web dependencies with `npm ci`, and have Poppler's
+Use Node >=22.12.0, install web dependencies with `npm ci`, and have Poppler's
 `pdftotext` on PATH (`brew install poppler` on macOS if missing).
 Run all commands below from the repository's `web/` directory.
 
@@ -41,8 +41,7 @@ See the official [testing guide](https://turbopuffer.com/docs/testing).
 
 ## Prepare and search the October paper
 
-Use the existing [Drive PDF](https://drive.google.com/file/d/1ow5nbrsflTHuxqXKlWFlQ_FrCynMPiIX/view)
-for paper 41. Save/download those bytes locally for extraction; no re-upload or
+Use the existing Drive PDF for paper 41 (its link is in `papers.pdf_drive_url`). Save/download those bytes locally for extraction; no re-upload or
 companion regeneration is required. Replace `/absolute/path/paper.pdf` below
 with that local path.
 

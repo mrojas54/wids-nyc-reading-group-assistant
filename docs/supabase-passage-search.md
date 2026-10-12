@@ -10,7 +10,7 @@ indexed passages. See the [October 12 verification](paper-41-index-verification.
 ## Runtime and configuration
 
 From `web/`, run `nvm install && nvm use` and `npm ci`. The engine requirement
-is **Node >=24.0.0**; `.nvmrc` pins **24.16.0**, also used by CI.
+is **Node >=22.12.0**; `.nvmrc` pins **22.22.3**, also used by CI.
 
 Copy `.env.paperpal.example` to `.env.paperpal.local` if it does not already
 exist. The CLI loads this file, not the portal's production `.env.local`.
@@ -18,11 +18,15 @@ The example points at a local Supabase API on `127.0.0.1:54321`; it does not
 start that API or supply credentials. Set the URL and key for the intended
 development database after applying migration 035 with its prerequisites.
 
-- Ingestion: use the target project's server-side service-role key as
-  `PAPERPAL_SUPABASE_KEY`. Never expose it through a `NEXT_PUBLIC_*` variable.
+- Ingestion (`index` only): put the target project's server-side service-role
+  key in `PAPERPAL_SUPABASE_SERVICE_ROLE_KEY`. Never expose it through a
+  `NEXT_PUBLIC_*` variable. No other command reads it.
 - Member search: use the publishable/anon key and set
-  `PAPERPAL_SUPABASE_ACCESS_TOKEN` to the member's access JWT. If omitted, the
-  CLI uses the key as its bearer token; a service-role key bypasses RLS.
+  `PAPERPAL_SUPABASE_ACCESS_TOKEN` to the member's access JWT. Search refuses to
+  run without it, and refuses an access token that is the API key, a
+  `sb_secret_` key, or a JWT with the `service_role` role, so it never reads
+  around RLS. To evaluate with full visibility, use an operator or admin
+  member's JWT.
 - Application integration must pass the authenticated member token explicitly.
   The operator CLI's service-role mode is not a member authorization check.
 
@@ -75,9 +79,14 @@ Migration `035_paper_passage_search.sql` adds:
   ranking with reciprocal-rank fusion. Search is scoped to paper and version
   before ranking. An ANN index is unnecessary for this initial per-paper scope.
 
-Attending members, the paper's meeting leader, operators, and admins can read
-the corresponding passages. Declined members, members without an attending
-RSVP, and unlinked users receive no passages unless another allowed role applies.
+Operators, admins, and the paper's meeting leader can read the corresponding
+passages. Other members can read them while they have an `attending` RSVP for a
+meeting on that paper that is still `scheduled` and started no more than 24 hours
+ago (migration 036). Members write their own RSVPs and every active member is
+invited to a scheduled meeting, so RSVPing to an upcoming meeting is the intended
+way in; an RSVP to a cancelled, finished, or past meeting grants nothing.
+Declined members, members without such an RSVP, and unlinked users receive no
+passages unless another allowed role applies.
 Anonymous users have no table or RPC access. Authenticated members cannot write.
 
 This is separate from the 768-dimensional SPECTER2 recommendation cache.
@@ -94,32 +103,31 @@ The Node/ONNX module cannot be imported unchanged into a Deno Edge Function.
 
 ## Verification
 
-Run `npm test`, `npm run lint`, and `npm run typecheck` in `web/` on Node 24.
+Run `npm test`, `npm run lint`, and `npm run typecheck` in `web/`.
 Tests cover adapter scoping, invalid embeddings, safe errors, chunk identity,
 token limits, CLI configuration and remote-write guard, plus the retained
 Turbopuffer path. Real local model inference produced two normalized vectors of
 384 dimensions on Node 24.16.0. Initial paper-41 spot checks found ranking weaknesses; see the live verification report.
 
-The SQL fixture is intentionally limited to a disposable database named
-`paperpal_retrieval_test`. It creates synthetic auth roles and member records;
-do not point it at a Supabase project. From the repository root, with Docker:
+The SQL test runs in CI (the `sql` job) against a throwaway Postgres 17 with
+pgvector. `tests/paper_passage_search_run.sh` creates the disposable
+`paperpal_retrieval_test` database, stubs the Supabase roles, `auth`, and
+`storage` schemas, applies every migration in numeric order, and runs the test.
+It drops and recreates that database, so never point it at a Supabase project.
+Locally, with Docker:
 
 ```sh
-docker run --name paperpal-retrieval-test --network none \
-  -e POSTGRES_HOST_AUTH_METHOD=trust -d pgvector/pgvector:pg17
+docker run --name paperpal-retrieval-test -p 127.0.0.1:55432:5432 \
+  -e POSTGRES_HOST_AUTH_METHOD=trust -d pgvector/pgvector:0.8.0-pg17
 # Wait until the container is ready (pg_isready exits successfully).
 docker exec paperpal-retrieval-test pg_isready -U postgres
-docker cp migrations paperpal-retrieval-test:/migrations
-docker cp tests paperpal-retrieval-test:/tests
-docker exec paperpal-retrieval-test createdb -U postgres paperpal_retrieval_test
-docker exec paperpal-retrieval-test psql -U postgres -d paperpal_retrieval_test \
-  -v ON_ERROR_STOP=1 -f /tests/paper_passage_search_fixture.sql \
-  -f /tests/paper_passage_search_test.sql
+PGHOST=127.0.0.1 PGPORT=55432 PGUSER=postgres tests/paper_passage_search_run.sh
 docker rm -f paperpal-retrieval-test
 ```
 
 The tests verify atomic rollback, immutable/idempotent imports, paper/version
-isolation, hybrid ranking, member RLS, and explicit grants. They passed on
+isolation, hybrid and keyword ranking, member RLS (including self-RSVPs to
+cancelled or past meetings), and explicit grants. They passed on
 Postgres 17 with pgvector. This checks database behavior directly; it does not
 claim end-to-end Supabase REST connectivity or a production migration.
 
@@ -139,8 +147,9 @@ validates all paper/source memberships and excerpts, and reranks locally before
 returning the requested number. Larger result limits increase the hybrid pool;
 the combined pool is capped at 100 candidates. Keyword lookup runs concurrently
 with query embedding and uses the same caller token and paper/source filters.
-It removes question boilerplate and searches adjacent content-word phrases,
-ordered by page and offset to retain early definitions and complete lists.
+It removes question boilerplate and searches adjacent content-word phrases
+through `match_paper_passage_keywords` (migration 036), which returns the best
+matches by `ts_rank_cd`, with page and offset only as the tie-break.
 The full original question still drives embeddings, hybrid search, and reranking.
 Negated questions, questions without content terms, and questions with more than
 12 content terms retain the wider 64–100 candidate path. Those queries may be slower.
@@ -176,7 +185,7 @@ suite. Configure `.env.paperpal.local` for the intended project and credential,
 then from `web/` run:
 
 ```sh
-node --conditions=react-server --env-file=.env.paperpal.local scripts/evaluate-passage-retrieval.mts
+node --experimental-strip-types --conditions=react-server --env-file=.env.paperpal.local scripts/evaluate-passage-retrieval.mts
 ```
 
 The fixed evaluation fixture pins October's source version and checks that known
@@ -191,7 +200,7 @@ CPU contention without relaxing test timeouts.
 From `web/`, with the intended read credentials configured:
 
 ```sh
-node --conditions=react-server --env-file=.env.paperpal.local scripts/benchmark-passage-retrieval.mts
+node --experimental-strip-types --conditions=react-server --env-file=.env.paperpal.local scripts/benchmark-passage-retrieval.mts
 ```
 
 This read-only benchmark repeats the five source-pinned questions three times,
@@ -199,8 +208,8 @@ checks supporting evidence in the top three, and reports candidate counts,
 stage durations, cold-process latency, and warm p50/p95. It exits unsuccessfully
 on a quality regression. Stage durations overlap because embedding and keyword
 lookup run concurrently; network stage timers measure fetch completion, not
-response JSON parsing. It does not generate answers or test member RLS when run
-with a service-role key.
+response JSON parsing. It does not generate answers. Like search, it requires a
+member access token and runs under that member's RLS.
 
 The October 12 local run passed 15/15 checks with 11–15 reranked candidates.
 Across 14 warm requests, median latency was 1.025 seconds and p95 was 4.593

@@ -1,4 +1,4 @@
-# Continuous integration — runs the web and Python test suites on every PR
+# Continuous integration — runs the web, Python, and SQL test suites on every PR
 # and on pushes to main.
 #
 # Security note: every run: block references only static strings; no
@@ -68,6 +68,36 @@ jobs:
       - name: Test
         run: npm run test
 
+  web-min-node:
+    # package.json engines allows Node >=22.12.0, but CI otherwise runs .nvmrc.
+    # Smoke the TypeScript CLIs on the minimum so a flag only newer Node
+    # versions imply (type stripping) can't slip through.
+    name: web (min Node CLI smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke CLIs
+        run: |
+          npm run paperpal:search -- --help
+          npm run turbopuffer -- --help
+
   python:
     # Display name kept as "python (pytest)" to match the required status check
     # in main's branch protection. The job now also runs ruff + ty (below).
@@ -134,3 +164,34 @@ jobs:
 
       - name: Lint Edge Functions
         run: deno lint
+
+  sql:
+    # Loads every migration in order into a throwaway Postgres with pgvector,
+    # then runs the passage-search RLS, grant, and ranking checks.
+    name: sql (passage search)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run passage-search SQL tests
+        run: tests/paper_passage_search_run.sh

@@ -30,7 +30,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
-2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`24.16.0`; package metadata requires `>=24.0.0`).
+2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
 3. `npm ci`
 4. `npm run dev` — opens http://localhost:3000
 
@@ -224,6 +224,6 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
 ## Paper Pal local passage retrieval
 
 [Supabase setup and commands](../docs/supabase-passage-search.md) cover the default
-passage store, local embeddings, and hybrid-search CLI on Node 24. The
+passage store, local embeddings, and hybrid-search CLI. The
 [Turbopuffer integration](../docs/turbopuffer-local.md) is retained as an optional
 backend. Member-facing discussion and understanding checks remain planned.

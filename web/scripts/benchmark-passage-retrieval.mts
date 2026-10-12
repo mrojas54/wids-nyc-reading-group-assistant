@@ -3,16 +3,14 @@ import { z } from 'zod';
 import { createSupabasePassageIndex } from '../lib/paperpal/retrieval/supabase.mts';
 import { embedPassages } from '../lib/paperpal/retrieval/local-embeddings.mts';
 import { scorePassages } from '../lib/paperpal/retrieval/local-reranker.mts';
+import { readSupabaseSearchConfig } from '../lib/paperpal/retrieval/supabase-config.mts';
 
 const fixtureSchema = z.object({ paperId: z.number().int().positive(), sourceVersionId: z.string().regex(/^[a-f0-9]{64}$/),
   cases: z.array(z.object({ name: z.string(), question: z.string().min(1).max(4000), expectedGroups: z.array(z.array(z.string()).min(1)).min(1) })).min(1).max(30),
 });
 async function main() {
   const fixture = fixtureSchema.parse(JSON.parse(readFileSync(new URL('./fixtures/october-retrieval.json', import.meta.url), 'utf8')));
-  const url = process.env.PAPERPAL_SUPABASE_URL;
-  const apiKey = process.env.PAPERPAL_SUPABASE_KEY;
-  if (!url || !apiKey) throw new Error('Missing configuration');
-  const config = { url, apiKey, accessToken: process.env.PAPERPAL_SUPABASE_ACCESS_TOKEN || apiKey };
+  const config = readSupabaseSearchConfig(process.env);
   const measurements: number[] = [];
   let passed = 0;
   for (let round=0; round<3; round++) {
@@ -21,7 +19,7 @@ async function main() {
       const index = createSupabasePassageIndex(config, fixture,
         async texts => { const t=performance.now(); const result=await embedPassages(texts); embeddingMs=performance.now()-t; return result; },
         async (input,init) => { const t=performance.now(); const result=await fetch(input,init); const elapsed=performance.now()-t;
-          if(init?.method === 'GET') lexicalMs=elapsed; else hybridMs=elapsed; return result; },
+          if(String(input).endsWith('/match_paper_passage_keywords')) lexicalMs=elapsed; else hybridMs=elapsed; return result; },
         async (question,texts) => { const t=performance.now(); candidates=texts.length; const scores=await scorePassages(question,texts); rerankingMs=performance.now()-t; return scores; });
       const t=performance.now();
       const hits=await index.retrievePassages({question:item.question,limit:3});
