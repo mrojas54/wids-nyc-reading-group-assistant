@@ -1,5 +1,7 @@
 import 'server-only';
 import { z } from 'zod';
+import { scorePassages, type ScorePassages } from './local-reranker.mts';
+import { rankPassages } from './reranking.mts';
 
 export const PASSAGE_MODEL = 'gte-small-93b36ff-mean-normalized-v1';
 export type EmbedPassages = (texts: string[]) => Promise<number[][]>;
@@ -16,7 +18,7 @@ const hitSchema = z.object({ id: z.string(), paper_id: z.number(), source_versio
 
 /** Pass a member access token for application reads; service credentials are for explicit ingestion only. */
 export function createSupabasePassageIndex(config: SupabaseSearchConfig, inputSource: z.infer<typeof sourceSchema>,
-  embed: EmbedPassages, fetcher: typeof fetch = fetch) {
+  embed: EmbedPassages, fetcher: typeof fetch = fetch, rerank: ScorePassages = scorePassages) {
   const source = sourceSchema.safeParse(inputSource);
   const url = new URL(config.url);
   if (!source.success || !config.apiKey.trim() || !config.accessToken.trim()
@@ -57,16 +59,19 @@ export function createSupabasePassageIndex(config: SupabaseSearchConfig, inputSo
       const parsed = z.object({ question: z.string().trim().min(1).max(4000), limit: z.number().int().min(1).max(100).default(8) }).safeParse(input);
       if (!parsed.success) throw new Error('Invalid passage query');
       const [vector] = await embeddings([parsed.data.question]);
-      const result = z.array(hitSchema).max(parsed.data.limit).safeParse(await rpc('match_paper_passages', {
+      const candidateLimit = Math.min(100, Math.max(64, parsed.data.limit * 4));
+      const result = z.array(hitSchema).max(candidateLimit).safeParse(await rpc('match_paper_passages', {
         p_paper_id: paperId, p_source_version: sourceVersionId, p_question: parsed.data.question,
-        p_query_embedding: vector, p_limit: parsed.data.limit,
+        p_query_embedding: vector, p_limit: candidateLimit,
       }));
       if (!result.success) throw new Error('Invalid Supabase query response');
-      return result.data.map(row => {
+      const hits = result.data.map(row => {
         if (row.paper_id !== paperId || row.source_version !== sourceVersionId
           || row.end_offset - row.start_offset !== row.text.length) throw new Error('Supabase result scope or excerpt mismatch');
         return { id: row.id, page: row.page, text: row.text, start: row.start_offset, end: row.end_offset, score: row.score };
       });
+      if (!hits.length) return [];
+      return rankPassages(parsed.data.question, hits, await rerank(parsed.data.question, hits.map(h => h.text)), parsed.data.limit);
     },
   };
 }

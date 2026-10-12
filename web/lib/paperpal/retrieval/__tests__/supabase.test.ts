@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
+vi.mock('../local-reranker.mts', () => ({ scorePassages: async (_q: string, texts: string[]) => texts.map(() => 1) }));
 import { createSupabasePassageIndex } from '../supabase.mts';
 import { retrievalBackend } from '../index.mts';
 
@@ -60,4 +61,21 @@ describe('Supabase passage search', () => {
     await expect(index.retrievePassages({ question: ' ', limit: 0 })).rejects.toThrow();
     expect(embedding).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
   });
+  it('reranks a wider pool before applying the requested limit', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json([row, { ...row, id: 'answer', score: 0.001 }]));
+    const scorer = vi.fn(async () => [-1, 3]);
+    const hits = await createSupabasePassageIndex(config, source, embed, fetcher, scorer)
+      .retrievePassages({ question: 'Which evidence supports this?', limit: 1 });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).p_limit).toBe(64);
+    expect(hits.map(h => h.id)).toEqual(['answer']);
+    expect(hits[0].text).toBe(passage.text);
+  });
+  it('validates every candidate scope before invoking the local model', async () => {
+    const fetcher = vi.fn().mockResolvedValue(json([row, { ...row, paper_id: 42 }]));
+    const scorer = vi.fn();
+    await expect(createSupabasePassageIndex(config, source, embed, fetcher, scorer)
+      .retrievePassages({ question: 'Why?', limit: 1 })).rejects.toThrow('scope');
+    expect(scorer).not.toHaveBeenCalled();
+  });
+
 });
