@@ -1,15 +1,17 @@
 # Paper Pal discussion mode and understanding checks
 
 Status: proposed implementation plan, revised against live reads on October 11,
-2026 at approximately 11:02 PM America/New_York. No production writes performed.
+2026 at approximately 11:02 PM America/New_York. The starting-point reads below are historical; see the live update below.
 
 Local implementation update (October 12): **Supabase is the default retrieval
 backend; Turbopuffer is retained for later.** The [Supabase setup guide](../../supabase-passage-search.md)
 covers the Node 24 CLI, locally computed GTE-small embeddings, canonical passages,
 and hybrid search. Migration 035 and its access policies passed disposable
-Postgres tests; it has not been applied to the live project. Member UI, source
-association, grounded generation, and October-paper retrieval evaluation remain
-planned. The [Turbopuffer adapter](../../turbopuffer-local.md) remains optional and
+Postgres tests. Migration 035 was applied to the live project on October 12;
+paper 41 now has 119 passages across 26 pages and its Drive link is populated.
+[Live verification](../../paper-41-index-verification.md) confirms canonical
+readback and RLS, but retrieval spot checks found ranking weaknesses. Member UI,
+complete source provenance, grounded generation, and broader evaluation remain planned. The [Turbopuffer adapter](../../turbopuffer-local.md) remains optional and
 hosted connectivity is still unverified.
 
 ## Verified starting point
@@ -61,7 +63,7 @@ from the downloaded bytes during indexing.
 The exact proposed database correction is one `papers` row: set
 `pdf_drive_url` to the verified Drive file URL, conditional on `id=41` and the
 value still being NULL. Re-read before applying; preserve any subsequently
-populated link. This plan records the correction; it has not applied it.
+populated link. Completed October 12: the link was populated conditionally and read back.
 
 Migration 035 adds source/version and passage records with explicit grants and RLS:
 
@@ -195,8 +197,9 @@ must not be reported as a successfully saved/resumable turn.
 
 ## Delivery and verification
 
-1. **Sources PR:** source association, apply and verify migration 035, Supabase
-   indexing and active-version readiness, and October-paper retrieval evaluation.
+1. **Sources PR:** finish durable source provenance, active-version readiness,
+   and October-paper retrieval tuning/evaluation. Migration 035 is applied and
+   the 119-passage index is live; canonical readback and RLS checks passed.
    Local adapters, atomic ingestion, and migration/RLS tests are implemented.
    Review the single-row link correction separately.
 2. **Discussion PR:** model adapter, sessions, retrieval, citation renderer,

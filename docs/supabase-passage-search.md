@@ -4,7 +4,8 @@ Supabase is the default local retrieval backend. Turbopuffer remains available
 for later through `PAPERPAL_RETRIEVAL_BACKEND=turbopuffer` and its existing CLI.
 This change adds no subscription. It implements the retrieval foundation;
 discussion, cited answer generation, and understanding checks are not wired to
-the member UI yet. The live database and October paper have not been modified.
+the member UI yet. Migration 035 is now applied to the live database and October paper 41 has 119
+indexed passages. See the [October 12 verification](paper-41-index-verification.md).
 
 ## Runtime and configuration
 
@@ -42,8 +43,7 @@ npm run paperpal:search -- search .paperpal-local/paper-41.json "What are the li
 ```
 
 For a reviewed remote target, indexing additionally requires `--allow-remote`
-after the manifest path. No live migration or paper import has been performed
-by this change. The referenced paper must already exist in the target database.
+after the manifest path. The first live migration and paper-41 import were completed on October 12, 2026. The referenced paper must already exist in the target database.
 
 The Supabase path creates page-preserving chunks of at most 1,000 characters.
 It downloads the quantized `Supabase/gte-small` model at Hugging Face revision
@@ -98,7 +98,7 @@ Run `npm test`, `npm run lint`, and `npm run typecheck` in `web/` on Node 24.
 Tests cover adapter scoping, invalid embeddings, safe errors, chunk identity,
 token limits, CLI configuration and remote-write guard, plus the retained
 Turbopuffer path. Real local model inference produced two normalized vectors of
-384 dimensions on Node 24.16.0. Retrieval quality for paper 41 is still untested.
+384 dimensions on Node 24.16.0. Initial paper-41 spot checks found ranking weaknesses; see the live verification report.
 
 The SQL fixture is intentionally limited to a disposable database named
 `paperpal_retrieval_test`. It creates synthetic auth roles and member records;
