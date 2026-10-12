@@ -10,20 +10,21 @@ const schema = z.object({
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 
 /** Physical PDF pages and exact extracted text; UTF-16 offsets, no lossy normalization. */
-export function prepareManifest(input: unknown) {
+export function prepareManifest(input: unknown, maxCharacters = 6000) {
+  if (!Number.isInteger(maxCharacters) || maxCharacters < 100 || maxCharacters > 6000) throw new Error('Invalid chunk size');
   const parsed = schema.safeParse(input);
   if (!parsed.success) throw new Error('Invalid paper manifest');
   const data = parsed.data;
   const pages = [...data.pages].sort((a, b) => a.page - b.page);
   if (new Set(pages.map(p => p.page)).size !== pages.length) throw new Error('Duplicate physical page numbers');
-  const sourceVersionId = sha(JSON.stringify({ ...data, pages, chunkingVersion: 'page-6000-v1' }));
+  const sourceVersionId = sha(JSON.stringify({ ...data, pages, chunkingVersion: `page-${maxCharacters}-v1` }));
   const passages: Array<{ id: string; page: number; text: string; start: number; end: number }> = [];
   for (const { page, text } of pages) {
     for (let start = 0; start < text.length;) {
-      let end = Math.min(start + 6000, text.length);
+      let end = Math.min(start + maxCharacters, text.length);
       if (end < text.length) {
         const boundary = text.lastIndexOf(' ', end - 1);
-        if (boundary > start + 3000) end = boundary + 1;
+        if (boundary > start + maxCharacters / 2) end = boundary + 1;
         // Avoid splitting a UTF-16 surrogate pair in long unbroken text.
         if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
       }

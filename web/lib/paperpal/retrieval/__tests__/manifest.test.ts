@@ -4,6 +4,13 @@ import { prepareManifest } from '../manifest.mts';
 const input = { paperId: 41, pdfSha256: 'a'.repeat(64), extractionVersion: 'test-v1',
   pages: [{ page: 1, text: 'First page.' }, { page: 2, text: 'Second page.' }] };
 describe('canonical local passage manifests', () => {
+  it('binds the smaller Supabase chunking strategy to a distinct source version', () => {
+    const sample = { ...input, pages: [{ page: 1, text: 'word '.repeat(600) }] };
+    const shorter = prepareManifest(sample, 1000);
+    expect(shorter.source).not.toEqual(prepareManifest(sample).source);
+    expect(shorter.passages.every(p => p.text.length <= 1000)).toBe(true);
+    expect(shorter.passages.map(p => p.text).join('')).toBe(sample.pages[0].text);
+  });
   it('reuses exact IDs and source versions for unchanged text', () => {
     expect(prepareManifest(input)).toEqual(prepareManifest(structuredClone(input)));
     expect(prepareManifest(input).passages.map(p => p.page)).toEqual([1, 2]);
