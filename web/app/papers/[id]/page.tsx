@@ -1,3 +1,4 @@
+import { formatMeetingTime } from "@/lib/paperpal/meeting-time";
 // /papers/<id> — Paper Pal Synthesis dashboard.
 // Rebase resolution (claude/implement-paper-pal-mvlis on top of #47):
 //   • If paper_companions.payload exists → render the new PaperDashboard +
@@ -93,16 +94,7 @@ export default async function PaperPage({
           nextMeeting={
             meeting?.scheduled_at
               ? {
-                  whenLabel: new Date(meeting.scheduled_at).toLocaleString(
-                    undefined,
-                    {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    },
-                  ),
+                  whenLabel: formatMeetingTime(meeting.scheduled_at),
                   venue: meeting.location,
                 }
               : null

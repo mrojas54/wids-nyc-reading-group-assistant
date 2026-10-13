@@ -7,7 +7,7 @@ afterEach(() => vi.unstubAllEnvs());
 describe("production Paper Pal routing", () => {
   it("routes only the tutor and hint endpoints to the configured Supabase project", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
-    expect(await nextConfig.rewrites()).toEqual([
+    expect(await nextConfig.rewrites!()).toEqual([
       { source: "/functions/v1/analyze-hint", destination: "https://example.supabase.co/functions/v1/analyze-hint" },
       { source: "/functions/v1/analyze-socratic", destination: "https://example.supabase.co/functions/v1/analyze-socratic" },
     ]);
