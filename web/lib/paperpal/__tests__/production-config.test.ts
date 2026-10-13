@@ -5,6 +5,17 @@ import { formatMeetingTime } from "../meeting-time";
 afterEach(() => vi.unstubAllEnvs());
 
 describe("production Paper Pal routing", () => {
+  it("does not create a proxy when Supabase is not configured", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    expect(await nextConfig.rewrites!()).toEqual([]);
+  });
+  it("normalizes a trailing slash in the configured origin", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co/");
+    expect(await nextConfig.rewrites!()).toContainEqual({
+      source: "/functions/v1/analyze-hint",
+      destination: "https://example.supabase.co/functions/v1/analyze-hint",
+    });
+  });
   it("routes only the tutor and hint endpoints to the configured Supabase project", async () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     expect(await nextConfig.rewrites!()).toEqual([
