@@ -57,7 +57,7 @@ const server = setupServer();
 beforeAll(() => {
   process.env.GEMINI_API_KEY = "test-gemini-key";
   process.env.ANTHROPIC_API_KEY = "test-claude-key";
-  server.listen({ onUnhandledRequest: "error" });
+  server.listen({ onUnhandledFrame: "error" });
 });
 beforeEach(() => server.resetHandlers());
 afterEach(() => server.resetHandlers());
