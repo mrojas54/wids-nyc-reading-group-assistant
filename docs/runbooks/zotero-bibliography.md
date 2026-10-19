@@ -11,11 +11,13 @@ and companion URL.
 | Codepath | Role |
 |---|---|
 | `scripts/zotero_push.py` | CLI and importable functions for single-paper pushes and CSV backfills. |
+| `scripts/zotero_api.py` | Zotero item and note payloads and the pyzotero create/lookup calls `zotero_push` makes. |
 | `migrations/009_papers_zotero_item_key.sql` | Adds `papers.zotero_item_key`, the local idempotency marker. |
 | `.claude/commands/wids-make-companion.md` | Legacy fallback command that invokes the push after `papers.companion_url` is updated. |
 | `.claude/commands/wids-zotero-retry.md` | Operator recovery command for failed single-paper pushes. |
 | `docs/superpowers/specs/wids-zotero-historical-readings.csv` | Historical readings input for one-time backfill. |
-| `tests/zotero_push_test.py` | Unit coverage for URL normalization, metadata extraction, idempotency, notes, CLI exits, and backfill behavior. |
+| `tests/zotero_push_test.py` | Unit coverage for idempotency, CLI exits, and backfill behavior. |
+| `tests/zotero_api_test.py` | Unit coverage for the context note, item payloads, and the correlator lookup. |
 
 ## Current integration status
 
@@ -183,10 +185,10 @@ Backfill mode:
 
 ## Local verification
 
-Run the focused test file:
+Run the focused test files:
 
 ```sh
-uv run pytest tests/zotero_push_test.py -v
+uv run pytest tests/zotero_push_test.py tests/zotero_api_test.py -v
 ```
 
 If dependencies are not synced, use the inline test command from the test
@@ -194,5 +196,5 @@ header:
 
 ```sh
 uv run --with pytest --with responses --with "psycopg[binary]" --with pyzotero \
-  pytest tests/zotero_push_test.py -v
+  pytest tests/zotero_push_test.py tests/zotero_api_test.py -v
 ```
