@@ -12,7 +12,7 @@ import math
 import numpy as np
 import pytest
 
-from scripts import find_paper_suggest, paper_metadata, zotero_push
+from scripts import find_paper_suggest, paper_metadata, zotero_api, zotero_push
 from scripts.env_file import parse_env_file
 from scripts.paper_urls import extract_doi_from_url, is_arxiv_host
 from scripts.vecmath import cosine
@@ -75,6 +75,15 @@ def test_classify_url_agrees_with_the_shared_extractor():
 def test_zotero_push_uses_the_paper_metadata_extractor():
     """zotero_push must not grow a second metadata path beside paper_metadata."""
     assert zotero_push.extract_metadata is paper_metadata.extract_metadata
+
+
+@pytest.mark.parametrize("name", [
+    "build_note_html", "create_zotero_item", "create_zotero_note", "find_existing_zotero_item",
+])
+def test_zotero_push_uses_the_zotero_api_writers(name):
+    """zotero_push must not grow a second Zotero write path beside zotero_api."""
+    assert getattr(zotero_push, name) is getattr(zotero_api, name)
+    assert not hasattr(zotero_push, "Zotero")
 
 
 # ── vecmath ──────────────────────────────────────────────────────────────────
