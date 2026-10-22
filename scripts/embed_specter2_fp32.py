@@ -10,7 +10,8 @@ scripts/specter2_parity_fixtures.json.
 Recipe (do not drift from this without re-running the verifier):
   - allenai/specter2_base + allenai/specter2 proximity adapter (set_active=True)
   - tokenizer: padding="max_length", truncation=True, max_length=512
-  - input format: f"{title}{tok.sep_token}{abstract}"
+  - input format: sep_text(title, tok.sep_token, abstract) -> "title[SEP]abstract"
+    (scripts/specter2_parity.py — shared with the export and verify scripts)
   - pooling: CLS token, i.e. last_hidden_state[0, 0, :].float()
   - model.train(False) inference mode
 
@@ -57,12 +58,19 @@ import argparse
 import json
 import sys
 import time
+from pathlib import Path
 from typing import Any
+
+# Invoked as `python scripts/<this>.py` (see the docstring), which puts scripts/
+# on sys.path but not the repo root; the shared input recipe lives in the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import torch
 from adapters import AutoAdapterModel
 from transformers import AutoTokenizer
+
+from scripts.specter2_parity import sep_text
 
 MODEL_BASE = "allenai/specter2_base"
 ADAPTER = "allenai/specter2"
@@ -82,7 +90,7 @@ def load_model() -> tuple[Any, Any]:
 
 def embed(model: Any, tok: Any, title: str, abstract: str) -> np.ndarray:
     """Return the 768-dim FP32 CLS vector for one (title, abstract) pair."""
-    text = f"{title}{tok.sep_token}{abstract}"
+    text = sep_text(title, tok.sep_token, abstract)
     enc = tok(text, padding="max_length", truncation=True,
               max_length=MAX_LENGTH, return_tensors="pt")
     with torch.no_grad():

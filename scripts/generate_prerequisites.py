@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -28,17 +27,12 @@ from typing import Any
 
 import psycopg
 
-from scripts.render_email_previews import (
-    TEMPLATES,
-    find_surviving_placeholders,
-    render,
-    splice_shared_blocks,
-    strip_html_comments,
-)
+from scripts.env_file import parse_env_file as _parse_env_file
+
+from scripts.render_email_previews import TEMPLATES, RenderError, render_body
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / "web" / ".env.local"
-_ENV_LINE_RE = re.compile(r'^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$')
 
 _PAPER_COLS = "id, title, url, abstract, authors, year, prerequisites"
 
@@ -184,25 +178,20 @@ def build_tokens(
 
 
 def render_new_paper_email(tokens: dict[str, str]) -> dict[str, str]:
-    """Render the .html + .txt pair; raise ValueError if any token is unresolved
-    or a shared-fragment placeholder survives (same splice contract as render_pair).
+    """Render the .html + .txt pair through the shared send pipeline
+    (``render_body``); raise ValueError if any token is unresolved, a block
+    marker survives, or a shared-fragment placeholder survives.
     """
     out: dict[str, str] = {}
     unresolved: list[str] = []
     for ext, key in (("html", "html"), ("txt", "text")):
         src = (TEMPLATES / f"new-paper-announcement.{ext}").read_text(encoding="utf-8")
-        if ext == "html":
-            # Splice before strip: the fragments' own markup must go through
-            # the same comment-stripping pass as the host template.
-            src = splice_shared_blocks(src)
-            src = strip_html_comments(src)
-        rendered, missing = render(src, tokens)
-        if ext == "html":
-            surviving = find_surviving_placeholders(rendered)
-            if surviving:
-                raise ValueError(
-                    f"surviving splice placeholders: {sorted(surviving)}"
-                )
+        try:
+            rendered, missing = render_body(
+                src, ext, None, tokens, label=f"new-paper-announcement.{ext}"
+            )
+        except RenderError as e:
+            raise ValueError(str(e)) from e
         unresolved.extend(missing)
         out[key] = rendered
     if unresolved:
@@ -217,23 +206,6 @@ def save_prerequisites(conn: psycopg.Connection, paper_id: int, payload: dict[st
             (json.dumps(payload), paper_id),
         )
     conn.commit()
-
-
-def _parse_env_file(path: Path) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not path.exists():
-        return out
-    for line in path.read_text().splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        m = _ENV_LINE_RE.match(line)
-        if not m:
-            continue
-        key, val = m.group(1), m.group(2)
-        if (val[:1], val[-1:]) in (('"', '"'), ("'", "'")):
-            val = val[1:-1]
-        out[key] = val
-    return out
 
 
 def _db_url() -> str:

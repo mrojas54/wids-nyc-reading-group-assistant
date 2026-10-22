@@ -1,0 +1,82 @@
+# SPECTER2 INT8 parity — scheduled, not per-PR.
+#
+# The WASM SPECTER2 path in web/lib/suggest/specter2-wasm.ts is guarded by
+# one test, web/lib/suggest/__tests__/parity.test.ts, which is
+# `describe.skipIf(!RUN_PARITY)` because it needs the 113 MB private blob and
+# a couple of minutes of CPU. Nothing set RUN_PARITY in CI, so embedding
+# drift (a re-quantised blob, a bumped onnxruntime-web or transformers.js)
+# would have reached production unchallenged. This workflow restores the
+# guard on a schedule that keeps the cost off the PR path.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   SPECTER2_MODEL_BLOB_URL  the private Vercel Blob URL of specter2_int8.onnx
+#   BLOB_READ_WRITE_TOKEN    a Vercel Blob token that can read it
+# Both are the same values web/README.md documents for running the parity
+# test locally. Until they are set, the run fails at the "Check secrets" step
+# with a message saying so — a missing secret is a red run, not a skipped
+# test, because a silently-skipped guard is exactly the state this replaces.
+#
+# Security note: schedule + workflow_dispatch only; no github.event.* inputs
+# are interpolated into run: blocks. Safe by the criteria at
+# https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+
+name: SPECTER2 parity
+
+on:
+  schedule:
+    # Mondays 09:17 UTC — off the hour so it does not compete with the
+    # top-of-hour GitHub-wide surge; weekly is enough for a model that only
+    # changes when someone re-exports it.
+    - cron: "17 9 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: parity (WASM INT8 vs S2 canonical)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Check secrets
+        env:
+          BLOB_URL: ${{ secrets.SPECTER2_MODEL_BLOB_URL }}
+          BLOB_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: |
+          if [ -z "$BLOB_URL" ] || [ -z "$BLOB_TOKEN" ]; then
+            echo "::error::SPECTER2_MODEL_BLOB_URL and BLOB_READ_WRITE_TOKEN must be set as repository secrets; see the header of this workflow."
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: web/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fixture file is validated by the Python unit tests on every PR
+      # (tests/specter2_parity_test.py); here it is the ground truth.
+      - name: Run parity test
+        env:
+          RUN_PARITY: "1"
+          SPECTER2_MODEL_BLOB_URL: ${{ secrets.SPECTER2_MODEL_BLOB_URL }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: npx vitest run lib/suggest/__tests__/parity.test.ts --reporter=verbose

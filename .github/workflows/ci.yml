@@ -1,4 +1,4 @@
-# Continuous integration — runs the web and Python test suites on every PR
+# Continuous integration — runs the web, Python, and SQL test suites on every PR
 # and on pushes to main.
 #
 # Security note: every run: block references only static strings; no
@@ -50,22 +50,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Full-tree audit. The `--omit=dev` narrowing that lived here from
-      # 2026-07-27 (e80db7a) has been removed: its own REVERT WHEN condition is
-      # now satisfied. brace-expansion backported the GHSA-mh99-v99m-4gvg fix in
-      # 1.1.18, so the eslint-config-next -> minimatch@3 -> brace-expansion@1
-      # chain resolves clean, and `npm audit` reports 0 at every severity across
-      # the whole tree. The gate no longer needs an exemption.
-      #
-      # Correction worth keeping: the old note said the fix "arrives via a plain
-      # `npm install` — the caret ranges float". It does not. `npm install`
-      # preserves any locked version that already satisfies its range, so the
-      # patched 1.1.18 was never picked up. `npm update` is what refreshes
-      # in-range and is what actually unblocked this. If a transitive advisory
-      # ever looks stuck again, check whether the lockfile is simply behind its
-      # own declared ranges before concluding there is no upstream fix.
+      # Fails closed on any high or critical finding; there are no exceptions.
+      # The braces (GHSA-vfj7-8cjw-p6xm) chain under eslint-config-next is
+      # removed by the @next/eslint-plugin-next override in web/package.json.
+      - name: Test audit policy
+        run: node --experimental-strip-types --test scripts/check-audit.test.mts
+
       - name: Audit dependencies
-        run: npm audit --audit-level=high
+        run: node --experimental-strip-types scripts/check-audit.mts
 
       - name: Lint
         run: npm run lint
@@ -75,6 +67,36 @@ jobs:
 
       - name: Test
         run: npm run test
+
+  web-min-node:
+    # package.json engines allows Node >=22.12.0, but CI otherwise runs .nvmrc.
+    # Smoke the TypeScript CLIs on the minimum so a flag only newer Node
+    # versions imply (type stripping) can't slip through.
+    name: web (min Node CLI smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Smoke CLIs
+        run: |
+          npm run paperpal:search -- --help
+          npm run turbopuffer -- --help
 
   python:
     # Display name kept as "python (pytest)" to match the required status check
@@ -108,7 +130,10 @@ jobs:
       # Collect the whole tests/ tree so new *_test.py files gate automatically
       # (a hand-maintained file list silently dropped new tests in July 2026).
       # scripts/pilot_cli.py is a live-DB operator CLI, not a pytest module; it
-      # lives under scripts/ so this collection never imports it.
+      # lives under scripts/ so this collection never runs it. Its decisions
+      # are pure functions exercised by tests/pilot_cli_test.py with a fake
+      # connection. The INT8 parity test is scheduled, not per-PR — see
+      # specter2-parity.yml.
       - name: Run unit tests
         run: uv run pytest -c tests/pytest.ini -v tests/
 
@@ -139,3 +164,34 @@ jobs:
 
       - name: Lint Edge Functions
         run: deno lint
+
+  sql:
+    # Loads every migration in order into a throwaway Postgres with pgvector,
+    # then runs the passage-search RLS, grant, and ranking checks.
+    name: sql (passage search)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run passage-search SQL tests
+        run: tests/paper_passage_search_run.sh

@@ -1,5 +1,25 @@
+import type { InferenceSession } from "onnxruntime-web";
 import { runChunkedWithAbort } from "./abortable";
 import { ModelLoadError, TimeoutError } from "./types";
+
+// A narrow view of the @xenova/transformers tokenizer covering only what
+// embedBatch() calls. The upstream class is callable through a Proxy that its
+// .d.ts cannot express (it declares `_call`, not a call signature), and its
+// BatchEncoding is a union of arrays and Tensors, so adopting the full type
+// buys casts at every use. This pins the three things we rely on: the
+// separator token, the call shape, and that int64 tensors expose a
+// BigInt64Array `data` plus `dims` — exactly what onnxruntime-web's Tensor
+// constructor consumes below.
+type Int64TensorLike = { data: BigInt64Array; dims: readonly number[] };
+type Specter2Tokenizer = {
+  sep_token: string;
+  (
+    texts: string[],
+    options: { padding: "max_length"; truncation: boolean; max_length: number },
+  ): { input_ids: Int64TensorLike; attention_mask: Int64TensorLike };
+};
+
+type LoadedModel = { session: InferenceSession; tokenizer: Specter2Tokenizer };
 
 // IMPORTANT: This SHA-256 must equal the hash of the file at SPECTER2_MODEL_BLOB_URL.
 // If the operator re-quantizes (e.g., HF Hub republishes the proximity adapter,
@@ -15,7 +35,7 @@ const EXPECTED_MODEL_SHA256 = "1db3c70bc2f4d5debfc256059d1e73261567411410f193051
 const MAX_BLOB_FETCH_RETRIES = 3;
 const RETRY_BACKOFFS_MS = [1000, 2000, 4000];
 
-let modelPromise: Promise<{ session: any; tokenizer: any }> | null = null;
+let modelPromise: Promise<LoadedModel> | null = null;
 let loadStartedAt: number | null = null;
 
 async function sha256Hex(buf: ArrayBuffer): Promise<string> {
@@ -45,7 +65,7 @@ async function fetchBlobWithRetries(url: string): Promise<ArrayBuffer> {
   throw new ModelLoadError(`blob fetch failed after ${MAX_BLOB_FETCH_RETRIES} retries: ${lastErr}`);
 }
 
-async function initModel() {
+async function initModel(): Promise<LoadedModel> {
   loadStartedAt = Date.now();
   const url = process.env.SPECTER2_MODEL_BLOB_URL;
   if (!url) throw new ModelLoadError("SPECTER2_MODEL_BLOB_URL env var is not set");
@@ -60,7 +80,10 @@ async function initModel() {
     const transformers = await import("@xenova/transformers");
     // Vercel's /var/task/ is read-only; redirect the HF model cache to /tmp.
     transformers.env.cacheDir = "/tmp/transformers-cache";
-    return transformers.AutoTokenizer.from_pretrained("allenai/specter2_base");
+    const tok = await transformers.AutoTokenizer.from_pretrained("allenai/specter2_base");
+    // See Specter2Tokenizer: the instance is callable at runtime (Callable
+    // proxy), which the upstream class type does not declare.
+    return tok as unknown as Specter2Tokenizer;
   })();
 
   const [buf, ort] = await Promise.all([bufPromise, ortPromise]);
@@ -81,7 +104,7 @@ export function modelLoadStartedAt(): number | null {
   return loadStartedAt;
 }
 
-async function getModel() {
+async function getModel(): Promise<LoadedModel> {
   if (!modelPromise) {
     modelPromise = initModel();
   }
@@ -129,7 +152,8 @@ export async function embedBatch(
 
   return runChunkedWithAbort(items, CHUNK, signal, async (chunk) => {
     const texts = chunk.map(it => `${it.title}${tokenizer.sep_token}${it.abstract}`);
-    const enc = await tokenizer(texts, { padding: "max_length", truncation: true, max_length: 512, return_tensors: "np" });
+    // Synchronous in transformers.js 2.x; returns Tensors by default.
+    const enc = tokenizer(texts, { padding: "max_length", truncation: true, max_length: 512 });
 
     // @xenova/transformers tensors have an undefined .location that
     // onnxruntime-web rejects. Build plain ORT tensors from the raw data.

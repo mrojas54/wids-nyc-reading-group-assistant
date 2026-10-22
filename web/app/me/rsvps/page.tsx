@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { currentMemberId, upcomingRsvps } from "@/lib/queries";
 import { Brandmark, Icon } from "@/components/ui";
 import { RsvpButtons } from "@/components/RsvpButtons";
+import { TYPE_LABEL } from "@/components/NextMeetingCard";
 import { formatDateNY, formatTimeNY } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -77,13 +78,19 @@ export default async function MyRsvpsPage() {
               const showBadge = m.type !== "reading_group";
               const title =
                 m.paper_title ??
-                (m.type === "admin" ? "Admin meeting" : "Paper to be announced");
+                (m.type === "admin"
+                  ? "Admin meeting"
+                  : m.type === "vibe_session"
+                    ? "Vibe session"
+                    : "Paper to be announced");
 
               return (
                 <li key={m.meeting_id} className="rsvp-meeting">
                   <div className="rsvp-meeting-when">
                     {dateLabel}
-                    {showBadge && <span className="rsvp-meeting-badge">admin</span>}
+                    {showBadge && (
+                      <span className="rsvp-meeting-badge">{TYPE_LABEL[m.type]}</span>
+                    )}
                   </div>
 
                   <div className="rsvp-meeting-title">{title}</div>

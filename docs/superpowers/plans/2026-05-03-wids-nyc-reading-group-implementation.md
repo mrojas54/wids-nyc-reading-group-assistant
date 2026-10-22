@@ -765,7 +765,7 @@ WITH slots AS (
                   range_start + interval '90 minutes' AS slot_end
   FROM availability WHERE meeting_id = <admin_id>
 ),
-overlaps AS (
+slot_overlap AS (
   SELECT s.slot_start, s.slot_end,
          count(DISTINCT a.member_id) AS members_available
   FROM slots s
@@ -776,7 +776,7 @@ overlaps AS (
   GROUP BY s.slot_start, s.slot_end
 )
 SELECT slot_start, slot_end, members_available
-FROM overlaps
+FROM slot_overlap
 ORDER BY members_available DESC, slot_start ASC
 LIMIT 5;
 ```

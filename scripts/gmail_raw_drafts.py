@@ -30,18 +30,12 @@ from __future__ import annotations
 
 import argparse
 import base64
-import hashlib
-import http.server
 import json
 import os
 import re
-import secrets
 import sys
-import threading
 import time
-import urllib.parse
-import webbrowser
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
@@ -50,12 +44,26 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_random_exponential,
+)
+
+from scripts.gmail_oauth import (
+    ENV_CLIENT_SECRET,
+    DraftError,
+    OAuthClient,
+    _as_object,
+    _read_json,
+    access_token,
+    authorize,
+    save_token,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
-#: The narrowest Google scope that can write a draft. It also permits sending;
-#: nothing here calls a send endpoint.
-SCOPE = "https://www.googleapis.com/auth/gmail.compose"
 GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 #: Where the templates point the mark today. ``cid`` mode rewrites this src.
@@ -64,15 +72,37 @@ MARK_CID = "wids-mark"
 MARK_PNG = ROOT / "web" / "public" / "branding" / "mark-reader-96.png"
 
 DEFAULT_TOKEN_PATH = Path.home() / ".config" / "wids" / "gmail-token.json"
-ENV_CLIENT_SECRET = "WIDS_GMAIL_CLIENT_SECRET"
 ENV_TOKEN = "WIDS_GMAIL_TOKEN"
 
 MarkMode = Literal["cid", "https", "none"]
 MARK_MODES: tuple[MarkMode, ...] = ("cid", "https", "none")
 
 
-class DraftError(RuntimeError):
-    """Raised when a draft cannot be built or written."""
+class _RetryableHttp(DraftError):
+    """A Gmail/OAuth response worth another attempt (429 or 5xx).
+
+    Raised inside the retried REST helpers so tenacity can distinguish a
+    transient upstream from a deterministic refusal; the CLI never sees it
+    as anything but a :class:`DraftError` once the attempts are exhausted.
+    """
+
+
+#: Same policy as ``find_paper_suggest._request_with_retry`` — three attempts,
+#: random exponential backoff capped at 10 s, transport errors and 429/5xx.
+#: One retry idiom across ``scripts/``, not three.
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+_gmail_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_random_exponential(multiplier=1, max=10),
+    retry=retry_if_exception_type((_RetryableHttp, httpx.TransportError)),
+    reraise=True,
+)
+
+
+def _slug(email: str) -> str:
+    """One filename stem per recipient, shared by the manifest bodies and the
+    ``--dry-run`` ``.eml`` files so the two always correspond."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", email)
 
 
 # ── MIME ──────────────────────────────────────────────────────────────────────
@@ -184,179 +214,6 @@ def html_body_of(msg: EmailMessage) -> str:
     return part.get_content() if part is not None else ""
 
 
-# ── OAuth (installed app, loopback + PKCE) ───────────────────────────────────
-
-
-@dataclass(frozen=True)
-class OAuthClient:
-    client_id: str
-    client_secret: str
-    auth_uri: str = "https://accounts.google.com/o/oauth2/v2/auth"
-    token_uri: str = "https://oauth2.googleapis.com/token"
-
-    @classmethod
-    def from_secret_file(cls, path: Path) -> OAuthClient:
-        """Read the JSON Google Cloud hands out for an OAuth client of type *Desktop app*."""
-        try:
-            doc = json.loads(path.read_text(encoding="utf-8"))
-        except FileNotFoundError as exc:
-            raise DraftError(
-                f"client secret not found at {path} — download it from Google Cloud "
-                f"(APIs & Services → Credentials → OAuth client, Desktop app) or set "
-                f"${ENV_CLIENT_SECRET}"
-            ) from exc
-        inner = doc.get("installed") or doc.get("web")
-        if not inner:
-            raise DraftError(f"{path}: expected an 'installed' (Desktop app) client JSON")
-        return cls(
-            client_id=inner["client_id"],
-            client_secret=inner["client_secret"],
-            auth_uri=inner.get("auth_uri", cls.auth_uri),
-            token_uri=inner.get("token_uri", cls.token_uri),
-        )
-
-
-@dataclass
-class Token:
-    access_token: str
-    refresh_token: str
-    expires_at: float
-    scope: str = SCOPE
-
-    def expiring(self, within: float = 60.0) -> bool:
-        return time.time() + within >= self.expires_at
-
-    @classmethod
-    def from_response(cls, doc: dict[str, object], refresh_token: str | None = None) -> Token:
-        expires_in = float(str(doc.get("expires_in", 0)))
-        rt = doc.get("refresh_token") or refresh_token
-        if not rt:
-            raise DraftError("token response carried no refresh_token — revoke the app "
-                             "at myaccount.google.com/permissions and run `auth` again")
-        return cls(
-            access_token=str(doc["access_token"]),
-            refresh_token=str(rt),
-            expires_at=time.time() + expires_in,
-            scope=str(doc.get("scope", SCOPE)),
-        )
-
-
-def load_token(path: Path) -> Token:
-    try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise DraftError(f"no token at {path} — run `auth` first") from exc
-    return Token(**doc)
-
-
-def save_token(path: Path, token: Token) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(asdict(token), indent=2), encoding="utf-8")
-    os.chmod(path, 0o600)
-
-
-def pkce_pair() -> tuple[str, str]:
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).decode().rstrip("=")
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    challenge = base64.urlsafe_b64encode(digest).decode().rstrip("=")
-    return verifier, challenge
-
-
-def build_auth_url(client: OAuthClient, redirect_uri: str, challenge: str, state: str) -> str:
-    params = {
-        "client_id": client.client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": SCOPE,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-        "state": state,
-        "access_type": "offline",
-        "prompt": "consent",
-    }
-    return f"{client.auth_uri}?{urllib.parse.urlencode(params)}"
-
-
-def exchange_code(
-    client: OAuthClient, code: str, redirect_uri: str, verifier: str, *, http: httpx.Client | None = None
-) -> Token:
-    data = {
-        "client_id": client.client_id,
-        "client_secret": client.client_secret,
-        "code": code,
-        "code_verifier": verifier,
-        "grant_type": "authorization_code",
-        "redirect_uri": redirect_uri,
-    }
-    resp = (http or httpx).post(client.token_uri, data=data, timeout=30)
-    if resp.status_code != 200:
-        raise DraftError(f"token exchange failed: {resp.status_code} {resp.text[:300]}")
-    return Token.from_response(resp.json())
-
-
-def refresh(client: OAuthClient, token: Token, *, http: httpx.Client | None = None) -> Token:
-    data = {
-        "client_id": client.client_id,
-        "client_secret": client.client_secret,
-        "refresh_token": token.refresh_token,
-        "grant_type": "refresh_token",
-    }
-    resp = (http or httpx).post(client.token_uri, data=data, timeout=30)
-    if resp.status_code != 200:
-        raise DraftError(f"token refresh failed: {resp.status_code} {resp.text[:300]}")
-    return Token.from_response(resp.json(), refresh_token=token.refresh_token)
-
-
-class _Loopback(http.server.BaseHTTPRequestHandler):
-    """Catches Google's one redirect back to 127.0.0.1 and stores the query."""
-
-    query: dict[str, list[str]] = {}
-
-    def do_GET(self) -> None:
-        type(self).query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Authorised. You can close this tab and go back to the terminal.\n")
-
-    def log_message(self, format: str, *args: object) -> None:
-        return
-
-
-def authorize(client: OAuthClient, *, open_browser: bool = True, timeout: float = 300.0) -> Token:
-    """Run the installed-app flow once. Returns a token with a refresh_token."""
-    server = http.server.HTTPServer(("127.0.0.1", 0), _Loopback)
-    port = server.server_address[1]
-    redirect_uri = f"http://127.0.0.1:{port}/"
-    verifier, challenge = pkce_pair()
-    state = secrets.token_urlsafe(16)
-    url = build_auth_url(client, redirect_uri, challenge, state)
-
-    thread = threading.Thread(target=server.handle_request, daemon=True)
-    thread.start()
-    print("Open this URL in the browser that is signed in as the operator:\n\n" + url + "\n")
-    if open_browser:
-        webbrowser.open(url)
-    thread.join(timeout)
-    server.server_close()
-    query = _Loopback.query
-    if not query:
-        raise DraftError("no redirect received — the browser never came back")
-    if query.get("state", [""])[0] != state:
-        raise DraftError("state mismatch on redirect — refusing the code")
-    if "error" in query:
-        raise DraftError(f"authorisation refused: {query['error'][0]}")
-    return exchange_code(client, query["code"][0], redirect_uri, verifier)
-
-
-def access_token(client: OAuthClient, token_path: Path) -> str:
-    token = load_token(token_path)
-    if token.expiring():
-        token = refresh(client, token)
-        save_token(token_path, token)
-    return token.access_token
-
-
 # ── Gmail REST (drafts only) ─────────────────────────────────────────────────
 
 
@@ -364,24 +221,39 @@ def _headers(access: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access}"}
 
 
+def _check(resp: httpx.Response, what: str) -> None:
+    if resp.status_code == 200:
+        return
+    detail = f"{what} failed: {resp.status_code} {resp.text[:300]}"
+    if resp.status_code in _RETRYABLE_STATUS:
+        raise _RetryableHttp(detail)
+    raise DraftError(detail)
+
+
+@_gmail_retry
 def create_draft(access: str, raw: str, *, http: httpx.Client | None = None) -> dict[str, object]:
-    """``drafts.create`` with a raw message. The draft lands in the operator's Drafts folder."""
+    """``drafts.create`` with a raw message. The draft lands in the operator's Drafts folder.
+
+    Retried on transport errors and 429/5xx (see ``_gmail_retry``). A retry
+    after a request Gmail actually completed could create the draft twice;
+    that is the one duplicate this tool can produce, and ``_emit`` reports
+    what it created so the operator can check Drafts rather than guess.
+    """
     resp = (http or httpx).post(
         f"{GMAIL_API}/drafts", headers=_headers(access), json={"message": {"raw": raw}}, timeout=60
     )
-    if resp.status_code != 200:
-        raise DraftError(f"drafts.create failed: {resp.status_code} {resp.text[:300]}")
+    _check(resp, "drafts.create")
     doc = resp.json()
     assert isinstance(doc, dict)
     return doc
 
 
+@_gmail_retry
 def get_draft_raw(access: str, draft_id: str, *, http: httpx.Client | None = None) -> EmailMessage:
     resp = (http or httpx).get(
         f"{GMAIL_API}/drafts/{draft_id}", headers=_headers(access), params={"format": "raw"}, timeout=60
     )
-    if resp.status_code != 200:
-        raise DraftError(f"drafts.get failed: {resp.status_code} {resp.text[:300]}")
+    _check(resp, "drafts.get")
     return decode_raw(resp.json()["message"]["raw"])
 
 
@@ -398,10 +270,7 @@ class DraftSpec:
 
 def load_manifest(path: Path) -> list[DraftSpec]:
     """``[{"to", "subject", "html", "text"}]`` — html/text are file paths relative to the manifest."""
-    try:
-        doc = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise DraftError(f"manifest not found: {path}") from exc
+    doc = _read_json(path, "manifest")
     if not isinstance(doc, list) or not doc:
         raise DraftError(f"{path}: expected a non-empty JSON list")
     specs: list[DraftSpec] = []
@@ -435,43 +304,42 @@ def write_reminder_manifest(
 ) -> Path:
     """Render availability-reminder per recipient through the shared pipeline.
 
-    Same helpers the preview renderer and the welcome composer use, in the same
-    order (blocks → splice → strip comments → substitute), so the body that goes
-    into the draft is exactly the body ``render_email_previews`` would preview.
+    ``render_body`` is the same function the preview renderer and the welcome
+    composer run, so the body that goes into the draft is exactly the body
+    ``render_email_previews`` would preview. The token set is derived from
+    ``state`` the same way the preview derives it: in ``paper_pending`` every
+    ``paper.*`` token is *removed* before rendering, so a block that still
+    referenced one would fail as unresolved here rather than quietly
+    substitute a paper into the "coming soon" email.
     """
     from scripts.render_email_previews import (
-        LEFTOVER_MARKER,
-        REMINDER_BLOCKS,
-        REMINDER_PAPER_PENDING_BLOCKS,
         TEMPLATES,
-        find_surviving_placeholders,
-        render,
-        resolve_blocks,
-        splice_shared_blocks,
-        strip_html_comments,
+        RenderError,
+        reminder_blocks_for_state,
+        reminder_tokens_for_state,
+        render_body,
     )
 
-    blocks = REMINDER_BLOCKS if state == "paper" else REMINDER_PAPER_PENDING_BLOCKS
+    blocks = reminder_blocks_for_state(state)
+    state_tokens = reminder_tokens_for_state(tokens, state)
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest: list[dict[str, str]] = []
     for r in recipients:
         first, email = r["first"], r["email"]
-        per = {**tokens, "recipient.firstName": first}
+        per = {**state_tokens, "recipient.firstName": first}
         bodies: dict[str, str] = {}
         for ext in ("html", "txt"):
-            body = (TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
-            body = resolve_blocks(body, ext, blocks)
-            if LEFTOVER_MARKER.search(body):
-                raise DraftError(f"{ext}: block marker survived — pass every block")
-            if ext == "html":
-                body = strip_html_comments(splice_shared_blocks(body))
-            rendered, unresolved = render(body, per)
+            src = (TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
+            try:
+                rendered, unresolved = render_body(
+                    src, ext, blocks, per, label=f"availability-reminder.{ext}"
+                )
+            except RenderError as exc:
+                raise DraftError(str(exc)) from exc
             if unresolved:
                 raise DraftError(f"{email} {ext}: unresolved tokens {sorted(set(unresolved))}")
-            if ext == "html" and find_surviving_placeholders(rendered):
-                raise DraftError(f"{email}: a shared-fragment placeholder survived")
             bodies[ext] = rendered
-        stem = re.sub(r"[^A-Za-z0-9._-]+", "_", email)
+        stem = _slug(email)
         (out_dir / f"{stem}.html").write_text(bodies["html"], encoding="utf-8")
         (out_dir / f"{stem}.txt").write_text(bodies["txt"], encoding="utf-8")
         manifest.append({"to": email, "subject": subject, "html": f"{stem}.html", "text": f"{stem}.txt"})
@@ -527,14 +395,29 @@ def _emit(specs: list[DraftSpec], args: argparse.Namespace) -> int:
         out = Path(args.dry_run)
         out.mkdir(parents=True, exist_ok=True)
         for spec, msg in zip(specs, msgs):
-            stem = re.sub(r"[^A-Za-z0-9._-]+", "_", spec.to)
-            (out / f"{stem}.eml").write_bytes(msg.as_bytes())
+            (out / f"{_slug(spec.to)}.eml").write_bytes(msg.as_bytes())
         print(f"wrote {len(msgs)} .eml file(s) to {out} — nothing touched Gmail")
         return 0
     client = _client_from_args(args)
     access = access_token(client, _token_path(args))
+    created: list[str] = []
     for spec, msg in zip(specs, msgs):
-        doc = create_draft(access, encode_raw(msg))
+        try:
+            doc = create_draft(access, encode_raw(msg))
+        except (DraftError, httpx.HTTPError) as exc:
+            # Each draft is its own request with no idempotency key, so a
+            # failure mid-batch leaves the earlier ones in Drafts. Say exactly
+            # which, so a re-run can be trimmed to the rest instead of
+            # duplicating the ones that landed.
+            remaining = [s.to for s in specs if s.to not in created and s.to != spec.to]
+            raise DraftError(
+                f"{exc}\n"
+                f"  created before the failure ({len(created)}): {', '.join(created) or 'none'}\n"
+                f"  failed: {spec.to}\n"
+                f"  not attempted ({len(remaining)}): {', '.join(remaining) or 'none'}\n"
+                f"  re-run with a manifest containing only the failed + not-attempted recipients"
+            ) from exc
+        created.append(spec.to)
         print(f"draft {doc.get('id')}  →  {spec.to}  ({spec.subject})")
     print(f"{len(msgs)} draft(s) created. Nothing was sent — open Gmail Drafts and send them yourself.")
     return 0
@@ -569,9 +452,35 @@ def cmd_inspect(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_recipients(path: Path) -> list[dict[str, str]]:
+    doc = _read_json(path, "recipients")
+    if not isinstance(doc, list) or not doc:
+        raise DraftError(f"{path}: expected a non-empty JSON list of {{\"first\", \"email\"}}")
+    out: list[dict[str, str]] = []
+    for i, entry in enumerate(doc):
+        fields = _as_object(entry) or {}
+        first, email = fields.get("first"), fields.get("email")
+        if not isinstance(first, str) or not isinstance(email, str):
+            raise DraftError(f"{path}: entry {i} needs string 'first' and 'email' fields")
+        out.append({"first": first, "email": email})
+    return out
+
+
+def _load_tokens(path: Path) -> dict[str, str]:
+    doc = _as_object(_read_json(path, "tokens"))
+    if doc is None:
+        raise DraftError(f"{path}: expected a JSON object of string token values")
+    out: dict[str, str] = {}
+    for k, v in doc.items():
+        if not isinstance(v, str):
+            raise DraftError(f"{path}: token {k!r} must be a string, got {type(v).__name__}")
+        out[k] = v
+    return out
+
+
 def cmd_reminder_manifest(args: argparse.Namespace) -> int:
-    recipients = json.loads(Path(args.recipients).read_text(encoding="utf-8"))
-    tokens = json.loads(Path(args.tokens).read_text(encoding="utf-8"))
+    recipients = _load_recipients(Path(args.recipients))
+    tokens = _load_tokens(Path(args.tokens))
     if "quote.text" not in tokens:
         from scripts.quotes import load_bundle, quote_tokens, select_quote
 

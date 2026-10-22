@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>Thanks for coming</title>
+
+  <!--
+    Meeting-thanks email — WiDS NYC AI Reading Group Planner.
+
+    Post-meeting thank-you to the people who were in the room. Any meeting
+    type: vibe_session, reading_group, admin. Drafted for attendees only,
+    not the whole roster — first used for vibe_session #41 (2026-09-26),
+    which the post-meeting-thanks spec has no path for.
+
+    Same visual family as availability-thanks.html. Built to survive the
+    Gmail MCP create_draft sanitiser (docs/runbooks/email-client-behavior.md,
+    VERIFIED 2026-09-02): no inline SVG — glyphs are Unicode — and every
+    painted background carries a bgcolor attribute alongside its inline
+    background-color. The wordmark's mark image is still dropped on that
+    path; the text lockup survives.
+
+    Source design: templates/email/MeetingThanksEmail.dc.html — Claude Design
+    project 019df06b-1ab7-7e46-a179-6fbef6d10864 (WiDS NYC Design System).
+
+    Merge fields: docs/runbooks/transactional-emails.md, Token contracts.
+  -->
+
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, h1, h2, p, span { font-family: Arial, Helvetica, sans-serif !important; }
+    .serif, .headline, .signoff-name, .quote-text, .wordmark-name { font-family: Georgia, "Times New Roman", serif !important; }
+  </style>
+  <![endif]-->
+
+  <style type="text/css">
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; border-collapse: collapse; }
+    img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
+    body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+    a { color: #365c4b; }
+
+    @media only screen and (max-width: 640px) {
+      .container { width: 100% !important; }
+      .pad-x { padding-left: 20px !important; padding-right: 20px !important; }
+      .body-text { font-size: 15px !important; line-height: 1.6 !important; }
+      .headline { font-size: 24px !important; }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background-color:#ecece4;background-image:radial-gradient(circle, #d2c8b4 1px, transparent 1px);background-size:16px 16px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;color:#1a1814;">
+
+  <!-- Hidden preheader -->
+  <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;font-family:sans-serif;">
+    {{ preheader }}
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+    &#847; &zwnj; &nbsp; &#8199; &#65279; &#8199; &nbsp; &zwnj; &#847;
+  </div>
+
+  <!-- ===== Outer wrapper (dotted paper backdrop) ===== -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ecece4" style="background-color:#ecece4;background-image:radial-gradient(circle, #d2c8b4 1px, transparent 1px);background-size:16px 16px;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+
+        <!-- ===== Email card ===== -->
+        <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:640px;max-width:640px;background-color:#ffffff;background-image:radial-gradient(circle, #e6dfd1 1px, transparent 1px);background-size:16px 16px;border:1px solid #e6dfd1;border-radius:14px;">
+
+          <!-- ── Brand bar (canonical wordmark — see assets/emails/template/_wordmark_shared.html) ── -->
+          <tr>
+            <td class="pad-x" style="padding:28px 32px 8px 32px;">
+              __WORDMARK_BLOCK__
+            </td>
+          </tr>
+
+          <!-- ── Session card: eyebrow, serif headline, date/place chips ── -->
+          <tr>
+            <td class="pad-x" style="padding:22px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#faf8f4" style="background-color:#faf8f4;border:1px solid #e6dfd1;border-radius:20px;">
+                <!-- Magenta top rule: one-cell table so the colour has an attribute to live on -->
+                <tr>
+                  <td style="padding:22px 24px 0 24px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td width="28" height="3" bgcolor="#c8226d" style="width:28px;height:3px;line-height:3px;font-size:0;background-color:#c8226d;">&nbsp;</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 24px 22px 24px;">
+                    <div style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:0.14em;color:#365c4b;font-weight:600;line-height:1.4;">
+                      &#10022;&nbsp; {{ meeting.kindLabel }}
+                    </div>
+
+                    <h1 class="headline serif" style="margin:10px 0 0 0;font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:28px;line-height:1.15;letter-spacing:-0.02em;color:#1a1814;font-weight:600;">
+                      {{ meeting.headline }}
+                    </h1>
+
+                    <!-- Chips: date + place. Text glyphs, not SVG. -->
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;">
+                      <tr>
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 12px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;white-space:nowrap;">
+                                <span style="color:#c8226d;">&#9679;</span>&nbsp; {{ meeting.dateLine }}
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                        <td style="padding-right:6px;padding-bottom:6px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background-color:#ffffff;border:1px solid #e6dfd1;border-radius:999px;">
+                            <tr>
+                              <td style="padding:5px 12px;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12.5px;color:#4f4a3e;font-weight:500;white-space:nowrap;">
+                                <span style="color:#365c4b;">&#9679;</span>&nbsp; {{ meeting.place }}
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Greeting ── -->
+          <tr>
+            <td class="pad-x" style="padding:26px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#1a1814;">
+                Hi {{ recipient.greeting }},
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Thanks ── -->
+          <tr>
+            <td class="pad-x" style="padding:12px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#4f4a3e;">
+                {{ body.lede }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── What's next ── -->
+          <tr>
+            <td class="pad-x" style="padding:14px 32px 0 32px;">
+              <p class="body-text" style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15.5px;line-height:1.65;color:#4f4a3e;">
+                {{ body.next }}
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Portal ghost link (no primary CTA — nothing to do) ── -->
+          <tr>
+            <td class="pad-x" style="padding:18px 32px 0 32px;">
+              <a href="{{ links.portalBase }}/dashboard" style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:14.5px;color:#365c4b;text-decoration:underline;text-underline-offset:3px;">
+                See what's coming up &#8594;
+              </a>
+            </td>
+          </tr>
+
+          <!-- ── Sign-off ── -->
+          <tr>
+            <td class="pad-x" style="padding:24px 32px 28px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px solid #e6dfd1;padding-top:18px;">
+                    <p style="margin:0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#4f4a3e;line-height:1.55;">
+                      With thanks,
+                    </p>
+                    <p class="signoff-name" style="margin:6px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;color:#1a1814;font-weight:500;line-height:1.55;">
+                      &mdash; {{ operator.displayName }}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Closing quote (rotating women-in-STEM) ── -->
+          <tr>
+            <td class="pad-x" align="center" style="padding:0 32px 28px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                <tr>
+                  <td width="36" height="1" bgcolor="#c8226d" style="width:36px;height:1px;line-height:1px;font-size:0;background-color:#c8226d;">&nbsp;</td>
+                </tr>
+              </table>
+              <p class="quote-text serif" style="margin:14px auto 0;max-width:460px;font-family:Charter,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:16.5px;line-height:1.5;letter-spacing:-0.005em;color:#1a1814;">
+                &ldquo;{{ quote.text }}&rdquo;
+              </p>
+              <p style="margin:8px 0 0 0;font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#6d6757;line-height:1.5;">
+                &mdash; <span style="font-weight:600;color:#1a1814;">{{ quote.by }}</span>, <span style="font-weight:400;color:#8e8674;">{{ quote.role }}</span>
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── Footer ── -->
+          <tr>
+            <td bgcolor="#faf8f4" style="background-color:#faf8f4;border-top:1px solid #e6dfd1;padding:16px 32px;border-bottom-left-radius:14px;border-bottom-right-radius:14px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family:'Geist',system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:12px;color:#8e8674;line-height:1.55;">
+                    __FOOTER_BRAND_BLOCK__
+                    <span style="color:#d2c8b4;">&nbsp;&middot;&nbsp;</span>
+                    <a href="{{ links.portalBase }}/dashboard" style="color:#6d6757;text-decoration:none;">Member portal</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

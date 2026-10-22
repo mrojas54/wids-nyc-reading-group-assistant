@@ -8,6 +8,7 @@ import {
   S2RequestError,
 } from "@/lib/suggest/types";
 import { toS2PaperId, fetchArxivBatch } from "@/lib/suggest/resolve-helpers";
+import type { Tables } from "@/lib/database.types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,24 @@ type DbPaperRow = {
   title: string;
   abstract: string;
 };
+
+// Both selects below flow into toDbPaperRow, whose parameter is built from the
+// generated Row type, so a renamed column is a compile error instead of a
+// silent `undefined`. (Not `.returns<T>()` — see lib/queries.ts for why that
+// is a cast that would hide exactly this.)
+type PaperSelectRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
+
+function toDbPaperRow(r: PaperSelectRow): DbPaperRow | null {
+  // Every row here was matched or upserted by s2_paper_id, so a NULL is a
+  // data invariant violation, not a value to coerce to "".
+  if (r.s2_paper_id === null) return null;
+  return {
+    id: r.id,
+    s2_paper_id: r.s2_paper_id,
+    title: r.title ?? "",
+    abstract: r.abstract ?? "",
+  };
+}
 
 export async function POST(req: Request) {
   try {
@@ -82,13 +101,9 @@ export async function POST(req: Request) {
     if (existingErr) throw existingErr;
 
     const resolvedMap = new Map<string, DbPaperRow>();
-    for (const r of (existing ?? []) as any[]) {
-      resolvedMap.set(r.s2_paper_id as string, {
-        id: r.id as number,
-        s2_paper_id: r.s2_paper_id as string,
-        title: (r.title as string) ?? "",
-        abstract: (r.abstract as string) ?? "",
-      });
+    for (const r of existing ?? []) {
+      const row = toDbPaperRow(r);
+      if (row) resolvedMap.set(row.s2_paper_id, row);
     }
 
     // 3. Fetch S2 metadata for misses, then UPSERT into papers
@@ -116,13 +131,9 @@ export async function POST(req: Request) {
           .upsert(insertRows, { onConflict: "s2_paper_id" })
           .select("id, s2_paper_id, title, abstract");
         if (insertErr) throw insertErr;
-        for (const row of (inserted ?? []) as any[]) {
-          resolvedMap.set(row.s2_paper_id as string, {
-            id: row.id as number,
-            s2_paper_id: row.s2_paper_id as string,
-            title: (row.title as string) ?? "",
-            abstract: (row.abstract as string) ?? "",
-          });
+        for (const r of inserted ?? []) {
+          const row = toDbPaperRow(r);
+          if (row) resolvedMap.set(row.s2_paper_id, row);
         }
       }
     }

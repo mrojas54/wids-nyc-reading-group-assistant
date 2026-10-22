@@ -1,0 +1,27 @@
+WiDS NYC AI Reading Group
+=========================
+
+{{ meeting.kindLabel }}: {{ meeting.headline }}
+{{ meeting.dateLine }} · {{ meeting.place }}
+
+
+Hi {{ recipient.greeting }},
+
+{{ body.lede }}
+
+{{ body.next }}
+
+See what's coming up:
+{{ links.portalBase }}/dashboard
+
+
+With thanks,
+— {{ operator.displayName }}
+
+
+"{{ quote.text }}"
+— {{ quote.by }}, {{ quote.role }}
+
+---
+WiDS NYC AI Reading Group
+Member portal: {{ links.portalBase }}/dashboard

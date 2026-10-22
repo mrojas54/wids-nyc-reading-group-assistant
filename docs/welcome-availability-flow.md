@@ -63,10 +63,12 @@ flowchart TD
 | `assets/emails/template/welcome-availability.{html,txt}` | Template pair with `BEGIN-BLOCK` / `[[BEGIN:]]` markers; HTML hosts `__WORDMARK_BLOCK__` / `__CTA_BLOCK__` |
 | `assets/emails/template/_{wordmark,cta,footer_brand}_shared.html` | Shared fragments spliced by `splice_shared_blocks()` before comment stripping |
 | `scripts/welcome_availability.py` | Block composer; preview via `uv run python -m scripts.welcome_availability` |
+| `scripts/render_email_previews.py` | Shared `resolve_blocks` / `LEFTOVER_MARKER` / `splice_shared_blocks` / `strip_html_comments` (same grammar as availability-reminder's `paper` / `paper_pending` pair) |
 | `scripts/quotes.py` | Rotates `quote.text` / `quote.by` when the quote block is on |
 | `paper_companions.payload` | Source of truth for whether `links.companion` is live |
 | `command_log` | `member_added` on insert; chase-namespace key after a real send |
-| Gmail MCP `create_draft` | Draft only — no send tool |
+| Gmail MCP `create_draft` | Default draft path — strips the mark at creation |
+| `scripts/gmail_raw_drafts.py` | Optional raw-MIME draft path that keeps the mark (`docs/runbooks/gmail-raw-drafts.md`) |
 
 ## Block toggles
 
@@ -101,7 +103,7 @@ Blurb copy depends on who is sending:
 - **Greeting is `Hey Queen,`** — `recipient.firstName` is accepted but unused. Middle-name mis-greeting does not apply here; it still does for `availability-reminder` / `rsvp-confirmation`.
 - **Deep-link the meeting:** `links.availability` must be `<portalBase>/availability?meeting=<id>`. Bare `/availability` falls back to newest prep and can point at a rolled-over meeting.
 - **HTML tokens are escaped** by the composer; the `.txt` twin is not. Do not double-escape.
-- **Mark will be missing** when the operator sends from Gmail compose — verified; see `docs/runbooks/email-client-behavior.md`. Everything else survives via `bgcolor` attributes.
+- **Mark will be missing** on the Gmail MCP `create_draft` path (stripped at draft creation, verified 2026-09-02) and again if the compose window sanitises on Send — see `docs/runbooks/email-client-behavior.md`. Everything else survives via `bgcolor` attributes. To keep the mark in the stored draft, use `scripts/gmail_raw_drafts.py` after `compose()` writes the bodies.
 - **Do not log the chase idempotency key for an unsent draft.** That silences `availability-chase` for a member who never got mail.
 - **Read `vouched_by` with the service-role client.** After `031`, an authenticated portal session cannot `SELECT` that column.
 
@@ -112,4 +114,4 @@ uv run python -m scripts.welcome_availability
 uv run pytest -c tests/pytest.ini -v tests/welcome_availability_test.py
 ```
 
-`render_email_previews.py` cannot drive this template — blocks must resolve first.
+`render_email_previews.py` does not list this stem in `DEFAULT_BLOCKS` — drive it through `scripts.welcome_availability` (which calls the shared `resolve_blocks()` itself).

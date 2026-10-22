@@ -195,3 +195,18 @@ def test_render_new_paper_email_splices_shared_fragments():
     assert "__CTA_BLOCK__" not in html
     assert "Share your availability" in html
     assert "http://a" in html
+
+
+def test_render_new_paper_email_rejects_a_surviving_block_marker(tmp_path, monkeypatch):
+    # The shared render_body pipeline checks for unresolved BEGIN/END block
+    # markers; the hand-rolled one this replaced skipped that check.
+    import scripts.generate_prerequisites as gp
+
+    (tmp_path / "new-paper-announcement.html").write_text(
+        "<p>Hi</p>\n<!-- BEGIN-BLOCK: paper -->\n<p>x</p>\n<!-- END-BLOCK: paper -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "new-paper-announcement.txt").write_text("Hi\n", encoding="utf-8")
+    monkeypatch.setattr(gp, "TEMPLATES", tmp_path)
+    with pytest.raises(ValueError, match="block marker"):
+        gp.render_new_paper_email({})

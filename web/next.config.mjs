@@ -1,5 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep member JWTs on same-origin requests; Supabase enforces the existing gate.
+  async rewrites() {
+    const origin = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+    if (!origin) return [];
+    return ["analyze-hint", "analyze-socratic"].map((name) => ({
+      source: `/functions/v1/${name}`,
+      destination: `${origin}/functions/v1/${name}`,
+    }));
+  },
   // Promoted out of `experimental` in Next 15+: these are now stable top-level keys.
   serverExternalPackages: [
     "@xenova/transformers",
