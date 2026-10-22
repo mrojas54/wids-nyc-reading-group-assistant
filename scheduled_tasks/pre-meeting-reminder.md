@@ -268,7 +268,7 @@ if any are unresolved:
 | `paper.authorsShort` | derived from `papers.authors[]` (see availability-chase.md Step 5b) |
 | `paper.companionUrl` | `<portalBase><paper_companion_url>` (for example, `<portalBase>/papers/2`; refuse or omit if null) |
 | `links.rsvpManage` | `<portal>/me/rsvps` |
-| `links.portalBase` | `https://planner.widsnyc.org` (or env override) |
+| `links.portalBase` | `https://wids-nyc-reading-group-assistant.vercel.app` (or env override) |
 
 **`links.calendar`:** read `meetings.calendar_html_link`, written at booking
 time by `/wids-schedule-reading-group` (migration 028). Earlier versions of this
