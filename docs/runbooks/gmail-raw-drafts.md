@@ -7,9 +7,10 @@ drafts ever shows the WiDS mark (`email-client-behavior.md`,
 `VERIFIED 2026-09-02`). The Gmail REST API's `drafts.create` with a `raw` message
 stores MIME verbatim. This script builds that MIME and writes the draft.
 
-**It never sends.** There is no send call in it or in its sign-in module
-(`scripts/gmail_oauth.py`) and no CLI verb for it;
-`tests/gmail_raw_drafts_test.py` fails if one is added to either file. The operator opens
+**It never sends.** There is no send call in it, in its sign-in module
+(`scripts/gmail_oauth.py`) or in its reminder renderer
+(`scripts/reminder_manifest.py`), and no CLI verb for it;
+`tests/gmail_raw_drafts_test.py` fails if one is added to any of them. The operator opens
 Gmail Drafts and presses Send, exactly as with MCP-drafted mail. The standing
 rule in `README.md` and `transactional-emails.md` is unchanged.
 
@@ -98,8 +99,8 @@ uv run python -m scripts.gmail_raw_drafts reminder-manifest \
 uv run python -m scripts.gmail_raw_drafts batch --manifest /tmp/reminders/manifest.json
 ```
 
-`reminder-manifest` renders through the same helpers as
-`scripts.render_email_previews` — blocks resolved, shared fragments spliced,
+`reminder-manifest` (rendering lives in `scripts/reminder_manifest.py`) goes
+through the same helpers as `scripts.render_email_previews` — blocks resolved, shared fragments spliced,
 HTML comments stripped, tokens substituted — so the body in the draft is the
 body the preview shows. Any other template: render it however its composer
 renders it, then `create` / `batch` with the files.

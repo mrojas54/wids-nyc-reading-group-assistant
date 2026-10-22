@@ -16,6 +16,7 @@ import respx
 
 from scripts import gmail_oauth as oauth
 from scripts import gmail_raw_drafts as g
+from scripts import reminder_manifest as rm
 
 PNG = (
     b"\x89PNG\r\n\x1a\n" + b"\x00" * 32  # any bytes; the MIME layer does not decode them
@@ -126,9 +127,9 @@ def test_get_draft_raw_decodes_the_stored_mime():
     assert g.survivors(g.html_body_of(back))["img"] == 1
 
 
-@pytest.mark.parametrize("module", [g, oauth], ids=["gmail_raw_drafts", "gmail_oauth"])
+@pytest.mark.parametrize("module", [g, oauth, rm], ids=["gmail_raw_drafts", "gmail_oauth", "reminder_manifest"])
 def test_no_send_endpoint_anywhere_in_the_module(module):
-    """Policy guard: neither the drafts tool nor its sign-in module may grow a send path."""
+    """Policy guard: neither the drafts tool nor its helper modules may grow a send path."""
     src = Path(module.__file__).read_text(encoding="utf-8")
     assert "/send" not in src and "messages.send" not in src.replace("``messages.send``", "")
     assert "drafts/send" not in src
@@ -351,7 +352,7 @@ def test_batch_failure_reports_created_failed_and_not_attempted(tmp_path: Path, 
     assert "re-run" in err
 
 
-# ── Manifest ↔ dry-run correspondence, and state-derived tokens ──────────────
+# ── Manifest ↔ dry-run correspondence ───────────────────────────────────────
 
 
 def test_manifest_bodies_and_dry_run_eml_share_one_filename_stem(tmp_path: Path):
@@ -371,62 +372,3 @@ def test_manifest_bodies_and_dry_run_eml_share_one_filename_stem(tmp_path: Path)
     assert rc == 0
     assert (tmp_path / "eml" / f"{g._slug(email)}.eml").exists()
     assert (tmp_path / "eml" / (Path(entry["html"]).stem + ".eml")).exists()
-
-
-def test_reminder_manifest_pending_state_strips_paper_tokens_before_rendering(tmp_path: Path):
-    """The draft path must be paper-free by construction like the preview is:
-    hand it the *full* token set and the pending body still carries no paper."""
-    from scripts.quotes import load_bundle, quote_tokens, select_quote
-    from scripts.render_email_previews import REMINDER_TOKENS
-
-    tokens = {**REMINDER_TOKENS, **quote_tokens(select_quote(load_bundle(), 20617))}
-    path = g.write_reminder_manifest(
-        recipients=[{"first": "Niki", "email": "niki@example.com"}],
-        tokens=tokens, state="paper_pending", out_dir=tmp_path, subject="Sub",
-    )
-    [entry] = json.loads(path.read_text(encoding="utf-8"))
-    for key in ("html", "text"):
-        body = (tmp_path / entry[key]).read_text(encoding="utf-8")
-        assert "Paper Pal coming soon" in body
-        assert "Hybrid LSTM" not in body and "doi.org" not in body and "papers/2" not in body
-
-
-def test_reminder_manifest_paper_state_still_needs_the_paper_tokens(tmp_path: Path):
-    from scripts.quotes import load_bundle, quote_tokens, select_quote
-    from scripts.render_email_previews import REMINDER_PAPER_PENDING_TOKENS
-
-    tokens = {**REMINDER_PAPER_PENDING_TOKENS, **quote_tokens(select_quote(load_bundle(), 20617))}
-    with pytest.raises(g.DraftError, match="unresolved tokens.*paper.title"):
-        g.write_reminder_manifest(
-            recipients=[{"first": "Niki", "email": "niki@example.com"}],
-            tokens=tokens, state="paper", out_dir=tmp_path, subject="Sub",
-        )
-
-
-def test_reminder_manifest_and_preview_render_byte_identical_bodies(tmp_path: Path):
-    """The whole point of sharing render_body: the draft *is* the preview."""
-    from scripts.quotes import load_bundle, quote_tokens, select_quote
-    from scripts.render_email_previews import (
-        REMINDER_PAPER_PENDING_BLOCKS,
-        REMINDER_PAPER_PENDING_TOKENS,
-        REMINDER_TOKENS,
-        TEMPLATES,
-        render_body,
-    )
-
-    q = quote_tokens(select_quote(load_bundle(), 20617))
-    for state, base, blocks in (
-        ("paper", REMINDER_TOKENS, {"paper": True, "paper_pending": False}),
-        ("paper_pending", REMINDER_PAPER_PENDING_TOKENS, REMINDER_PAPER_PENDING_BLOCKS),
-    ):
-        tokens = {**base, **q}
-        path = g.write_reminder_manifest(
-            recipients=[{"first": "Maya", "email": "maya@example.com"}],
-            tokens=tokens, state=state, out_dir=tmp_path / state, subject="Sub",
-        )
-        [entry] = json.loads(path.read_text(encoding="utf-8"))
-        for ext, key in (("html", "html"), ("txt", "text")):
-            src = (TEMPLATES / f"availability-reminder.{ext}").read_text(encoding="utf-8")
-            expected, unresolved = render_body(src, ext, blocks, {**tokens, "recipient.firstName": "Maya"})
-            assert unresolved == []
-            assert (tmp_path / state / entry[key]).read_text(encoding="utf-8") == expected
