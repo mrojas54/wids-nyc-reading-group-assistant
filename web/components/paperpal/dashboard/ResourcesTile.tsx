@@ -2,6 +2,7 @@
 // we use category/type labels rather than emoji icons per the design system.
 
 import { Tile, TileHeader } from "../primitives";
+import { externalHttpUrl } from "@/lib/safeUrl";
 import type { LearningResource } from "@/lib/paperpal/types";
 
 const CATEGORY_LABEL: Record<LearningResource["category"], string> = {
@@ -23,8 +24,14 @@ export function ResourcesTile({
 }: {
   resources: LearningResource[];
 }) {
+  // These URLs come from the model's synthesis, stored in paper_companions.
+  // A row written before migration 037's CHECK could hold `javascript:…`, and
+  // a resource that is not a web link is not further reading, so drop it
+  // rather than render a dead or dangerous anchor.
+  const linkable = resources.filter((r) => externalHttpUrl(r.url) !== null);
+
   const grouped = new Map<LearningResource["category"], LearningResource[]>();
-  for (const r of resources) {
+  for (const r of linkable) {
     const list = grouped.get(r.category) ?? [];
     list.push(r);
     grouped.set(r.category, list);
@@ -32,7 +39,7 @@ export function ResourcesTile({
 
   return (
     <Tile id="section-resources" className="pp-col-12">
-      <TileHeader title="Further reading" count={resources.length} />
+      <TileHeader title="Further reading" count={linkable.length} />
       <div className="pp-resources">
         {CATEGORY_ORDER.filter((c) => grouped.has(c)).map((cat) => (
           <div className="pp-resources-group" key={cat}>

@@ -96,7 +96,7 @@ if (dryRun) {
 ## Step 4 — Log to command_log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, metadata)
 VALUES (
   'scheduled_task',
   'wids-prune-paper-pdfs',
@@ -107,6 +107,12 @@ VALUES (
     <candidate_count>,
     <freed_mb>,
     <total_mb>
+  ),
+  jsonb_build_object(
+    'dry_run',         <dry_run>,
+    'candidate_count', <candidate_count>,
+    'freed_mb',        <freed_mb>,
+    'total_mb',        <total_mb>
   )
 );
 ```

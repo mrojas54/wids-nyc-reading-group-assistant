@@ -63,6 +63,19 @@ describe("toS2PaperId", () => {
     expect(toS2PaperId("https://www.semanticscholar.org/paper/abc123def456")).toBe("abc123def456");
   });
 
+  // Refused schemes. The matchers below are substring searches, so a script
+  // URL with an arXiv-looking tail would otherwise resolve to a candidate the
+  // operator could then insert into `papers`.
+  it.each([
+    "javascript:alert(1)",
+    "javascript:void(0)#arxiv.org/abs/2501.12345",
+    "javascript:void('10.3390/math13101551')",
+    "data:text/html,arxiv.org/abs/2501.12345",
+    "file:///tmp/arxiv.org/abs/2501.12345",
+  ])("returns null for %s", (input) => {
+    expect(toS2PaperId(input)).toBeNull();
+  });
+
   // Edge cases
   it("returns null for unparseable input", () => {
     expect(toS2PaperId("not a paper")).toBeNull();

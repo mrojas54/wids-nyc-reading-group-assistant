@@ -21,7 +21,7 @@ from pydantic import BaseModel
 # but not the repo root; the shared helpers live in the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.paper_urls import extract_doi_from_url
+from scripts.paper_urls import extract_doi_from_url, has_refused_scheme
 from scripts.vecmath import cosine
 from tenacity import (
     retry,
@@ -86,7 +86,7 @@ def extract_arxiv_id(url: str) -> str | None:
     Handles /abs/ and /pdf/ paths, version suffixes (v1, v2, ...), and
     .pdf extensions. Returns None for non-arXiv URLs or empty input.
     """
-    if not url:
+    if not url or has_refused_scheme(url):
         return None
     m = _ARXIV_RE.search(url)
     return m.group(1) if m else None
@@ -96,7 +96,9 @@ def to_s2_paper_id(url: str) -> str | None:
     """Convert a paper URL to a Semantic Scholar paper identifier.
 
     Returns 'ARXIV:<id>' if the URL is an arXiv URL, 'DOI:<doi>' if a
-    DOI is extractable from the URL, or None if neither.
+    DOI is extractable from the URL, or None if neither — including when the
+    URL carries a scheme other than http(s), which the regexes below would
+    otherwise happily match inside (`javascript:…#arxiv.org/abs/1706.03762`).
     """
     arxiv_id = extract_arxiv_id(url)
     if arxiv_id:

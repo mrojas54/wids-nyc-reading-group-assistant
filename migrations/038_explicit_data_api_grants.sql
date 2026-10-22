@@ -1,5 +1,5 @@
 -- Explicit API access after Supabase removes automatic public-table grants.
--- Forward-only: do not change 001–036 or restore broad default privileges.
+-- Forward-only: do not change 001–037 or restore broad default privileges.
 -- BYPASSRLS does not bypass SQL grants (including for service_role).
 BEGIN;
 

@@ -19,6 +19,6 @@ for legacy_grants in false true; do
   psql -v ON_ERROR_STOP=1 -q -d "$db" -f tests/members_column_grants_test.sql
   psql -v ON_ERROR_STOP=1 -q -d "$db" -f tests/replace_my_availability_test.sql
   # The forward migration must also be safe on a second application.
-  psql -v ON_ERROR_STOP=1 -q -d "$db" -f migrations/037_explicit_data_api_grants.sql
+  psql -v ON_ERROR_STOP=1 -q -d "$db" -f migrations/038_explicit_data_api_grants.sql
   psql -v ON_ERROR_STOP=1 -q -d "$db" -f tests/data_api_grants_test.sql
 done
