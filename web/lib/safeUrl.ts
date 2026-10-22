@@ -42,18 +42,35 @@ export function isExternalHttpUrl(value: string | null | undefined): boolean {
   return externalHttpUrl(value) !== null;
 }
 
+// Resolving a relative path needs a base. Any origin does — what matters is
+// only whether resolution stays on it — and `.invalid` can never be real.
+const RELATIVE_BASE = "https://placeholder.invalid";
+
 /**
- * `value` when it is safe as an `href`, else `null`: either an absolute
- * http(s) URL or a site-relative path such as `/papers/2`.
+ * A safe `href` for `value`, else `null`: the value itself when it is an
+ * absolute http(s) URL, or the normalized path when it is site-relative, as
+ * `papers.companion_url` stores the legacy filesystem-backed companions
+ * (`/papers/<id>`).
  *
- * `papers.companion_url` holds either form — the legacy filesystem-backed
- * companions are stored as `/papers/<id>`. `//host/…` and `/\host/…` are
- * refused: both read as protocol-relative, so neither is the same-origin path
- * it looks like.
+ * Anything that resolves off the current origin is refused. Checking the
+ * leading characters is not enough: `//host/…` and `/\host/…` are the obvious
+ * protocol-relative forms, but `/<tab>/host/…` is one too — an `href` parser
+ * strips the tab and lands on `//host/…`. Resolving against a base and
+ * comparing origins asks the parser the question directly, so no amount of
+ * stripped whitespace turns an accepted value into an off-origin one. The
+ * normalized path is what gets returned, so those characters never reach the
+ * attribute either.
  */
 export function safeHref(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (/^\/[/\\]/.test(value)) return null;
-  if (value.startsWith("/")) return value;
-  return externalHttpUrl(value);
+  if (externalHttpUrl(value)) return value;
+  if (!value.startsWith("/")) return null;
+  let resolved: URL;
+  try {
+    resolved = new URL(value, RELATIVE_BASE);
+  } catch {
+    return null;
+  }
+  if (resolved.origin !== RELATIVE_BASE) return null;
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
 }

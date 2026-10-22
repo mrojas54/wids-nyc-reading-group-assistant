@@ -59,6 +59,25 @@ describe("safeHref", () => {
     expect(safeHref("/\\evil.example.com/x")).toBeNull();
   });
 
+  // An href parser strips tabs and newlines, so each of these lands on
+  // `//evil.example.com/x` in the browser even though it opens with a single
+  // `/`. Checking the leading characters alone would let them through.
+  it.each(["/\t/evil.example.com/x", "/\n/evil.example.com/x", "/\r/evil.example.com/x"])(
+    "refuses a path whose stripped form is protocol-relative (%j)",
+    (value) => {
+      expect(safeHref(value)).toBeNull();
+    },
+  );
+
+  it("normalizes the path it returns, so stripped characters never reach the href", () => {
+    expect(safeHref("/papers/2?x=1#y")).toBe("/papers/2?x=1#y");
+    expect(safeHref("/pap\ters/2")).toBe("/papers/2");
+  });
+
+  it("refuses a relative path with no leading slash", () => {
+    expect(safeHref("papers/2")).toBeNull();
+  });
+
   it("refuses javascript: and data: URLs", () => {
     expect(safeHref("javascript:alert(1)")).toBeNull();
     expect(safeHref("data:text/html,<script>alert(1)</script>")).toBeNull();

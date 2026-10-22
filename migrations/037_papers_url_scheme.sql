@@ -18,8 +18,10 @@
 --
 -- `companion_url` takes the looser rule on purpose: the legacy
 -- filesystem-backed companions are stored as the site-relative `/papers/<id>`.
--- `//host/…` and `/\host/…` are excluded — both read as protocol-relative, so
--- neither is the same-origin path it looks like.
+-- `//host/…`, `/\host/…` and `/<tab>/host/…` are all excluded — each reads as
+-- protocol-relative once an href parser has stripped what it strips, so none
+-- is the same-origin path it looks like. Hence `[^/\\[:cntrl:]]` rather than
+-- just `[^/\\]`.
 --
 -- Additive: three CHECK constraints, no row rewrite. The violation preview was
 -- empty on the live project before applying:
@@ -27,7 +29,7 @@
 --   SELECT id, url, pdf_drive_url, companion_url FROM papers
 --   WHERE (url IS NOT NULL AND url !~* '^https?://')
 --      OR (pdf_drive_url IS NOT NULL AND pdf_drive_url !~* '^https?://')
---      OR (companion_url IS NOT NULL AND companion_url !~* '^(https?://|/[^/\\])');
+--      OR (companion_url IS NOT NULL AND companion_url !~* '^(https?://|/[^/\\[:cntrl:]])');
 --   -- expected: 0 rows
 --
 -- Verify after applying:
@@ -50,7 +52,7 @@ ALTER TABLE papers ADD CONSTRAINT papers_pdf_drive_url_scheme
   CHECK (pdf_drive_url IS NULL OR pdf_drive_url ~* '^https?://');
 
 ALTER TABLE papers ADD CONSTRAINT papers_companion_url_scheme
-  CHECK (companion_url IS NULL OR companion_url ~* '^(https?://|/[^/\\])');
+  CHECK (companion_url IS NULL OR companion_url ~* '^(https?://|/[^/\\[:cntrl:]])');
 
 COMMENT ON COLUMN papers.url IS
   'Canonical link to the paper. http(s) only (papers_url_scheme): this value '
