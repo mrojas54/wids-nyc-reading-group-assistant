@@ -259,13 +259,41 @@ Both saved to the cycle's Drive folder.
 
 Run by Anthropic's scheduled-tasks MCP, daily by default. Each is a self-contained prompt with Supabase + Gmail + Calendar access. None can invoke Claude Code slash commands directly; they either act via MCPs or email the operator with a suggested next step.
 
+> **Historical — this table records the 2026-05-03 design, not current behavior.**
+> Several rows have since been superseded. The live specs in
+> [`scheduled_tasks/`](../../../scheduled_tasks/) are authoritative; where the two
+> disagree, this doc is the stale one.
+>
+> **`cycle-keep-alive` — superseded 2026-09-08** by
+> [`scheduled_tasks/cycle-keep-alive.md`](../../../scheduled_tasks/cycle-keep-alive.md).
+> The 28-day rule below proved too eager. It now runs weekly rather than daily and
+> nudges only when **both** gates pass: nothing on the books, **and** no meetup —
+> reading group *or* admin — in 3+ months, with a 28-day cap between nudges. A
+> `prep` row older than 21 days with no date counts as stalled and no longer
+> suppresses the nudge.
+>
+> **`form-response-chase` — renamed with migration 002** to
+> [`scheduled_tasks/availability-chase.md`](../../../scheduled_tasks/availability-chase.md).
+> Availability is collected through the member portal at `/availability`, not
+> Google Forms, so the trigger reads the `availability` table rather than a form
+> response count. The >7-day / <50% shape below survives the rename; only the
+> source of the responses changed.
+>
+> **`leader-nudge` — deprecated 2026-05-16**, superseded by the Paper Pal
+> companion flow and **not registered**. All three nudge conditions moved into the
+> leader's interactive workflow, because out-of-band daily email would duplicate
+> or contradict Paper Pal's in-flow prompts. The spec survives at
+> [`scheduled_tasks/leader-nudge.md`](../../../scheduled_tasks/leader-nudge.md) as
+> a reference with a revert path. Note that its third condition keyed off
+> `packets_sent_at`, a column dropped in migration `024`.
+
 | Task | Purpose | Action |
 |------|---------|--------|
-| `cycle-keep-alive` | Detect stalled cycles | If last reading_group was 28+ days ago AND no in-progress cycle → email operator suggesting `/wids-meeting-start admin`. No auto-start. |
-| `form-response-chase` | Surface low-response forms | If form has been out >7 days AND <50% response rate → email operator with non-responder list. Operator triggers any reminder send. |
+| `cycle-keep-alive` ⚠️ superseded | Detect stalled cycles | If last reading_group was 28+ days ago AND no in-progress cycle → email operator suggesting `/wids-meeting-start admin`. No auto-start. |
+| `form-response-chase` ⚠️ renamed | Surface low-response forms | If form has been out >7 days AND <50% response rate → email operator with non-responder list. Operator triggers any reminder send. |
 | `pre-meeting-reminder` | Logistics reminders | 2 days before any `status='scheduled'` meeting → email active members logistics (date, time, location, Meet link). No guide attachment (leader handles separately). |
 | `meeting-auto-advance` | Status bookkeeping | Mark meetings `status='done'` 24h after `scheduled_at` passes. |
-| `leader-nudge` | Keep leader on-track | Direct emails to leader: paper not picked >7d after admin; guide not drafted <14d before reading_group; packets not sent <7d before reading_group. Each nudge fires at most once per 5 days. CC operator on the third. |
+| `leader-nudge` ⚠️ deprecated | Keep leader on-track | Direct emails to leader: paper not picked >7d after admin; guide not drafted <14d before reading_group; packets not sent <7d before reading_group. Each nudge fires at most once per 5 days. CC operator on the third. |
 | `post-meeting-thanks` | Post-meeting recap/thanks | Day after meeting flips to done. **Reading_group:** drafts thank-you, emails leader for a 1-line personal addition, sends to members. **Admin:** drafts recap, sends directly (no leader handoff). |
 | `calendar-rsvp-sync` | Pull RSVP state | Polls Calendar event attendees; updates `meeting_attendance.rsvp_status` and `responded_at`. Also pulls back `scheduled_at` if event was manually rescheduled. |
 
@@ -278,9 +306,9 @@ Weeks counted from the previous reading_group. Bold = manual operator/leader act
 | 0 | Reading group meeting happens | — |
 | 0+1d | *post-meeting-thanks* drafts thanks; leader adds personal line; sent | scheduled → leader → scheduled |
 | 1 | (rest week) | — |
-| 2 | *cycle-keep-alive* may fire if 28d passed | scheduled |
+| 2 | *cycle-keep-alive* may fire if 28d passed ⚠️ superseded — it no longer fires on a healthy two-month cycle at all (3-month dormancy gate) | scheduled |
 | 4 | **`/wids-meeting-start admin`** — creates admin + reading_group rows, sends Form 1 | operator |
-| 5 | *form-response-chase* may email operator about laggers | scheduled |
+| 5 | *form-response-chase* may email operator about laggers ⚠️ now *availability-chase*, reading the portal rather than a form | scheduled |
 | 5–6 | **`/wids-schedule-admin`** — picks date, books Calendar | operator |
 | 6 | Admin meeting happens | — |
 | 6 | **`/wids-pick-leader`** — runs algorithm, announces | operator |
@@ -290,7 +318,7 @@ Weeks counted from the previous reading_group. Bold = manual operator/leader act
 | 6 | **`/wids-meeting-start reading_group`** — sends Form 2 | operator |
 | 7 | **`/wids-schedule-reading-group`** — picks date, books Calendar | operator |
 | 7 | **`/wids-make-guide`** — stage 1 + stage 2 fan-out + stage 3 → both PDFs | leader |
-| 7–8 | *leader-nudge* may ping if guide not drafted | scheduled |
+| 7–8 | *leader-nudge* may ping if guide not drafted ⚠️ deprecated — never fires; Paper Pal prompts the leader in-flow instead | scheduled |
 | 8 | **`/wids-send-packets`** — leader emails members' packet | leader |
 | 8 | *pre-meeting-reminder* sends logistics 2 days before | scheduled |
 | 8 | Reading group meeting happens — restart at week 0 | — |

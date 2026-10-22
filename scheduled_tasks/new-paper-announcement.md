@@ -181,6 +181,7 @@ VALUES ('scheduled_task', 'new-paper-announcement', 'success',
 If Step 1 found no paper, log `no_action` instead — no `idempotency_key`:
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
-VALUES ('scheduled_task', 'new-paper-announcement', 'no_action', 'no papers to announce');
+INSERT INTO command_log (source, name, status, summary, metadata)
+VALUES ('scheduled_task', 'new-paper-announcement', 'no_action', 'no papers to announce',
+        jsonb_build_object('drafts', 0, 'reason', 'no_paper_found'));
 ```

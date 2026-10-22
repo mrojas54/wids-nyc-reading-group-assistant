@@ -66,7 +66,7 @@ The operator must have a `reading-group-guide` skill installed. The make-guide c
 ### 5. Scheduled-tasks MCP
 After running `/wids-bootstrap`, register the scheduled task prompts (output by bootstrap) via the scheduled-tasks MCP. See [scheduled_tasks/README.md](scheduled_tasks/README.md).
 
-Register these active task prompts (7): `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `cycle-keep-alive`, `availability-chase`, and weekly `prune-paper-pdfs`. Keep `new-paper-announcement` available as an operator-triggered prompt, but do not put it on a recurring schedule. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
+Register these active task prompts (7): daily `pre-meeting-reminder`, `calendar-rsvp-sync`, `meeting-auto-advance`, `post-meeting-thanks`, `availability-chase`; weekly `cycle-keep-alive` (Mon) and `prune-paper-pdfs` (Sun). Keep `new-paper-announcement` available as an operator-triggered prompt, but do not put it on a recurring schedule. `leader-nudge` is **deprecated** — superseded by the Paper Pal companion flow; do not register.
 
 ### 6. Vercel project (only needed once the member portal is ready to deploy)
 - Connect this GitHub repo to Vercel.

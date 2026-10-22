@@ -108,7 +108,9 @@ Run `/wids-send-packets` to create the email draft, then send from Gmail.
 ## Log
 
 ```sql
-INSERT INTO command_log (source, name, status, summary)
+INSERT INTO command_log (source, name, status, summary, metadata)
 VALUES ('scheduled_task', 'leader-nudge', 'success',
-        'Nudged leader=<leader_id> condition=<n>');
+        'Nudged leader=<leader_id> condition=<n>',
+        jsonb_build_object('leader_id', <leader_id>, 'meeting_id', <meeting_id>,
+                           'condition', <n>, 'emails_sent', 1));
 ```

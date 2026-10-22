@@ -45,7 +45,8 @@ Doesn't matter — they're independent. But a sensible order is:
 1. `meeting-auto-advance` (cheapest; verify infra)
 2. `calendar-rsvp-sync`
 3. `pre-meeting-reminder`
-4. `cycle-keep-alive`
+4. `cycle-keep-alive` (weekly Monday; both gates — nothing on the books AND
+   no meetup in 3+ months — must pass before it emails)
 5. `availability-chase`
 6. `post-meeting-thanks` (24h–7d window on `scheduled_at`; reading_group
    path is two-run — see that file's `leader-draft` vs send keys; drafts
