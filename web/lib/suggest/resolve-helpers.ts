@@ -22,10 +22,28 @@ const BARE_ARXIV_RE = /^([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)$/;
 // Old-style arXiv ID: hep-ph/9901234, cs.AI/0601001
 const OLD_ARXIV_RE = /^([a-z-]+(?:\.[A-Z]{2})?)\/([0-9]{7})$/;
 
+// Which schemes may reach the URL matchers below. http(s) are the only ones a
+// paper link may use; `doi:` is an identifier prefix, not a link. Anything else
+// with a scheme — `javascript:`, `data:`, `file:` — is refused, so a hostile
+// URL cannot be resolved into a suggestion and go on to be inserted into
+// `papers`. Bare identifiers ("10.1234/x", "2605.02028") carry no scheme, fail
+// to parse as a URL, and are untouched by this check; the canonical `ARXIV:` /
+// `MAG:` prefixes are returned before it runs.
+const URL_SCHEMES = new Set(["http:", "https:", "doi:"]);
+
+function hasRefusedScheme(s: string): boolean {
+  try {
+    return !URL_SCHEMES.has(new URL(s).protocol);
+  } catch {
+    return false; // not a URL at all — a bare ID
+  }
+}
+
 /**
  * Convert any supported paper URL / ID string to a canonical S2 paper ID
  * (e.g. "ARXIV:2605.02028v1", "DOI:10.xxxx/yyyy").
- * Returns null when the input doesn't match any known format.
+ * Returns null when the input doesn't match any known format, or is a URL with
+ * a scheme other than http(s).
  */
 export function toS2PaperId(url: string): string | null {
   const s = url.trim();
@@ -33,6 +51,8 @@ export function toS2PaperId(url: string): string | null {
   if (CANONICAL_RE.test(s)) return s;
   // Mixed-case arXiv: prefix → normalise to ARXIV:
   if (/^arxiv:/i.test(s)) return `ARXIV:${s.slice(6)}`;
+  // Everything left is matched as a URL or a bare ID, so pin the scheme first.
+  if (hasRefusedScheme(s)) return null;
   // Full arXiv URL
   const arxiv = s.match(ARXIV_RE);
   if (arxiv) return `ARXIV:${arxiv[1]}`;

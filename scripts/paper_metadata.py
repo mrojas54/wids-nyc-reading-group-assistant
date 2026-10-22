@@ -15,7 +15,7 @@ from urllib.parse import urlparse, urlunparse
 import requests
 from psycopg import Connection
 
-from scripts.paper_urls import extract_doi_from_url, is_arxiv_host
+from scripts.paper_urls import extract_doi_from_url, is_arxiv_host, is_http_url
 
 
 _ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
@@ -28,9 +28,16 @@ def normalize_url(url: str) -> str:
     - arxiv.org/pdf/<id>(.pdf)? -> arxiv.org/abs/<id>
     - drop query string on arxiv.org URLs and on `?needAccess=` params
     - leave fragments off
+
+    Raises ValueError for anything that is not an absolute http(s) URL. A paper
+    URL ends up in an `href` on the portal, so `javascript:` and `data:` values
+    are refused here rather than normalized and passed along — including when
+    one is read back out of a `papers` row written before migration 037.
     """
+    if not is_http_url(url):
+        raise ValueError(f"paper URL must be an absolute http(s) URL: {url!r}")
     parsed = urlparse(url.strip())
-    scheme = "https" if parsed.scheme in ("http", "https") else parsed.scheme
+    scheme = "https"
     host = parsed.netloc.lower()
     path = parsed.path
     query = parsed.query

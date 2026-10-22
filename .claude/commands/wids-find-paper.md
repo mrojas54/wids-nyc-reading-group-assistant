@@ -70,6 +70,12 @@ Either way, continue to 2c with the top 5 papers (title, authors, abstract, arXi
 
 ### 2c — Insert candidates into papers + paper_suggestions
 
+`papers.url` is rendered into an `href` by the portal, so it must be an
+absolute `http://` or `https://` URL — never `javascript:`, `data:` or a bare
+host. Drop a candidate whose URL is anything else rather than rewriting it.
+Migration 037's `papers_url_scheme` CHECK rejects the insert either way; this
+is so you get a clear candidate to drop instead of a constraint violation.
+
 For each candidate:
 ```sql
 -- Find or create paper by URL (no UNIQUE constraint on papers.url in V1, so check first)

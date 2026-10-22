@@ -90,6 +90,23 @@ describe("researchPaperAnalysisSchema", () => {
     ).toThrow();
   });
 
+  // `new URL` — and so zod's own z.url() — accepts any scheme, but
+  // ResourcesTile renders this value into an href, so a provider that returns
+  // a script URL must not reach paper_companions.payload.
+  it.each([
+    "javascript:alert(1)",
+    "JavaScript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+  ])("rejects a learningResources URL with the scheme in %s", (url) => {
+    expect(() =>
+      researchPaperAnalysisSchema.parse({
+        ...minimalPayload,
+        learningResources: [{ ...minimalPayload.learningResources[0], url }],
+      }),
+    ).toThrow();
+  });
+
   it("rejects a quiz question with fewer than two options", () => {
     expect(() =>
       researchPaperAnalysisSchema.parse({

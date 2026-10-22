@@ -129,6 +129,20 @@ def test_to_s2_paper_id(url, expected):
     assert to_s2_paper_id(url) == expected
 
 
+@pytest.mark.parametrize("url", [
+    # Both extractors search inside the string, so a script URL with an
+    # arXiv-looking or DOI-looking tail would otherwise resolve to an id and
+    # pull the paper into the suggestion pipeline.
+    "javascript:void(0)#arxiv.org/abs/1706.03762",
+    "javascript:void('10.1080/26939169.2023.2276446')",
+    "data:text/plain,arxiv.org/abs/1706.03762",
+    "file:///tmp/arxiv.org/abs/1706.03762",
+])
+def test_to_s2_paper_id_refuses_non_http_schemes(url):
+    from scripts.find_paper_suggest import to_s2_paper_id
+    assert to_s2_paper_id(url) is None
+
+
 # ---------------------- Vector math ----------------------
 
 import math

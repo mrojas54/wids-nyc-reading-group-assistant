@@ -3,6 +3,7 @@
 // The "Next paper" hero at the top of the scheduling rail.
 import Link from "next/link";
 import { Card, CardBody, Icon, MeetingTypeBadge } from "@/components/ui";
+import { externalHttpUrl } from "@/lib/safeUrl";
 import { formatAuthors } from "@/lib/schedule/format";
 import type { ScheduleMeeting } from "@/lib/schedule/loadPoll";
 
@@ -15,7 +16,11 @@ export function PaperHero({ meeting }: { meeting: ScheduleMeeting }) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const isArxiv = !!paper?.url && /arxiv\.org/i.test(paper.url);
+  // papers.url is operator-supplied, so a row could hold `javascript:…`. Link
+  // only what parses as http(s); everything downstream — the arXiv label
+  // included — reads this validated value, never paper.url.
+  const paperUrl = externalHttpUrl(paper?.url);
+  const isArxiv = !!paperUrl && /arxiv\.org/i.test(paperUrl);
   return (
     <Card variant="hero">
       <CardBody>
@@ -30,8 +35,8 @@ export function PaperHero({ meeting }: { meeting: ScheduleMeeting }) {
           </p>
           {paper && (
             <div className="hero-links">
-              {paper.url && (
-                <a className="hero-link" href={paper.url} target="_blank" rel="noreferrer">
+              {paperUrl && (
+                <a className="hero-link" href={paperUrl} target="_blank" rel="noreferrer">
                   {isArxiv ? "arXiv" : "Paper"} <Icon name="external" size={16} />
                 </a>
               )}

@@ -14,6 +14,7 @@ import { QuoteCard } from "@/components/QuoteCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
 import { canFindPaper, canScheduleMeeting } from "@/lib/roles";
+import { safeHref } from "@/lib/safeUrl";
 import { signOut } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,10 @@ export default async function DashboardPage() {
       : "needed"
     : null;
 
+  // papers.companion_url is operator-written and holds either a site-relative
+  // path or an absolute URL, so it gets the href check before it is rendered.
+  const companionHref = safeHref(meeting?.companion_url);
+
   return (
     <div className="shell">
       <header className="shell-header">
@@ -94,16 +99,16 @@ export default async function DashboardPage() {
 
         <QuoteCard />
 
-        {meeting?.companion_url && (
+        {companionHref && (
           <a
-            href={meeting.companion_url}
+            href={companionHref}
             className="card companion-card"
             style={{ textDecoration: "none", color: "inherit" }}
           >
             <div className="companion-body">
               <div className="companion-eyebrow">Paper Pal</div>
               <div className="companion-title">
-                {meeting.paper_title ?? "Paper Pal"}
+                {meeting?.paper_title ?? "Paper Pal"}
               </div>
               <div className="companion-meta">Open Paper Pal</div>
             </div>
