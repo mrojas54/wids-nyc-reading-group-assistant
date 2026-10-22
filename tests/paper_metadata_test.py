@@ -41,6 +41,23 @@ def test_normalize_url(raw, expected):
     assert normalize_url(raw) == expected
 
 
+@pytest.mark.parametrize("raw", [
+    # papers.url is rendered into an href by the portal, so a non-web scheme is
+    # refused here rather than normalized and carried into the Zotero item.
+    "javascript:alert(1)",
+    "JavaScript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///etc/passwd",
+    # Not an absolute URL at all
+    "arxiv.org/abs/2405.02411",
+    "/papers/2",
+    "",
+])
+def test_normalize_url_refuses_non_http(raw):
+    with pytest.raises(ValueError, match="absolute http"):
+        normalize_url(raw)
+
+
 from scripts.paper_metadata import classify_url
 
 

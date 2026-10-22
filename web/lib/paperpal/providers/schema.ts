@@ -6,6 +6,9 @@
 // Kept deliberately permissive on optional fields (e.g. sectionRef) — the
 // goal is "could this render?", not strict shape lock.
 import { z } from "zod";
+// Relative, with the extension, so the Deno edge functions that import
+// providers/index.ts resolve it the same way the Next build does.
+import { isExternalHttpUrl } from "../../safeUrl.ts";
 
 const sectionRef = z.enum(["abstract", "method", "math", "diagram"]).optional();
 
@@ -49,7 +52,12 @@ const diagramBreakdown = z.object({
 
 const learningResource = z.object({
   title: z.string(),
-  url: z.string().url(),
+  // Not z.url(): that accepts any scheme `new URL` accepts, so a provider
+  // could land `javascript:…` in paper_companions.payload and ResourcesTile
+  // would render it as an href. Further reading is a web link or nothing.
+  url: z.string().refine(isExternalHttpUrl, {
+    message: "must be an http(s) URL",
+  }),
   category: z.enum(["foundational", "survey", "tutorial", "course"]),
   type: z.enum(["video", "article", "book", "interactive"]),
   description: z.string(),

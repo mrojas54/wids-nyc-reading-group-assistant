@@ -1,6 +1,7 @@
 // Bottom action strip — Present + Open original PDF links.
 
 import { Eyebrow } from "../primitives";
+import { externalHttpUrl } from "@/lib/safeUrl";
 
 export function DashboardActionStrip({
   presentHref,
@@ -9,6 +10,10 @@ export function DashboardActionStrip({
   presentHref?: string;
   pdfHref?: string | null;
 }) {
+  // presentHref is an internal route the caller builds; pdfHref is
+  // papers.pdf_drive_url straight out of the database, so it gets the scheme
+  // check before it becomes an href.
+  const pdfUrl = externalHttpUrl(pdfHref);
   return (
     <div className="pp-actions-strip pp-col-12">
       <div>
@@ -26,10 +31,10 @@ export function DashboardActionStrip({
             Present
           </a>
         )}
-        {pdfHref && (
+        {pdfUrl && (
           <a
             className="pp-action-chip"
-            href={pdfHref}
+            href={pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
           >

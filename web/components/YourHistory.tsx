@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { safeHref } from "@/lib/safeUrl";
 import { formatDateNY } from "@/lib/time";
 import type { HistoryItem } from "@/lib/queries";
 
@@ -23,21 +24,26 @@ export function YourHistory({ items }: { items: HistoryItem[] }) {
     <section className="history">
       <h3 className="section-eyebrow">Your history</h3>
       <ul className="history-list">
-        {visible.map((it) => (
-          <li key={it.meeting_id} className="history-item">
-            <div className="history-text">
-              <div className="history-title">{it.paper_title ?? "(no paper)"}</div>
-              <div className="history-meta">
-                {it.date ? formatDateNY(it.date) : "Date TBD"}
+        {visible.map((it) => {
+          // papers.companion_url is operator-written and holds either a
+          // site-relative path or an absolute URL, so it gets the href check.
+          const companionHref = safeHref(it.companion_url);
+          return (
+            <li key={it.meeting_id} className="history-item">
+              <div className="history-text">
+                <div className="history-title">{it.paper_title ?? "(no paper)"}</div>
+                <div className="history-meta">
+                  {it.date ? formatDateNY(it.date) : "Date TBD"}
+                </div>
               </div>
-            </div>
-            {it.companion_url && (
-              <a href={it.companion_url} className="history-link">
-                Paper Pal →
-              </a>
-            )}
-          </li>
-        ))}
+              {companionHref && (
+                <a href={companionHref} className="history-link">
+                  Paper Pal →
+                </a>
+              )}
+            </li>
+          );
+        })}
       </ul>
       {hidden > 0 && (
         <button
