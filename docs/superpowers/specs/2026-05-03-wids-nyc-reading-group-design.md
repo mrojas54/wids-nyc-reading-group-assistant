@@ -264,7 +264,7 @@ Run by Anthropic's scheduled-tasks MCP, daily by default. Each is a self-contain
 > [`scheduled_tasks/`](../../../scheduled_tasks/) are authoritative; where the two
 > disagree, this doc is the stale one.
 >
-> **`cycle-keep-alive` — superseded 2026-09-08** by
+> **`cycle-keep-alive` — superseded 2026-09-21** (PR #181) by
 > [`scheduled_tasks/cycle-keep-alive.md`](../../../scheduled_tasks/cycle-keep-alive.md).
 > The 28-day rule below proved too eager. It now runs weekly rather than daily and
 > nudges only when **both** gates pass: nothing on the books, **and** no meetup —
