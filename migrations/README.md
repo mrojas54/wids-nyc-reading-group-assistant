@@ -61,7 +61,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `035_paper_passage_search.sql` | Canonical versioned passages, local GTE-small vectors (384 dimensions), hybrid-search RPC, atomic ingestion, explicit grants and member RLS. **Applied 2026-10-12** via `supabase db query --linked` to the production project; verified by object/grant/RLS readback. This path does not add a migration-history row. See [live verification](../docs/paper-41-index-verification.md). |
 | `036_paper_passage_access_and_keywords.sql` | Follow-up to 035 (applied, so not edited). Limits RSVP-based passage access to `attending` RSVPs on meetings that are still `scheduled` and started no more than 24 hours ago, since members write their own RSVPs. Adds `match_paper_passage_keywords`, which ranks keyword candidates by `ts_rank_cd` instead of page order. Tested with every migration by `tests/paper_passage_search_run.sh` in CI. **Applied 2026-10-12** via Supabase MCP `apply_migration` (records a migration-history row); verified by function definition, grant, and keyword-RPC readback. |
 | `037_papers_url_scheme.sql` | Pins `papers.url` and `papers.pdf_drive_url` to `^https?://`, and `papers.companion_url` to that or a site-relative `/<path>` (not `//host`, `/\host`, `/<tab>/host`, or anything with a `.`/`..` segment — each reads as, or collapses to, a protocol-relative path once an href parser is done with it). All three are rendered into an `href` by the portal — `PaperHero` on the operator-only `/admin/schedule` rail among them — so any other scheme is stored XSS. The render sites validate the scheme too (`web/lib/safeUrl.ts`), but the live write path for `papers.url` is the raw `INSERT` that `/wids-find-paper` runs, with no application guard in front of it. Additive: three CHECKs, no row rewrite; the violation preview was empty on the live project. **Not yet applied.** |
-| `038_explicit_data_api_grants.sql` | Makes table, sequence, schema, and service-only RPC grants explicit. Preserves existing RLS policies and enables RLS where fresh installs lacked the custom trigger. Not applied to production. |
+| `038_explicit_data_api_grants.sql` | Makes table, sequence, schema, and service-only RPC grants explicit. Preserves existing RLS policies and enables RLS where fresh installs lacked the custom trigger. **Applied 2026-10-22** to production via `supabase db query --linked --project-ref dmyulakudbdegwkqgelx`; verified by live grant/RLS checks and member-session hosted REST checks. This path does not add a migration-history row. See the production verification record below. |
 
 ## `ensure_rls` event trigger
 
@@ -173,7 +173,43 @@ These checks use real PostgreSQL roles and SQL. They do not run PostgREST,
 GraphQL, Supabase Auth, Storage, or a hosted preview branch. Function defaults
 remain in the fixture because this rollout changes table and sequence defaults.
 
-### Preview verification before production
+### Production application and verification — October 22, 2026
+
+Applied the exact `038` SQL from merged commit `148f939` to production project
+`dmyulakudbdegwkqgelx` using `supabase db query --linked --project-ref` with the
+migration file. The migration committed successfully. This execution path does
+not add a row to `supabase_migrations.schema_migrations`; application was verified
+from the live database state.
+
+Post-application catalog checks passed for table grants, the members column
+restriction, all 11 public sequences, schema USAGE, and service-role-only execution
+of `upsert_paper_companion`. RLS remained enabled on all 16 public tables.
+Before/after fingerprints confirmed that existing RLS policies and default
+privileges were unchanged. Read-only role-switched checks for three linked
+members also passed availability and RSVP own-row isolation, volunteer reads,
+and private-member-column denial.
+
+The operator then ran GET-only hosted REST checks in DevTools using the existing
+signed-in member session and supplied the results. The script first validated
+the session with Supabase Auth. All eight members endpoint checks passed, each
+with `limit=0` so no member rows were returned:
+
+| Requested columns | HTTP status | PostgreSQL code | Result |
+|---|---|---|---|
+| `id,name,role,auth_user_id` | 200 | — | PASS |
+| `email` | 403 | `42501` | PASS |
+| `phone` | 403 | `42501` | PASS |
+| `whatsapp` | 403 | `42501` | PASS |
+| `active` | 403 | `42501` | PASS |
+| `vouched_by` | 403 | `42501` | PASS |
+| `joined_at` | 403 | `42501` | PASS |
+| `*` | 403 | `42501` | PASS |
+
+The 403 responses are the expected permission denials. The checks did not print
+the session token, change application rows, or send messages. Production write
+workflows, GraphQL, and Storage were not exercised by these checks.
+
+### Preview verification procedure
 
 1. Provision a disposable Supabase project or preview branch with automatic table grants disabled.
 2. Replay the numbered files from `migrations/` through `038` before the app connects.
