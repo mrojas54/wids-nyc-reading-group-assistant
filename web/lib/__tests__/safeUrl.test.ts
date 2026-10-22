@@ -69,6 +69,22 @@ describe("safeHref", () => {
     },
   );
 
+  // These resolve on-origin, but normalizing collapses the dot segments and
+  // *produces* a protocol-relative path, so the returned string has to be
+  // checked as well as the input.
+  it.each([
+    "/.//evil.example.com/x",
+    "/..//evil.example.com/x",
+    "/a/../..//evil.example.com",
+    "/./\\evil.example.com",
+  ])("refuses a path that normalizes into a protocol-relative one (%j)", (value) => {
+    expect(safeHref(value)).toBeNull();
+  });
+
+  it("keeps a dot inside a segment, which is not a dot segment", () => {
+    expect(safeHref("/papers/2.pdf")).toBe("/papers/2.pdf");
+  });
+
   it("normalizes the path it returns, so stripped characters never reach the href", () => {
     expect(safeHref("/papers/2?x=1#y")).toBe("/papers/2?x=1#y");
     expect(safeHref("/pap\ters/2")).toBe("/papers/2");

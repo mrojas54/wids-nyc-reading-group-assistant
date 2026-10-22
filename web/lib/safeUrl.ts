@@ -46,6 +46,18 @@ export function isExternalHttpUrl(value: string | null | undefined): boolean {
 // only whether resolution stays on it — and `.invalid` can never be real.
 const RELATIVE_BASE = "https://placeholder.invalid";
 
+/** The normalized path of `value` when it resolves on-origin, else `null`. */
+function sameOriginPath(value: string): string | null {
+  let resolved: URL;
+  try {
+    resolved = new URL(value, RELATIVE_BASE);
+  } catch {
+    return null;
+  }
+  if (resolved.origin !== RELATIVE_BASE) return null;
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+}
+
 /**
  * A safe `href` for `value`, else `null`: the value itself when it is an
  * absolute http(s) URL, or the normalized path when it is site-relative, as
@@ -57,20 +69,20 @@ const RELATIVE_BASE = "https://placeholder.invalid";
  * protocol-relative forms, but `/<tab>/host/…` is one too — an `href` parser
  * strips the tab and lands on `//host/…`. Resolving against a base and
  * comparing origins asks the parser the question directly, so no amount of
- * stripped whitespace turns an accepted value into an off-origin one. The
- * normalized path is what gets returned, so those characters never reach the
- * attribute either.
+ * stripped whitespace turns an accepted value into an off-origin one.
+ *
+ * The check runs twice, because normalizing can manufacture the very form it
+ * was asked about: `/.//host/…` and `/a/../..//host/…` both resolve on-origin,
+ * yet their normalized paths are `//host/…`, which is protocol-relative all
+ * over again. So the string that actually ships is checked the same way the
+ * input was. A second pass would be redundant — normalization is idempotent
+ * from here.
  */
 export function safeHref(value: string | null | undefined): string | null {
   if (!value) return null;
   if (externalHttpUrl(value)) return value;
   if (!value.startsWith("/")) return null;
-  let resolved: URL;
-  try {
-    resolved = new URL(value, RELATIVE_BASE);
-  } catch {
-    return null;
-  }
-  if (resolved.origin !== RELATIVE_BASE) return null;
-  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  const path = sameOriginPath(value);
+  if (path === null || sameOriginPath(path) !== path) return null;
+  return path;
 }

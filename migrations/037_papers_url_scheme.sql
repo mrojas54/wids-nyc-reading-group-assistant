@@ -23,13 +23,21 @@
 -- is the same-origin path it looks like. Hence `[^/\\[:cntrl:]]` rather than
 -- just `[^/\\]`.
 --
+-- `.` and `..` path segments are excluded for the same reason one step later:
+-- `/.//host/…` and `/a/../..//host/…` both start with a harmless-looking
+-- segment, but collapse to `//host/…`. Nothing legitimate here uses them —
+-- `companion_url` is `/papers/<id>` — and a dot *inside* a segment
+-- (`/papers/2.pdf`) is untouched.
+--
 -- Additive: three CHECK constraints, no row rewrite. The violation preview was
 -- empty on the live project before applying:
 --
 --   SELECT id, url, pdf_drive_url, companion_url FROM papers
 --   WHERE (url IS NOT NULL AND url !~* '^https?://')
 --      OR (pdf_drive_url IS NOT NULL AND pdf_drive_url !~* '^https?://')
---      OR (companion_url IS NOT NULL AND companion_url !~* '^(https?://|/[^/\\[:cntrl:]])');
+--      OR (companion_url IS NOT NULL
+--          AND (companion_url !~* '^(https?://|/[^/\\[:cntrl:]])'
+--               OR companion_url ~ '(^|/)\.\.?(/|$)'));
 --   -- expected: 0 rows
 --
 -- Verify after applying:
@@ -52,7 +60,11 @@ ALTER TABLE papers ADD CONSTRAINT papers_pdf_drive_url_scheme
   CHECK (pdf_drive_url IS NULL OR pdf_drive_url ~* '^https?://');
 
 ALTER TABLE papers ADD CONSTRAINT papers_companion_url_scheme
-  CHECK (companion_url IS NULL OR companion_url ~* '^(https?://|/[^/\\[:cntrl:]])');
+  CHECK (
+    companion_url IS NULL
+    OR (companion_url ~* '^(https?://|/[^/\\[:cntrl:]])'
+        AND companion_url !~ '(^|/)\.\.?(/|$)')
+  );
 
 COMMENT ON COLUMN papers.url IS
   'Canonical link to the paper. http(s) only (papers_url_scheme): this value '
