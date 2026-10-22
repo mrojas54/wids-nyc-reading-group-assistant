@@ -97,8 +97,10 @@ Don't promise a reply-based snooze. Nothing reads replies to this address; the
 
 ## Step 5 — Log
 
-`command_log.metadata` is `jsonb NOT NULL` **with no default** — an insert that
-omits it fails. Always supply it, on both the nudge and `no_action` paths.
+`command_log.metadata` is `jsonb NOT NULL DEFAULT '{}'::jsonb` (migration 020)
+— an insert that omits it writes an empty object rather than failing, so the
+cost is silent: the operator loses any record of *why* a run took no action.
+Always supply it, on both the nudge and `no_action` paths.
 
 ```sql
 INSERT INTO command_log (source, name, status, summary, metadata)
