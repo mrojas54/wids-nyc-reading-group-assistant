@@ -60,6 +60,7 @@ unapplied migration you have not yet run anywhere is fine.
 | `034_meetings_vibe_session_type.sql` | Adds `'vibe_session'` to the `meetings_type_check` CHECK — a purely social meeting with no paper and no discussion leader, alongside `admin` and `reading_group`. Also adds a generated `meetings.type_priority` column (`reading_group`=2, `vibe_session`=1, `admin`=0) and repoints `orderNewestPrep()`'s (`web/lib/queries.ts`) same-created_at tiebreak at it instead of `ORDER BY type DESC` — that trick only worked because `'reading_group'` happens to sort after `'admin'`, and `'vibe_session'` sorting after `'reading_group'` would have silently inverted the intended precedence. Additive: widens a CHECK, adds one generated column, no row rewrite. **Applied 2026-09-21** via MCP. |
 | `035_paper_passage_search.sql` | Canonical versioned passages, local GTE-small vectors (384 dimensions), hybrid-search RPC, atomic ingestion, explicit grants and member RLS. **Applied 2026-10-12** via `supabase db query --linked` to the production project; verified by object/grant/RLS readback. This path does not add a migration-history row. See [live verification](../docs/paper-41-index-verification.md). |
 | `036_paper_passage_access_and_keywords.sql` | Follow-up to 035 (applied, so not edited). Limits RSVP-based passage access to `attending` RSVPs on meetings that are still `scheduled` and started no more than 24 hours ago, since members write their own RSVPs. Adds `match_paper_passage_keywords`, which ranks keyword candidates by `ts_rank_cd` instead of page order. Tested with every migration by `tests/paper_passage_search_run.sh` in CI. **Applied 2026-10-12** via Supabase MCP `apply_migration` (records a migration-history row); verified by function definition, grant, and keyword-RPC readback. |
+| `037_explicit_data_api_grants.sql` | Makes table, sequence, schema, and service-only RPC grants explicit. Preserves existing RLS policies and enables RLS where fresh installs lacked the custom trigger. Not applied to production. |
 
 ## `ensure_rls` event trigger
 
@@ -123,3 +124,68 @@ Checked on the live project 2026-08-15 after applying `031`–`033`.
   FROM unnest(ARRAY['id','name','role','auth_user_id','email','phone',
   'whatsapp','active','vouched_by']) AS c;`
   — expected `t t t t f f f f f`.
+
+## Explicit Data API grants (October 30, 2026)
+
+Migration `037_explicit_data_api_grants.sql` removes dependencies on automatic
+table and sequence grants. It preserves migrations `001`–`036` and all existing
+RLS policies. It also enables RLS on three tables that relied on `ensure_rls`.
+The migration does not change default privileges or grant access to future tables.
+
+| Objects | Audit result and final access |
+|---|---|
+| `members`, `meetings`, `paper_embeddings` | `031`, `030`, and `033` already restrict browser access. `037` adds missing service-role DML and sequence usage. Members retain their four-column read restriction. |
+| `meeting_attendance` | `008` explicitly grants authenticated SELECT/INSERT/UPDATE and sequence access. It does not remove historical defaults. `037` removes those defaults and preserves the three operations. |
+| `papers`, `topics`, `paper_topics` | Policies exist, but table grants depended on defaults. Authenticated callers receive SELECT only. |
+| `availability` | Existing policies permit own-row CRUD. `037` grants those operations and sequence usage. The atomic replacement RPC remains unchanged. |
+| `volunteers`, `paper_suggestions` | Policies exist, but grants depended on defaults. Volunteers receive SELECT/INSERT/DELETE. Suggestions receive SELECT/INSERT. Both receive sequence usage. |
+| `paper_companions` | Grants and RLS activation depended on platform setup. `037` enables RLS and grants authenticated CRUD under the existing member/operator policies. |
+| `paper_socratic_turns` | Authenticated own-row reads lacked explicit SELECT. Browser writes remain unavailable. |
+| `command_log`, `blackout_periods` | Service-role access depended on defaults. Browser access remains unavailable. `037` explicitly enables blackout RLS. |
+| `paper_passage_sources`, `paper_passages` | `035` already grants authenticated SELECT and service-role access. No additional grants are necessary. |
+| RPCs | `004`, `017`, `032`, `035`, and `036` already grant their intended callers access. `016` revokes browser execution but omits an explicit service-role grant for `upsert_paper_companion`. `037` adds that grant. |
+
+The service role receives DML on named application tables and USAGE on named
+sequences. It does not receive new TRUNCATE, REFERENCES, TRIGGER, or CREATE grants.
+Historical service-role privileges remain unchanged. BYPASSRLS does not bypass
+SQL grants. Comments in older migrations that claim otherwise are inaccurate.
+
+### Local regression checks
+
+On a disposable PostgreSQL server with pgvector, run:
+
+```sh
+tests/paper_passage_search_run.sh
+```
+
+The runner recreates only `paperpal_retrieval_test`. It replays every migration
+with empty table/sequence defaults, then with historical defaults. Neither fixture
+installs the custom RLS event trigger. Both omit inherited `public` schema access.
+The forward migration supplies schema USAGE for authenticated and service-role callers.
+
+The checks cover table permissions, member columns, sequence permissions, RLS
+activation, own-row operations, rejected cross-member writes, and the service-only
+Paper Pal RPC. Existing passage-search tests cover ingestion, ranking, and access
+boundaries. Each fixture also checks a second application of `037`.
+
+These checks use real PostgreSQL roles and SQL. They do not run PostgREST,
+GraphQL, Supabase Auth, Storage, or a hosted preview branch. Function defaults
+remain in the fixture because this rollout changes table and sequence defaults.
+
+### Preview verification before production
+
+1. Provision a disposable Supabase project or preview branch with automatic table grants disabled.
+2. Replay the numbered files from `migrations/` through `037` before the app connects.
+3. Inspect actual grants, RLS state, function owners, role inheritance, and the `ensure_rls` trigger.
+4. Use member sessions to read papers, submit availability, volunteer, suggest papers, and update an RSVP.
+5. Use an unrelated session to check own-row isolation and the members column restriction.
+6. Use the service client to write logs, store Socratic turns, and call `upsert_paper_companion`.
+7. Exercise passage search, PDF upload, and GraphQL if the deployment enables it.
+
+The repository stores SQL in `migrations/`, rather than `supabase/migrations/`.
+A CLI reset does not prove a complete replay unless its setup explicitly loads
+these files. Preview environments must finish the full replay before use.
+A cloned branch can inherit existing grants and conceal a missing replay step.
+
+Production deployment requires separate authorization. Local checks do not
+establish production ACL state or prove a hosted Data API request succeeds.

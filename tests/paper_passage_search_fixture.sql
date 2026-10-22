@@ -22,10 +22,16 @@ GRANT USAGE ON SCHEMA auth, extensions TO anon, authenticated, service_role;
 -- default search_path; 010's unqualified CREATE EXTENSION is then a no-op.
 CREATE EXTENSION vector WITH SCHEMA extensions;
 ALTER DATABASE paperpal_retrieval_test SET search_path = public, extensions;
--- Supabase's default privileges and the ensure_rls helper revoked by 005.
+-- Model a recreated public schema without inherited schema access.
+REVOKE ALL ON SCHEMA public FROM PUBLIC, anon, authenticated, service_role;
+-- Exercise both historical defaults and the October 30 empty ACL baseline.
+-- Keep function defaults: the announced change concerns tables and sequences.
+\if :legacy_grants
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+\endif
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+-- Intentionally no event trigger: fresh installs must establish RLS themselves.
 CREATE FUNCTION public.rls_auto_enable() RETURNS void LANGUAGE sql AS 'SELECT';
 -- Storage, for 018's bucket row and upload policy.
 CREATE SCHEMA storage;
