@@ -5,19 +5,39 @@ argument-hint: [admin|reading_group]
 
 # /wids-meeting-start [type]
 
-Opens planning for a new meeting. With no arg, picks the opposite of the last completed meeting.
+Opens planning for a new meeting. With no arg, picks the next step in the admin → paired-meeting cycle, based on the most recently completed meeting.
 
 ## Argument resolution
 
 If `$1` is `admin` or `reading_group`, use it.
 
+This command never opens a `vibe_session`. That type exists only as a retyped
+paired meeting (meeting 41 was created as a `reading_group` by Step A2 and switched
+by migration 034 / PR #178). If `$1` is anything other than `admin` or
+`reading_group`, halt and ask the operator.
+
 If `$1` is missing:
 ```sql
-SELECT type FROM meetings WHERE status='done' ORDER BY scheduled_at DESC LIMIT 1;
+SELECT type FROM meetings WHERE status='done'
+ORDER BY created_at DESC, type_priority DESC, id DESC
+LIMIT 1;
 ```
 - Result `reading_group` → use `admin`
+- Result `vibe_session` → use `admin`. It is the second half of a cycle, same as a reading group.
 - Result `admin` → use `reading_group`
 - Empty result → use `admin` (kickoff)
+- **Any other value → halt and ask the operator.** Do not guess. A new
+  `meetings.type` means this rule needs updating.
+
+**Why `created_at`, not `scheduled_at`.** Admin rows usually have
+`scheduled_at IS NULL`, and Postgres sorts NULLs *first* under `DESC`. So an
+`ORDER BY scheduled_at DESC` returned a stale legacy admin row: on 2026-09-29 it
+returned admin #35 from June and chose `reading_group`, when the correct answer
+was `admin`. Step A2 inserts an admin and its paired meeting in one transaction,
+so they share `created_at`. `type_priority` (migration 034: reading_group 2,
+vibe_session 1, admin 0) breaks that tie toward the paired meeting. The rule
+therefore reads "admin done, pair still in prep" as `admin`, and "pair done" as
+the pair's type.
 
 ## Branch: type='admin'
 

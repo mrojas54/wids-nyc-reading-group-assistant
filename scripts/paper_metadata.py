@@ -1,0 +1,270 @@
+"""Paper metadata lookup: URL normalization plus arXiv, CrossRef and DB extractors.
+
+Split out of ``zotero_push`` so the network-facing metadata path can be read and
+tested apart from the Zotero write path. ``extract_metadata`` is the entry point:
+normalize the URL, classify it, try the matching remote source, and fall back to
+the ``papers`` row when no remote source yields anything.
+"""
+from __future__ import annotations
+
+import re
+import xml.etree.ElementTree as ET
+from typing import Any, Optional
+from urllib.parse import urlparse, urlunparse
+
+import requests
+from psycopg import Connection
+
+from scripts.paper_urls import extract_doi_from_url, is_arxiv_host
+
+
+_ARXIV_PDF_RE = re.compile(r"^/pdf/(.+?)(?:\.pdf)?$")
+
+
+def normalize_url(url: str) -> str:
+    """Canonicalize paper URLs for source classification and idempotency.
+
+    - http -> https; lowercase host
+    - arxiv.org/pdf/<id>(.pdf)? -> arxiv.org/abs/<id>
+    - drop query string on arxiv.org URLs and on `?needAccess=` params
+    - leave fragments off
+    """
+    parsed = urlparse(url.strip())
+    scheme = "https" if parsed.scheme in ("http", "https") else parsed.scheme
+    host = parsed.netloc.lower()
+    path = parsed.path
+    query = parsed.query
+
+    if host == "arxiv.org":
+        m = _ARXIV_PDF_RE.match(path)
+        if m:
+            path = f"/abs/{m.group(1)}"
+        query = ""  # always drop query on arxiv
+
+    if "needaccess" in query.lower():
+        # tandfonline-style epdf links — drop the param
+        query = ""
+
+    return urlunparse((scheme, host, path, "", query, ""))
+
+
+_CITATION_DOI_RE = re.compile(
+    rb'<meta\s+name=["\']citation_doi["\']\s+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+
+_ARXIV_API_URL = "https://export.arxiv.org/api/query"
+_ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
+
+
+def classify_url(url: str) -> str:
+    """Decide which extractor to use.
+
+    Returns one of: "arxiv", "doi_in_url", "needs_meta_lookup".
+    "needs_meta_lookup" means: try to find a citation_doi <meta> tag by
+    fetching the page; if that fails, fall back to DB metadata.
+    """
+    if is_arxiv_host(urlparse(url).netloc):
+        return "arxiv"
+    if extract_doi_from_url(url):
+        return "doi_in_url"
+    return "needs_meta_lookup"
+
+
+def _arxiv_id_from_url(url: str) -> str:
+    """Extract the arXiv id from a normalized abs URL."""
+    parsed = urlparse(url)
+    # path is "/abs/<id>" or "/abs/<category>/<id>"
+    return parsed.path[len("/abs/"):]
+
+
+def _el_text(el: Optional[ET.Element]) -> str:
+    """Stripped text of an XML element, or '' if the element is absent/empty."""
+    return (el.text or "").strip() if el is not None else ""
+
+
+def extract_arxiv_metadata(url: str) -> Optional[dict[str, Any]]:
+    """Fetch metadata from the arXiv API for a normalized abs URL.
+
+    Returns None if the API returns no entry (404-equivalent).
+    """
+    arxiv_id = _arxiv_id_from_url(url)
+    resp = requests.get(
+        _ARXIV_API_URL,
+        params={"id_list": arxiv_id},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    root = ET.fromstring(resp.text)
+    entry = root.find("atom:entry", _ARXIV_NS)
+    if entry is None:
+        return None
+
+    title_el = entry.find("atom:title", _ARXIV_NS)
+    summary_el = entry.find("atom:summary", _ARXIV_NS)
+    published_el = entry.find("atom:published", _ARXIV_NS)
+    authors = [
+        _el_text(a.find("atom:name", _ARXIV_NS))
+        for a in entry.findall("atom:author", _ARXIV_NS)
+    ]
+    year = None
+    if published_el is not None and published_el.text:
+        year = int(published_el.text[:4])
+
+    return {
+        "item_type": "preprint",
+        "title": _el_text(title_el),
+        "authors": authors,
+        "abstract": _el_text(summary_el),
+        "year": year,
+        "arxiv_id": arxiv_id,
+        "url": url,
+    }
+
+
+def extract_doi_from_meta_tag(url: str) -> Optional[str]:
+    """Fetch the page and read the Highwire-Press <meta name="citation_doi"> tag.
+
+    Returns None on timeout, non-200, non-HTML content, or no matching tag.
+    """
+    try:
+        resp = requests.get(url, timeout=5, allow_redirects=True)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    content_type = resp.headers.get("Content-Type", "").lower()
+    if "html" not in content_type:
+        return None
+    m = _CITATION_DOI_RE.search(resp.content)
+    return m.group(1).decode("utf-8") if m else None
+
+
+_CROSSREF_API_URL = "https://api.crossref.org/works/"
+
+_CROSSREF_TYPE_TO_ZOTERO = {
+    "journal-article": "journalArticle",
+    "proceedings-article": "conferencePaper",
+    "book-chapter": "bookSection",
+    "book": "book",
+    "report": "report",
+    "posted-content": "preprint",
+}
+
+_JATS_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_jats(text: str) -> str:
+    """CrossRef abstracts are JATS XML; strip tags down to plain text."""
+    return _JATS_TAG_RE.sub("", text).strip()
+
+
+def extract_crossref_metadata(doi: str, *, paper_url: str) -> Optional[dict[str, Any]]:
+    """Fetch metadata from CrossRef for a DOI.
+
+    `paper_url` is the original URL we got from papers.url; we keep it as the
+    canonical link in the Zotero item rather than swapping in CrossRef's
+    doi.org URL — humans browsing the bibliography expect the publisher link.
+    """
+    resp = requests.get(_CROSSREF_API_URL + doi, timeout=10)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    msg = resp.json().get("message", {})
+
+    title_list = msg.get("title") or []
+    title = title_list[0].strip() if title_list else ""
+
+    authors = []
+    for a in msg.get("author") or []:
+        given = (a.get("given") or "").strip()
+        family = (a.get("family") or "").strip()
+        full = (given + " " + family).strip()
+        if full:
+            authors.append(full)
+
+    abstract_raw = msg.get("abstract") or ""
+    abstract = _strip_jats(abstract_raw) if abstract_raw else ""
+
+    container = msg.get("container-title") or []
+    venue = container[0] if container else None
+
+    year = None
+    issued = msg.get("issued") or {}
+    parts = issued.get("date-parts") or []
+    if parts and parts[0]:
+        year = int(parts[0][0])
+
+    crossref_type = msg.get("type", "")
+    item_type = _CROSSREF_TYPE_TO_ZOTERO.get(crossref_type, "webpage")
+
+    canonical_doi = msg.get("DOI") or doi
+
+    return {
+        "item_type": item_type,
+        "title": title,
+        "authors": authors,
+        "abstract": abstract,
+        "venue": venue,
+        "year": year,
+        "doi": canonical_doi,
+        "url": paper_url,
+    }
+
+
+def extract_db_fallback_metadata(conn: Connection, *, paper_id: int) -> dict[str, Any]:
+    """Read metadata for the given paper directly from `papers`.
+
+    Always returns a dict (raises ValueError if the row is missing). Used
+    when no remote source (arXiv/CrossRef/citation_doi) yields metadata.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT title, url, abstract, authors, venue, year "
+            "FROM papers WHERE id = %s",
+            (paper_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise ValueError(f"paper_id={paper_id} not found in papers")
+    title, url, abstract, authors, venue, year = row
+    return {
+        "item_type": "webpage",
+        "title": title,
+        "authors": list(authors) if authors else [],
+        "abstract": abstract or "",
+        "venue": venue,
+        "year": year,
+        "url": url,
+    }
+
+
+def extract_metadata(conn: Connection, *, paper_id: int, paper_url: str) -> dict[str, Any]:
+    """Top-level metadata extractor.
+
+    Order: normalize URL -> classify -> try the matching remote source ->
+    fall back to DB if remote yields nothing.
+    """
+    url = normalize_url(paper_url)
+    source = classify_url(url)
+
+    if source == "arxiv":
+        meta = extract_arxiv_metadata(url)
+        if meta is not None:
+            return meta
+
+    elif source == "doi_in_url":
+        doi = extract_doi_from_url(url)
+        if doi is not None:
+            meta = extract_crossref_metadata(doi, paper_url=url)
+            if meta is not None:
+                return meta
+
+    elif source == "needs_meta_lookup":
+        doi = extract_doi_from_meta_tag(url)
+        if doi is not None:
+            meta = extract_crossref_metadata(doi, paper_url=url)
+            if meta is not None:
+                return meta
+
+    return extract_db_fallback_metadata(conn, paper_id=paper_id)

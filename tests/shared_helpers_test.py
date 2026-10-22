@@ -12,7 +12,7 @@ import math
 import numpy as np
 import pytest
 
-from scripts import find_paper_suggest, zotero_push
+from scripts import find_paper_suggest, paper_metadata, zotero_api, zotero_push
 from scripts.env_file import parse_env_file
 from scripts.paper_urls import extract_doi_from_url, is_arxiv_host
 from scripts.vecmath import cosine
@@ -50,7 +50,7 @@ def test_extract_doi_from_url_policy(url, expected):
 def test_suggest_and_zotero_share_one_doi_extractor():
     """The two send paths must not be able to disagree on a paper's DOI."""
     assert find_paper_suggest.extract_doi_from_url is extract_doi_from_url
-    assert zotero_push.extract_doi_from_url is extract_doi_from_url
+    assert paper_metadata.extract_doi_from_url is extract_doi_from_url
 
 
 @pytest.mark.parametrize("netloc, expected", [
@@ -67,9 +67,23 @@ def test_is_arxiv_host(netloc, expected):
 
 
 def test_classify_url_agrees_with_the_shared_extractor():
-    assert zotero_push.classify_url("https://arxiv.org/abs/2405.02411") == "arxiv"
-    assert zotero_push.classify_url("https://dl.acm.org/doi/10.1145/3696410.3714618") == "doi_in_url"
-    assert zotero_push.classify_url("https://www.mdpi.com/2227-7390/13/10/1551") == "needs_meta_lookup"
+    assert paper_metadata.classify_url("https://arxiv.org/abs/2405.02411") == "arxiv"
+    assert paper_metadata.classify_url("https://dl.acm.org/doi/10.1145/3696410.3714618") == "doi_in_url"
+    assert paper_metadata.classify_url("https://www.mdpi.com/2227-7390/13/10/1551") == "needs_meta_lookup"
+
+
+def test_zotero_push_uses_the_paper_metadata_extractor():
+    """zotero_push must not grow a second metadata path beside paper_metadata."""
+    assert zotero_push.extract_metadata is paper_metadata.extract_metadata
+
+
+@pytest.mark.parametrize("name", [
+    "build_note_html", "create_zotero_item", "create_zotero_note", "find_existing_zotero_item",
+])
+def test_zotero_push_uses_the_zotero_api_writers(name):
+    """zotero_push must not grow a second Zotero write path beside zotero_api."""
+    assert getattr(zotero_push, name) is getattr(zotero_api, name)
+    assert not hasattr(zotero_push, "Zotero")
 
 
 # ── vecmath ──────────────────────────────────────────────────────────────────

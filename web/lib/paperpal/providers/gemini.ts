@@ -120,7 +120,7 @@ export async function geminiSynthesize(
 
 export async function geminiHint(input: HintInput, opts: SynthesizeOpts): Promise<HintResult> {
   const apiKey = requireApiKey();
-  const model = opts.model ?? "gemini-2.5-flash";
+  const model = opts.model ?? "gemini-3.8-flash";
   const { text, meta } = await callGemini([{ text: buildHintPrompt(input) }], {
     apiKey,
     model,
@@ -141,7 +141,7 @@ export async function geminiSocratic(
   opts: SynthesizeOpts,
 ): Promise<SocraticResult> {
   const apiKey = requireApiKey();
-  const model = opts.model ?? "gemini-2.5-flash";
+  const model = opts.model ?? "gemini-3.8-flash";
   const { text, meta } = await callGemini([{ text: buildSocraticPrompt(input) }], {
     apiKey,
     model,

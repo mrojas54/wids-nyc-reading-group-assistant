@@ -1,3 +1,4 @@
+import { formatMeetingTime } from "@/lib/paperpal/meeting-time";
 // Single paper card used in the Inbox sections. Server component (no handlers).
 import Link from "next/link";
 import type { InboxPaper } from "@/lib/paperpal/inbox";
@@ -25,14 +26,7 @@ function authorsLine(authors: string[] | null): string {
 function formatScheduled(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatMeetingTime(iso);
   } catch {
     return iso;
   }

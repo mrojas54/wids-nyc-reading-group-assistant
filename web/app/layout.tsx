@@ -1,17 +1,32 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Newsreader } from "next/font/google";
+import localFont from "next/font/local";
 
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
+const geistSans = localFont({
+  src: [{ path: "./fonts/GeistVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const geistMono = localFont({
+  src: [{ path: "./fonts/GeistMonoVF.woff", weight: "100 900", style: "normal" }],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+// Bundled (latin subset, from @fontsource/newsreader) so builds don't depend on
+// the Google Fonts loader.
+const newsreader = localFont({
+  src: [
+    { path: "./fonts/newsreader/newsreader-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/newsreader/newsreader-latin-400-italic.woff2", weight: "400", style: "italic" },
+    { path: "./fonts/newsreader/newsreader-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/newsreader/newsreader-latin-500-italic.woff2", weight: "500", style: "italic" },
+    { path: "./fonts/newsreader/newsreader-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/newsreader/newsreader-latin-600-italic.woff2", weight: "600", style: "italic" },
+  ],
   variable: "--font-newsreader",
   display: "swap",
-  // Newsreader isn't in next/font's static metric-override table (Next 14.2.x),
-  // so the CLS-prevention fallback pass logs `Failed to find font override
-  // values for font Newsreader`. Opting out silences the warning; the trade-off
-  // is a brief CLS on first paint, mitigated by `display: swap` already.
   adjustFontFallback: false,
 });
 
@@ -22,7 +37,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={newsreader.variable}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

@@ -1,3 +1,4 @@
+import { formatMeetingTime } from "@/lib/paperpal/meeting-time";
 // Inbox — chapter reading queue. Server component; fetches via Promise.all.
 // Ported from design_handoff/design/ideas-screens.jsx · <InboxScreen>.
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -8,20 +9,13 @@ import ProposePaperForm from "./ProposePaperForm";
 import "./inbox.css";
 
 function formatMonthYear(d: Date): string {
-  return d.toLocaleString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleString("en-US", { timeZone: "America/New_York", month: "long", year: "numeric" });
 }
 
 function formatHero(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
-    const d = new Date(iso);
-    return d.toLocaleString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    return formatMeetingTime(iso);
   } catch {
     return null;
   }
@@ -30,7 +24,8 @@ function formatHero(iso: string | null | undefined): string | null {
 function formatRelativeDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
       month: "short",
       day: "numeric",
     });

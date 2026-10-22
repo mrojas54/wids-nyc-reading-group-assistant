@@ -13,7 +13,7 @@ import { NextMeetingCard, type AvailabilityStatus } from "@/components/NextMeeti
 import { QuoteCard } from "@/components/QuoteCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
-import { canFindPaper } from "@/lib/roles";
+import { canFindPaper, canScheduleMeeting } from "@/lib/roles";
 import { signOut } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +49,15 @@ export default async function DashboardPage() {
   const stats = await myStats(sb, submitted, memberId);
   // The banner is a prompt to *choose* a paper, so it stops once the next meeting
   // has one — permission alone would keep nagging leaders to pick a paper that is
-  // already picked. No meeting (or no paper on it) still shows it.
-  const showFindPaper = canFindPaper(member?.role) && !meeting?.paper_id;
+  // already picked. No meeting (or no paper on it) still shows it. Only
+  // reading_group meetings ever have a paper, so an admin meeting or vibe
+  // session in prep must not trigger this — neither one is waiting on a pick.
+  const showFindPaper =
+    canFindPaper(member?.role) && meeting?.type === "reading_group" && !meeting?.paper_id;
+  // The operator's way into /admin/schedule: shown only while a reading group
+  // is collecting availability, and never to members (see canScheduleMeeting).
+  const showSchedule =
+    canScheduleMeeting(member?.role) && prepMeeting?.type === "reading_group";
 
   const firstName = member?.name ? String(member.name).split(/\s+/)[0] : null;
 
@@ -109,6 +116,16 @@ export default async function DashboardPage() {
             <div className="availability-banner-body">
               <strong className="banner-title">Find a paper</strong>
               <span>Search and rank papers for the next meeting</span>
+            </div>
+            <Icon name="arrowRight" size={16} aria-hidden />
+          </Link>
+        )}
+
+        {showSchedule && (
+          <Link href="/admin/schedule" className="banner banner-info">
+            <div className="availability-banner-body">
+              <strong className="banner-title">Schedule the next meeting</strong>
+              <span>Pick an evening from the availability poll</span>
             </div>
             <Icon name="arrowRight" size={16} aria-hidden />
           </Link>

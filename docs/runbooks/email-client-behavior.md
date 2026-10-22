@@ -164,6 +164,24 @@ Consequence: **no image the Gmail MCP writes into a draft reaches anyone.**
 Not the mark, not the card icons, not a QR code. Do not spend another cycle on
 `src` schemes, asset hosting, or template markup — none of them is the lever.
 
+### `VERIFIED` 2026-09-29 — `create_draft` keeps `bgcolor` and Unicode glyphs, drops `background-image`
+
+Method: `create_draft` with `htmlBody` + `body` for `meeting-thanks` (the
+template built for this path: no SVG, `bgcolor` on every tint), then
+`get_draft` `FULL_CONTENT`. Draft `r4948173521769847118`, message
+`1a0eb4c194106afb`, to two members (vibe_session #41 thanks).
+
+Stored: every `bgcolor` attribute and its inline `background-color`, both
+magenta rules (one-cell tables), card `border` + `border-radius`, the `✦` and
+`●` glyphs, Charter/Geist font stacks, the preheader. Dropped:
+`background-image:radial-gradient(...)` and `background-size` on both the
+backdrop and the card — the dot grid is gone before Send. That is draft-time
+loss, which does not contradict the 2026-05-27 refutation above (that message
+was not drafted through this connector).
+
+Consequence: a template built on Unicode glyphs + `bgcolor` arrives intact
+apart from the mark and the dot grid. Flat cream is the connector-path look.
+
 ### `VERIFIED` 2026-09-02 — the date confound is broken; May's send path is the only unknown
 
 Every profile-B message in the table is consistent with having been drafted by

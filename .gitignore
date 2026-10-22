@@ -32,6 +32,7 @@ dist/
 build/
 .vercel
 .env*.local
+.paperpal-local/
 
 # ONNX model artifacts (large binary, stored in Vercel Blob)
 specter2_int8.onnx
@@ -42,9 +43,15 @@ specter2_int8.onnx
 # Agent tool scratch (per-developer, not part of the repo)
 # claude-mem auto-injects empty CLAUDE.md context markers on directory reads
 CLAUDE.md
+# ...except the root one, which is the tracked project guide.
+!/CLAUDE.md
 # Firecrawl CLI / MCP scratch dir
 .firecrawl/
 # Serena MCP scratch dir
 .serena/
 # `remember` skill session-handoff scratch dir
 .remember/
+
+# Deno writes this on `deno check`. Not tracked: CI and Supabase deploys have
+# never used one, and nothing (Dependabot included) would keep it fresh.
+supabase/functions/deno.lock

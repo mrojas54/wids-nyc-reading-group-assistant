@@ -10,11 +10,17 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 import httpx
 import numpy as np
 from pydantic import BaseModel
+
+# Invoked as `uv run scripts/find_paper_suggest.py`, which puts scripts/ on sys.path
+# but not the repo root; the shared helpers live in the package.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from scripts.paper_urls import extract_doi_from_url
 from scripts.vecmath import cosine
 from tenacity import (

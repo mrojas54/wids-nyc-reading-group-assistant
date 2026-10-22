@@ -1,11 +1,14 @@
 ---
 schedule: daily
-description: Draft thank-you note day after each meeting (operator sends); reading_group needs leader's 1-line addition
+description: Draft thank-you note day after each meeting (operator sends); reading_group needs leader's 1-line addition; vibe_session gets a short social note
 ---
 
 # scheduled_tasks/post-meeting-thanks
 
-Two paths: reading_group (leader-augmented) vs admin (auto-sent).
+One path per `meetings.type`: admin (Step 3a), reading_group (Step 3b,
+leader-augmented), and vibe_session (Step 3c, social). Every path ends in a draft
+that the operator sends. Any other type follows the **unknown-type default** at the
+end of Step 3. Never improvise a thank-you for a type this spec doesn't name.
 
 ## Step 1 — Find recently-completed meetings
 
@@ -233,6 +236,53 @@ On `/admin/logs` this renders as `warn` severity (see `deriveSeverity` in
 `web/lib/logs.ts`: `needs_action→warn`), which is the right signal — a draft is
 sitting in the operator's mailbox waiting on them, and amber is what surfaces it.
 
+## Step 3c — type='vibe_session': short social thank-you
+
+A vibe session is purely social (migration 034): `paper_id` and `leader_id` are
+NULL by design. Step 1's `LEFT JOIN`s return NULL `paper_title`, `leader_name`, and
+`leader_email`. **Use none of them.** There is no leader to ask, so this path is
+one run, like 3a.
+
+Recipients: active members.
+
+Subject: `WiDS NYC: thanks for hanging out`
+
+Body:
+```
+Hi everyone,
+
+Thanks for coming out to the vibe session on <scheduled_at, local date>! It was
+lovely to spend time together without a paper on the table.
+
+The next reading group is being planned. More soon.
+```
+
+**Draft it, do not send it.** Log per Step 4 with `meeting_type = 'vibe_session'`.
+
+## Unknown-type default — halt, do not draft
+
+If `m.type` is not `admin`, `reading_group`, or `vibe_session`, create no draft and
+write one `needs_action` row under a key distinct from the Step 2 key:
+
+```sql
+INSERT INTO command_log (source, name, status, summary, idempotency_key, metadata)
+VALUES ('scheduled_task', 'post-meeting-thanks', 'needs_action',
+        'Meeting <id> type=<type> has no thanks path in spec; no draft created',
+        'post-meeting-thanks:unhandled-type:meeting=<id>',
+        jsonb_build_object('meeting_id', <id>, 'meeting_type', '<type>',
+                           'reason', 'unhandled_meeting_type',
+                           'operator_action_required', true,
+                           'drafts_created', 0, 'emails_sent', 0));
+```
+
+This key deliberately does **not** block Step 1, so the meeting stays in scope
+once this spec gains a branch for the type. On later runs, the insert trips
+SQLSTATE 23505. Treat that as "already reported": write nothing more, and mention
+the meeting as still unhandled in the run summary.
+
+This default first fired on 2026-09-28 for meeting 41 (`vibe_session`), before
+Step 3c existed. The run wrote exactly this key and no draft.
+
 ## Step 4 — Log
 
 ```sql
@@ -270,13 +320,14 @@ VALUES ('scheduled_task', 'post-meeting-thanks', 'no_action',
 
 ### Key inventory
 
-Three keys, and only the second one means "the members' message has been handed
+Four keys, and only the second one means "the members' message has been handed
 off":
 
 | Key | Written by | Meaning |
 |-----|-----------|---------|
 | `post-meeting-thanks:leader-draft:meeting=<id>` | 3b-i | Leader draft exists; clock started. Does **not** block the members' draft — Step 1 deliberately filters on the second key only, so the meeting stays in scope for 3b-ii. |
 | `post-meeting-thanks:meeting=<id>` | Step 4, the 3b-ii fallback, or a manual operator send | The members' draft exists (or the operator already sent). Blocks everything further for this meeting. |
+| `post-meeting-thanks:unhandled-type:meeting=<id>` | unknown-type default | Type has no path in this spec. Does **not** block Step 1. |
 | `NULL` | the `no_action` row | Nothing qualified. Exempt from the unique index, so it repeats daily. |
 
 Note the second key is claimed when the **draft** is created, not when the mail

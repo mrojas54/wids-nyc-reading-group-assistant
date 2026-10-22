@@ -7,8 +7,9 @@ drafts ever shows the WiDS mark (`email-client-behavior.md`,
 `VERIFIED 2026-09-02`). The Gmail REST API's `drafts.create` with a `raw` message
 stores MIME verbatim. This script builds that MIME and writes the draft.
 
-**It never sends.** There is no send call in the file and no CLI verb for it;
-`tests/gmail_raw_drafts_test.py` fails if one is added. The operator opens
+**It never sends.** There is no send call in it or in its sign-in module
+(`scripts/gmail_oauth.py`) and no CLI verb for it;
+`tests/gmail_raw_drafts_test.py` fails if one is added to either file. The operator opens
 Gmail Drafts and presses Send, exactly as with MCP-drafted mail. The standing
 rule in `README.md` and `transactional-emails.md` is unchanged.
 
