@@ -25,7 +25,15 @@ describe("@next/eslint-plugin-next fast-glob override", () => {
     for (const name of ["braces", "micromatch"]) {
       expect(() => require.resolve(`${name}/package.json`)).toThrow();
     }
-    expect(() => require.resolve("fast-glob/package.json")).toThrow();
+    // npm may hoist the aliased package to the root, so a root-level
+    // `fast-glob` is allowed only when it is the tinyglobby alias.
+    let rootFastGlob: string | undefined;
+    try {
+      rootFastGlob = (require("fast-glob/package.json") as { name: string }).name;
+    } catch {
+      rootFastGlob = undefined;
+    }
+    expect([undefined, "tinyglobby"]).toContain(rootFastGlob);
   });
 
   it("loads the plugin rule that uses the glob", () => {
