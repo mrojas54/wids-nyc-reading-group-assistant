@@ -19,10 +19,10 @@ dependency updates. This review does not establish exploitation or compromise.
   Preserve both help-command checks, explicit TypeScript flags, all other test
   commands, audit policy, and required status-check names.
 - Align current setup documentation and add Vercel runtime verification steps.
-  No application dependencies, resolved versions, integrity hashes or overrides
-  change; only the lockfile's root engine metadata changes.
+  The initial runtime commit changed only root engine metadata in the lockfile.
+  The follow-up below also resolves the dependency audit failures.
 
-## Validation
+## Initial runtime validation
 
 Local runtime: Node 22.23.4, fresh `npm ci` from the committed dependency graph.
 
@@ -55,21 +55,29 @@ the build to complete. No production credentials were supplied to validation.
 Node 24 and 26 received engine-declaration checks, not full runtime test runs.
 The credential-dependent SPECTER2 parity test remains skipped locally.
 
-## Outstanding merge gates
+## Dependency audit remediation
 
-Live `npm audit` on the unchanged dependency graph reports **5 high and
-1 critical** affected packages: `@vercel/blob`, `@vercel/cli-config`,
-`@vercel/oidc`, `dompurify`, `undici`, and nested `zod`.
-The existing audit gate fails as intended. Runtime updates do not patch npm
-copies of Undici (6.29.0 and 7.30.0 here), DOMPurify (3.4.16), or nested Zod
-(4.1.11 under `@vercel/cli-config`). Resolve these in a dependency-focused
-change and rerun the gate; do not use the audit tool's suggested Blob downgrade
-without reviewing compatibility.
+The first PR CI run confirmed **5 high and 1 critical** affected packages in
+`@vercel/blob`, `@vercel/cli-config`, `@vercel/oidc`, `dompurify`, `undici`,
+and nested `zod`. Node's bundled Undici update does not patch npm copies.
+The follow-up keeps all direct dependency ranges and applies only:
+
+- DOMPurify 3.4.16 → 3.4.17.
+- Undici 6.29.0 → 6.29.1 and jsdom's copy 7.30.0 → 7.30.1.
+- A scoped `@vercel/cli-config` override, `"zod": "$zod"`, resolving its
+  fixed 4.1.11 dependency to the app's existing patched 4.6.7. Even the newest
+  cli-config package still declares 4.1.11, so a parent update alone is insufficient.
+
+The audit gate now reports no high or critical findings. `npm ls zod --all`
+confirms the nested vulnerable copy is gone. Four synthetic schema checks
+verify valid global/auth settings, passthrough keys, and rejection of invalid
+boolean/expiration/token-source fields with the overridden Zod. They do not
+read real Vercel configuration or credentials. No audit exception was added.
 
 The baseline's GitHub web, CLI smoke, Python, Deno and SQL checks were successful:
 [CI run](https://github.com/mrojas54/wids-nyc-reading-group-assistant/actions/runs/39756802235).
 Its Vercel status was successful too. Those historical results do not validate
-this patch or override the newer live audit findings. Obtain fresh PR CI and
+this patch. Obtain fresh PR CI and
 preview-build results before merging.
 
 ## Deployment boundary

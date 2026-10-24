@@ -77,6 +77,12 @@ range. Dependabot only rewrites declared dependencies; a bare
 advisories continue to land on the real package (seen 2026-09-11 before
 `cc9d2c8`). Keep the direct dep + `$postcss` form whenever you touch overrides.
 
+The scoped `@vercel/cli-config` → `zod: "$zod"` override replaces its fixed
+Zod 4.1.11 dependency with the app's patched direct Zod release. Remove it
+when the upstream package requires a patched version and the resolved graph
+audits clean. Keep the scope on that package; do not downgrade Vercel Blob
+to avoid the transitive advisory.
+
 The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only
 (`vitest.config.mts`; the `.mts` extension keeps the config real ESM without
 setting `"type": "module"` on `package.json`), so Vite upgrades affect tests
