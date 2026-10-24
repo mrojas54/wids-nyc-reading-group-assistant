@@ -184,7 +184,7 @@ See `docs/superpowers/specs/2026-05-03-wids-nyc-reading-group-design.md` for the
 ```sh
 cd web
 cp .env.example .env.local   # fill in values
-nvm install && nvm use       # install/select Node 22.22.3 from web/.nvmrc
+nvm install && nvm use       # install/select Node 22.23.4 from web/.nvmrc
 npm ci
 npm run dev
 ```
@@ -247,7 +247,7 @@ docs/                Guides, specs, and plans
 tests/               SQL smoke tests (RLS) + Python unit tests (pytest)
 web/                 Next.js member portal app
 .dvmrc               Deno version pin (CI + Cursor/Claude cloud agents; currently 2.9.5)
-web/.nvmrc           Node version pin for the portal (22.22.3)
+web/.nvmrc           Node version pin for the portal (22.23.4)
 pyproject.toml       Python deps + ruff/ty config (single source of truth)
 ```
 

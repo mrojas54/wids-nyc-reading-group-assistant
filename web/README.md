@@ -30,7 +30,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 ## Local dev
 
 1. Copy `.env.example` to `.env.local` and fill in values from Supabase project.
-2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`22.22.3`; package metadata requires `>=22.12.0`).
+2. Run `nvm install && nvm use` to install/select Node from [`.nvmrc`](.nvmrc) (`22.23.4`; package metadata allows `^22.23.4 || ^24.22.1 || ^26.12.1`).
 3. `npm ci`
 4. `npm run dev` — opens http://localhost:3000
 
@@ -76,6 +76,12 @@ range. Dependabot only rewrites declared dependencies; a bare
 `"postcss": "^8.x"` override is invisible to it, so the pin freezes while
 advisories continue to land on the real package (seen 2026-09-11 before
 `cc9d2c8`). Keep the direct dep + `$postcss` form whenever you touch overrides.
+
+The scoped `@vercel/cli-config` → `zod: "$zod"` override replaces its fixed
+Zod 4.1.11 dependency with the app's patched direct Zod release. Remove it
+when the upstream package requires a patched version and the resolved graph
+audits clean. Keep the scope on that package; do not downgrade Vercel Blob
+to avoid the transitive advisory.
 
 The app is intentionally forced onto Webpack for Next commands (`next dev --webpack`, `next build --webpack`). Vite is used by Vitest only
 (`vitest.config.mts`; the `.mts` extension keeps the config real ESM without
@@ -191,6 +197,30 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
 - **Framework preset:** Next.js (auto-detected when Root Directory is correct).
 - **Deployment Protection:** Vercel Authentication on for Production until cutover. Removed in [member-app plan task 9.3](../docs/superpowers/plans/2026-05-03-wids-member-app.md#task-93-cycle-end-cutover) once members are ready to sign in.
 
+### Node.js security updates
+
+The [October 21, 2026 Node.js advisory](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases)
+is addressed by 22.23.4, 24.22.1, and 26.12.1. Local development and the
+primary CI job use `.nvmrc` (22.23.4); the CLI smoke job independently tests
+the minimum permitted release. The package engine range allows patched
+releases within those three major lines and excludes unpatched releases
+and end-of-life odd-numbered majors. Dependency versions remain locked.
+
+[Vercel selects a major version and manages minor/patch updates](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
+The package engine range can override the dashboard major; `.nvmrc` does
+not prove the deployed patch. Vercel currently documents 22.x and 24.x
+support, so allowing Node 26 locally does not request Node 26 hosting.
+
+Before considering production remediated, record the deployment ID and
+commit, inspect the selected major and build logs (`node -v`), and verify
+the actual server runtime (`process.version` in server-side logs) meets
+that major's patched floor. Build-time evidence alone does not establish
+the function runtime. If the deployed runtime is older, arrange an approved
+redeployment after Vercel makes the patched runtime available, then check
+again. Merging to `main` triggers automatic production deployment; review
+preview checks and obtain deployment approval before merging. Do not expose
+a public diagnostic endpoint or log credentials to verify the version.
+
 ### Supabase auth callback
 
 `<vercel-url>/auth/callback` must be in the Supabase project's allowed redirect URLs (Supabase dashboard → Authentication → URL Configuration). Without this, magic-link sign-in returns a 404 and the user is stuck on the callback page.
@@ -205,7 +235,7 @@ see [../docs/admin-suggest.md](../docs/admin-suggest.md).
   Use `op run` to inject the token without it touching your shell history:
 
   ```sh
-  nvm use 20   # Node 20+; a stale macOS system npm at /usr/local predates node:path support
+  nvm install && nvm use   # select the patched Node version from .nvmrc
   op run --env-file <(printf 'BLOB_READ_WRITE_TOKEN=op://Personal/4vsjnrbjyhlqju5mbtw2kcf3ba/credential\nSPECTER2_MODEL_BLOB_URL=https://dzoasz69j2a1a7lp.private.blob.vercel-storage.com/specter2/specter2_int8.onnx\nRUN_PARITY=1\n') -- \
     npm --prefix . test -- lib/suggest/__tests__/parity.test.ts
   ```
