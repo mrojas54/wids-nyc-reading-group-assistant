@@ -3,7 +3,7 @@
 #
 # Prepares the three toolchains this repo's CI exercises:
 #   - Python 3.13 via uv         (scripts/ + tests/: ruff, ty, pytest)
-#   - Node 22.22.3 via nvm       (web/: Next.js member portal)
+#   - Node 22.23.4 via nvm       (web/: Next.js member portal)
 #   - Deno, pinned by .dvmrc     (supabase/functions/: edge-function check + lint)
 #
 # Safe to run repeatedly: every tool install is guarded, and dependency
@@ -31,7 +31,7 @@ export PATH="$HOME/.local/bin:$PATH"
 # functions here on a major CI had never run.
 #
 # Pinning exactly (rather than a `2.x` range) mirrors how web/.nvmrc pins Node
-# to 22.22.3. The install script takes a concrete version tag, not a range, so
+# to 22.23.4. The install script takes a concrete version tag, not a range, so
 # an exact pin is also the only form both consumers can share verbatim.
 DENO_VERSION="$(cat .dvmrc)"
 if [ "$(deno --version 2>/dev/null | head -1 | cut -d' ' -f2)" != "$DENO_VERSION" ]; then

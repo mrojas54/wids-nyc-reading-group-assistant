@@ -69,7 +69,7 @@ jobs:
         run: npm run test
 
   web-min-node:
-    # package.json engines allows Node >=22.12.0, but CI otherwise runs .nvmrc.
+    # Keep this at the lowest patched version allowed by package.json engines.
     # Smoke the TypeScript CLIs on the minimum so a flag only newer Node
     # versions imply (type stripping) can't slip through.
     name: web (min Node CLI smoke)
@@ -86,7 +86,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22.12.0
+          node-version: 22.23.4
           cache: npm
           cache-dependency-path: web/package-lock.json
 
