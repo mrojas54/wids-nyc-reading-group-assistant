@@ -1,51 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { AssessmentQuiz, Lens, QuizQuestion } from "@/lib/paperpal/types";
 import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
 import { fetchHint } from "@/lib/paperpal/hint";
+import {
+  MCQ_INITIAL,
+  applyHint,
+  currentIndex,
+  eliminatedAt,
+  goToQuestion,
+  hintCap,
+  nextQuestion,
+  prevQuestion,
+  scoreQuiz,
+  selectAnswer,
+  submitAnswer,
+  type McqState,
+} from "@/lib/paperpal/mcq";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import type { AnalyzeHintResponse, HintConfidence } from "@/lib/paperpal/wire";
+import type { AnalyzeHintResponse } from "@/lib/paperpal/wire";
+import { AiHintNote, type AiHintState } from "./AiHintNote";
+import { McqResults } from "./McqResults";
 import "./assessment.css";
-
-type AiHintState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; hint: string; confidence: HintConfidence }
-  | { status: "error"; message: string };
-
-const CONFIDENCE_COLOR: Record<HintConfidence, string> = {
-  low: "var(--color-paper-400)",
-  medium: "var(--color-indigo-400)",
-  high: "var(--color-sage-600)",
-};
-
-interface McqState {
-  idx: number;
-  answers: Record<number, number>;
-  submitted: Record<number, boolean>;
-  hints: Record<number, number[]>;
-  done: boolean;
-}
-
-const INITIAL: McqState = {
-  idx: 0,
-  answers: {},
-  submitted: {},
-  hints: {},
-  done: false,
-};
 
 const LENS_LABEL: Record<Lens, string> = {
   beginner: "Beginner",
   engineer: "Engineer",
   expert: "Expert",
-};
-
-const LENS_HINT_BUDGET: Record<Lens, number> = {
-  beginner: 3,
-  engineer: 2,
-  expert: 1,
 };
 
 export function McqMode({
@@ -61,23 +43,16 @@ export function McqMode({
   const [state, setState] = usePaperLocalState<McqState>(
     paperId,
     "assessment:mcq",
-    INITIAL,
+    MCQ_INITIAL,
   );
   const [aiHint, setAiHint] = useState<Record<number, AiHintState>>({});
 
-  const idx = Math.min(
-    Math.max(0, state.idx || 0),
-    Math.max(0, questions.length - 1),
-  );
+  const idx = currentIndex(state, questions.length);
   const current: QuizQuestion | undefined = questions[idx];
   const selected = state.answers[idx];
   const showFeedback = !!state.submitted[idx];
-  const eliminated = state.hints[idx] || [];
-  const optionCount = current?.options.length ?? 0;
-  const HINT_CAP = useMemo(
-    () => Math.min(LENS_HINT_BUDGET[lens], Math.max(1, optionCount - 2)),
-    [lens, optionCount],
-  );
+  const eliminated = eliminatedAt(state, idx);
+  const HINT_CAP = hintCap(lens, current?.options.length ?? 0);
 
   if (!current) {
     return (
@@ -87,30 +62,16 @@ export function McqMode({
     );
   }
 
-  const update = (patch: Partial<McqState>) =>
-    setState({ ...state, ...patch });
-
-  const setAnswer = (i: number) => {
-    if (showFeedback || eliminated.includes(i)) return;
-    update({ answers: { ...state.answers, [idx]: i } });
+  const apply = (next: McqState) => {
+    if (next !== state) setState(next);
   };
 
+  const setAnswer = (i: number) => apply(selectAnswer(state, idx, i));
+
   const useHint = () => {
-    if (showFeedback || eliminated.length >= HINT_CAP) return;
-    const candidates = current.options
-      .map((_, i) => i)
-      .filter(
-        (i) => i !== current.correctAnswerIndex && !eliminated.includes(i),
-      );
-    if (!candidates.length) return;
-    const pick = candidates.find((i) => i !== selected) ?? candidates[0];
-    const nextHints = { ...state.hints, [idx]: [...eliminated, pick] };
-    let nextAnswers = state.answers;
-    if (selected === pick) {
-      nextAnswers = { ...state.answers };
-      delete nextAnswers[idx];
-    }
-    update({ hints: nextHints, answers: nextAnswers });
+    const next = applyHint(state, idx, current, HINT_CAP);
+    if (next === state) return;
+    setState(next);
     if (current.sectionRef) recordHint(paperId, current.sectionRef);
   };
 
@@ -147,47 +108,14 @@ export function McqMode({
     }
   };
 
-  const submit = () => {
-    if (selected == null || showFeedback) return;
-    update({ submitted: { ...state.submitted, [idx]: true } });
-  };
+  const submit = () => apply(submitAnswer(state, idx));
+  const next = () => apply(nextQuestion(state, idx, questions.length));
+  const prev = () => apply(prevQuestion(state, idx));
+  const goToQ = (i: number) => setState(goToQuestion(state, i));
+  const reset = () => setState(MCQ_INITIAL);
 
-  const next = () => {
-    if (idx + 1 >= questions.length) update({ done: true });
-    else update({ idx: idx + 1 });
-  };
-
-  const prev = () => {
-    if (idx === 0) return;
-    update({ idx: idx - 1 });
-  };
-
-  const goToQ = (i: number) => update({ idx: i, done: false });
-
-  const reset = () => setState(INITIAL);
-
-  const score = questions.reduce(
-    (acc, q, i) => acc + (state.answers[i] === q.correctAnswerIndex ? 1 : 0),
-    0,
-  );
-  const pct = Math.round((score / questions.length) * 100);
-
+  const score = scoreQuiz(state, questions);
   const done = state.done;
-  const grade =
-    pct >= 80
-      ? "Strong recall"
-      : pct >= 60
-      ? "Workable understanding"
-      : "Re-read recommended";
-  const stroke =
-    pct >= 80
-      ? "var(--color-sage-600)"
-      : pct >= 60
-      ? "var(--color-warning-500, #c89a3a)"
-      : "var(--color-magenta-500)";
-  const r = 56;
-  const c = 2 * Math.PI * r;
-  const dash = c * (pct / 100);
 
   return (
     <div className="pp-assessment-shell">
@@ -346,47 +274,7 @@ export function McqMode({
               </div>
             )}
 
-            {aiHint[idx] && aiHint[idx].status !== "idle" && (
-              <div
-                className="pp-hint-note"
-                role="status"
-                style={{ flexDirection: "column", alignItems: "stretch" }}
-              >
-                {aiHint[idx].status === "loading" && (
-                  <span>Asking the AI for a hint…</span>
-                )}
-                {aiHint[idx].status === "ready" && (
-                  <>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          padding: "2px 8px",
-                          borderRadius: 999,
-                          background: CONFIDENCE_COLOR[
-                            (aiHint[idx] as { confidence: HintConfidence }).confidence
-                          ],
-                          color: "white",
-                          textTransform: "capitalize",
-                        }}
-                      >
-                        {(aiHint[idx] as { confidence: HintConfidence }).confidence}{" "}
-                        confidence
-                      </span>
-                      <strong>AI hint</strong>
-                    </div>
-                    <p style={{ marginTop: 6, lineHeight: 1.55 }}>
-                      {(aiHint[idx] as { hint: string }).hint}
-                    </p>
-                  </>
-                )}
-                {aiHint[idx].status === "error" && (
-                  <span>
-                    {(aiHint[idx] as { message: string }).message}
-                  </span>
-                )}
-              </div>
-            )}
+            <AiHintNote hint={aiHint[idx]} />
 
             {showFeedback && (
               <div
@@ -463,70 +351,11 @@ export function McqMode({
             </div>
           </>
         ) : (
-          <div style={{ textAlign: "center", paddingTop: 16 }}>
-            <div className="pp-score-circle">
-              <svg viewBox="0 0 140 140">
-                <circle
-                  cx="70"
-                  cy="70"
-                  r={r}
-                  fill="none"
-                  stroke="var(--color-paper-200)"
-                  strokeWidth="10"
-                />
-                <circle
-                  cx="70"
-                  cy="70"
-                  r={r}
-                  fill="none"
-                  stroke={stroke}
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  strokeDasharray={`${dash} ${c}`}
-                />
-              </svg>
-              <div className="pp-num">
-                {score}/{questions.length}
-              </div>
-            </div>
-            <span className="pp-eyebrow">Result · {pct}%</span>
-            <div
-              style={{
-                fontFamily: "var(--font-serif)",
-                fontSize: 28,
-                fontWeight: 500,
-                letterSpacing: "-0.02em",
-                marginTop: 8,
-                color: "var(--fg-1)",
-              }}
-            >
-              {grade}
-            </div>
-            <div
-              style={{
-                marginTop: 6,
-                fontSize: 14,
-                color: "var(--fg-3)",
-                maxWidth: "48ch",
-                margin: "6px auto 0",
-                lineHeight: 1.55,
-              }}
-            >
-              Jump back into the synthesis to revisit anything you missed.
-            </div>
-            <div
-              style={{
-                marginTop: 22,
-                display: "flex",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              <button className="pp-btn" onClick={reset}>
-                Retake
-              </button>
-            </div>
-          </div>
+          <McqResults
+            score={score}
+            total={questions.length}
+            onRetake={reset}
+          />
         )}
       </div>
     </div>
