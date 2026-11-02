@@ -1,8 +1,9 @@
 // Pure state transitions for the multiple-choice assessment (McqMode).
 //
-// The component keeps this state in localStorage via usePaperLocalState and
-// only renders; every rule about answering, hints, submitting and moving
-// between questions lives here so it can be tested without a DOM. Each
+// This module owns the synchronous quiz state transitions: answering,
+// eliminating options, submitting, moving between questions and scoring, so
+// they can be tested without a DOM. McqMode still owns the AI hint request,
+// the localStorage wiring (usePaperLocalState) and recordHint calls. Each
 // transition returns the same state object when the action is not allowed,
 // so callers can skip the write (and any side effect) on a no-op.
 
@@ -38,7 +39,10 @@ export function currentIndex(state: McqState, questionCount: number): number {
   );
 }
 
-/** Eliminate-an-option hints allowed per question: the lens budget, always leaving two options. */
+/**
+ * Eliminate-an-option hints allowed per question: the lens budget, capped so
+ * two options stay. A question with only two options still allows one hint.
+ */
 export function hintCap(lens: Lens, optionCount: number): number {
   return Math.min(LENS_HINT_BUDGET[lens], Math.max(1, optionCount - 2));
 }

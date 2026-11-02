@@ -41,7 +41,7 @@ describe("currentIndex", () => {
 });
 
 describe("hintCap", () => {
-  it("uses the lens budget but always leaves two options", () => {
+  it("uses the lens budget, leaving two options except on two-option questions", () => {
     expect(hintCap("beginner", 4)).toBe(2);
     expect(hintCap("beginner", 5)).toBe(3);
     expect(hintCap("engineer", 4)).toBe(2);
