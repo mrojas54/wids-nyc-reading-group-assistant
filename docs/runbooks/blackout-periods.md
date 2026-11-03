@@ -36,12 +36,13 @@ A bare timestamp is interpreted in the database session's timezone and will be
 off by the UTC offset — during EDT that silently shifts every boundary by four
 hours.
 
-## Current windows (seeded by migration 021)
+## Current windows (seeded by migrations 021 and 039)
 
 | id | Blocks (inclusive, ET) | `range_start` | `range_end` (exclusive) | reason |
 |---|---|---|---|---|
 | 1 | Jul 12 – Jul 31, 2026 | `2026-07-12 00:00 America/New_York` | `2026-08-01 00:00 America/New_York` | Summer break part 1 (Jul 12 – Jul 31, 2026) |
 | 2 | Aug 21 – Sep 7, 2026 | `2026-08-21 00:00 America/New_York` | `2026-09-08 00:00 America/New_York` | Summer break part 2 (Aug 21 – Sep 7, 2026) |
+| 3 | Dec 19, 2026 – Jan 3, 2027 | `2026-12-19 00:00 America/New_York` | `2027-01-04 00:00 America/New_York` | Winter break (Dec 19, 2026 – Jan 3, 2027). Seeded by migration 039, not 021. |
 
 The gap **Aug 1 – Aug 20, 2026 is bookable**. `id` values are assigned by the
 `SERIAL` sequence; confirm them with the view query below before editing.
