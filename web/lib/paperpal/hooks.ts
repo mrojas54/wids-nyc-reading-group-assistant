@@ -1,16 +1,23 @@
 "use client";
 
-// localStorage-backed state hooks for PaperPal. SSR-safe: every access guards
-// `typeof window` so server renders return the initial value and hydration
-// catches up on mount.
+// PaperPal browser state uses server defaults during hydration, then restores
+// the member's saved state without replacing the server-rendered DOM.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { HintFlags, SectionRef } from "./types";
 
 const NS = "paperpal:v1:";
 
 const globalKey = (key: string) => `${NS}${key}`;
 const paperKey = (paperId: string, key: string) => `${NS}${paperId}:${key}`;
+
+const subscribeHydration = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
+
+function useHydrated(): boolean {
+  return useSyncExternalStore(subscribeHydration, clientSnapshot, serverSnapshot);
+}
 
 function readJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -36,19 +43,15 @@ export function useLocalState<T>(
   fullKey: string,
   initial: T | (() => T),
 ): [T, (v: T | ((prev: T) => T)) => void] {
-  // The lazy initializer runs once on mount; closing over the first-render
-  // `initial` matches the previous useRef-captured behavior.
-  const [value, setValue] = useState<T>(() => {
-    const base =
-      typeof initial === "function" ? (initial as () => T)() : initial;
-    return readJSON<T>(fullKey, base);
-  });
+  const hydrated = useHydrated();
+  const [initialValue] = useState<T>(initial);
+  const [value, setValue] = useState<T>(() => readJSON<T>(fullKey, initialValue));
 
   useEffect(() => {
-    writeJSON(fullKey, value);
-  }, [fullKey, value]);
+    if (hydrated) writeJSON(fullKey, value);
+  }, [fullKey, value, hydrated]);
 
-  return [value, setValue];
+  return [hydrated ? value : initialValue, setValue];
 }
 
 export function useGlobalLocalState<T>(
@@ -70,6 +73,7 @@ export function usePaperLocalState<T>(
 
 const hintFlagsKey = (paperId: string) => paperKey(paperId, "hintFlags");
 const HINT_EVENT = "paperpal:hint-flags-changed";
+const EMPTY_HINT_FLAGS: HintFlags = {};
 
 function readHintFlags(paperId: string): HintFlags {
   return readJSON<HintFlags>(hintFlagsKey(paperId), {});
@@ -101,6 +105,7 @@ export function clearHintFlags(paperId: string): void {
 }
 
 export function useHintFlags(paperId: string): HintFlags {
+  const hydrated = useHydrated();
   const [flags, setFlags] = useState<HintFlags>(() => readHintFlags(paperId));
 
   // Re-read when the paper changes, during render rather than in an effect.
@@ -124,5 +129,5 @@ export function useHintFlags(paperId: string): HintFlags {
     };
   }, [refresh]);
 
-  return flags;
+  return hydrated ? flags : EMPTY_HINT_FLAGS;
 }

@@ -60,16 +60,19 @@ export function SocraticMode({
   const [networkError, setNetworkError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
-  // Seed opener once.
+  // Hydration shows an empty thread first; preserve any saved conversation.
   useEffect(() => {
     if (thread.length === 0) {
-      setThread([
-        {
-          role: "tutor",
-          body: prompt.openingQuestion,
-          ts: Date.now(),
-        },
-      ]);
+      setThread((saved) => {
+        if (saved.length > 0) return saved;
+        return [
+          {
+            role: "tutor",
+            body: prompt.openingQuestion,
+            ts: Date.now(),
+          },
+        ];
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompt.id]);
