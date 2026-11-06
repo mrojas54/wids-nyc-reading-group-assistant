@@ -157,3 +157,51 @@ it("preserves an existing Socratic conversation while hydrating its server place
     if (writtenKey === key) expect(JSON.parse(value)).toEqual(saved);
   }
 });
+
+it("restores Socratic mode and its conversation together", async () => {
+  const tweaks = { mode: "socratic", lens: "expert" };
+  const thread = [
+    { role: "learner", body: "The full history explains unsuccessful experiments.", ts: 1 },
+  ];
+  window.localStorage.setItem("paperpal:v1:tweaks", JSON.stringify(tweaks));
+  window.localStorage.setItem("paperpal:v1:40:socratic:thread:harness", JSON.stringify(thread));
+
+  const { container, onRecoverableError } = await hydrate(
+    <AssessmentPanel paperId="40" quiz={quiz} socraticPrompts={[prompt]} />,
+  );
+
+  expect(onRecoverableError).not.toHaveBeenCalled();
+  expect(within(container).getByRole("tab", { name: "Socratic tutor" })).toHaveAttribute("aria-selected", "true");
+  expect(within(container).getByText(thread[0].body)).toBeVisible();
+  expect(JSON.parse(window.localStorage.getItem("paperpal:v1:tweaks")!)).toEqual(tweaks);
+  expect(JSON.parse(window.localStorage.getItem("paperpal:v1:40:socratic:thread:harness")!)).toEqual(thread);
+});
+
+it.each(["empty", "malformed", "unavailable"])(
+  "hydrates and accepts quiz answers when storage is %s",
+  async (storage) => {
+    if (storage === "malformed") {
+      window.localStorage.setItem("paperpal:v1:40:assessment:mcq", "invalid json");
+    } else if (storage === "unavailable") {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new DOMException("Storage disabled", "SecurityError");
+      });
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException("Storage disabled", "SecurityError");
+      });
+    }
+
+    const { container, serverNode, onRecoverableError } = await hydrate(
+      <McqMode paperId="40" quiz={quiz} lens="engineer" />,
+    );
+
+    expect(onRecoverableError).not.toHaveBeenCalled();
+    expect(container.firstElementChild).toBe(serverNode);
+    const submit = within(container).getByRole("button", { name: "Submit answer" });
+    expect(submit).toBeDisabled();
+    fireEvent.click(within(container).getByRole("button", { name: /The full experiment history/ }));
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    expect(within(container).getByText("Correct.")).toBeVisible();
+  },
+);
