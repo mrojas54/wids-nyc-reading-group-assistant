@@ -11,6 +11,7 @@ window you add is honored everywhere without a redeploy.
 | Codepath | Role |
 |---|---|
 | `migrations/021_blackout_periods.sql` | Creates the `blackout_periods` table and seeds the two 2026 summer-break windows. |
+| `migrations/039_winter_break_2026.sql` | Defines the December 19–January 3 winter window. Its production row was inserted through the Data API on November 6, 2026. |
 | `web/lib/blackout.ts` | Shared overlap helper (`isDayBlackedOut`, `blackedOutDays`, type `BlackoutPeriod`) — the single source of truth for "is this day blocked?". |
 | `.claude/commands/wids-schedule-admin.md` | Scheduler Step 2 filters candidate slots with a `NOT EXISTS (… blackout_periods …)` clause. |
 | `.claude/commands/wids-schedule-reading-group.md` | Inherits the same filter (reuses the admin Step-2 query). |
@@ -19,6 +20,7 @@ window you add is honored everywhere without a redeploy.
 | `web/app/availability/actions.ts` (`submitAvailability`) | Authoritative server-side rejection of any submitted day inside a window. |
 | `tests/blackout_periods_test.sql` | psql fixture test for the scheduler filter + the `CHECK` constraint. |
 | `web/lib/__tests__/blackout.test.ts`, `web/components/__tests__/MonthCalendar.blackout.test.tsx` | Unit + render coverage for the helper and the greyed calendar. |
+| `web/components/__tests__/MonthCalendar.winter.test.tsx` | Winter boundaries, disabled clicks, form prefill, and the calendar's month horizon. Submission and network access are mocked. |
 
 ## The one rule that bites: `range_end` is exclusive
 
@@ -36,16 +38,24 @@ A bare timestamp is interpreted in the database session's timezone and will be
 off by the UTC offset — during EDT that silently shifts every boundary by four
 hours.
 
-## Current windows (seeded by migrations 021 and 039)
+## Production windows (verified 2026-11-06)
 
 | id | Blocks (inclusive, ET) | `range_start` | `range_end` (exclusive) | reason |
 |---|---|---|---|---|
 | 1 | Jul 12 – Jul 31, 2026 | `2026-07-12 00:00 America/New_York` | `2026-08-01 00:00 America/New_York` | Summer break part 1 (Jul 12 – Jul 31, 2026) |
 | 2 | Aug 21 – Sep 7, 2026 | `2026-08-21 00:00 America/New_York` | `2026-09-08 00:00 America/New_York` | Summer break part 2 (Aug 21 – Sep 7, 2026) |
-| 3 | Dec 19, 2026 – Jan 3, 2027 | `2026-12-19 00:00 America/New_York` | `2027-01-04 00:00 America/New_York` | Winter break (Dec 19, 2026 – Jan 3, 2027). Seeded by migration 039, not 021. |
+| 5 | Dec 19, 2026 – Jan 3, 2027 | `2026-12-19 00:00 America/New_York` | `2027-01-04 00:00 America/New_York` | Winter break (Dec 19, 2026 – Jan 3, 2027) |
 
 The gap **Aug 1 – Aug 20, 2026 is bookable**. `id` values are assigned by the
 `SERIAL` sequence; confirm them with the view query below before editing.
+
+The winter row matches migration `039`, but was inserted through the Data API
+after the migration API timed out. A fresh GET verified one winter row and
+unchanged summer rows. The insert did not create a migration-history entry;
+history reconciliation remains open because history reads also timed out.
+See the [production insert record](../../migrations/README.md#winter-break-production-insert-2026-11-06)
+for the timestamps and verification limits. Fresh databases may assign a
+different ID when replaying the migrations.
 
 ## Where changes take effect
 
@@ -66,10 +76,12 @@ enables RLS and the table intentionally has **no policies**, so the anon and
 authenticated (browser) keys cannot see it — exactly like `command_log`. Manage
 it from a privileged context only:
 
-- the **Supabase SQL Editor** (runs as the table owner, bypasses RLS), or
-- the **Supabase MCP** `execute_sql` / `apply_migration` tools (service role).
+- the **Supabase SQL Editor** (runs as the table owner, bypasses RLS),
+- the **Supabase MCP** `execute_sql` / `apply_migration` tools (service role), or
+- an authorized server-side **Data API** request with a service-role credential.
 
-There is no operator UI and no slash command — window changes are direct SQL.
+There is no operator UI or slash command for managing windows. Direct Data API
+writes do not record migration history.
 
 ### View current windows
 
@@ -169,8 +181,14 @@ Portal helper + greyed calendar (from `web/`):
 
 ```sh
 npm test -- blackout
+npm test -- MonthCalendar.winter
 ```
 
 Covers `lib/__tests__/blackout.test.ts` (overlap + boundary days) and
 `components/__tests__/MonthCalendar.blackout.test.tsx` (a day inside a window
 renders disabled; a bookable gap day does not).
+
+`MonthCalendar.winter.test.tsx` covers every December 19–January 3 button,
+January 4 selection, blocked prefill in `AvailabilityForm`, and the November
+horizon. Its December fixture uses December 1 as today so both December and
+January are rendered. Submission is mocked and never invoked.
