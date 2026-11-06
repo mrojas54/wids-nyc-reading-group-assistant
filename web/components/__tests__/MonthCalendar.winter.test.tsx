@@ -52,6 +52,20 @@ afterEach(() => {
 });
 
 describe("winter blackout calendar", () => {
+  it("keeps every winter date and January 4 enabled without blackout data", () => {
+    render(
+      <MonthCalendar
+        today={DECEMBER_TODAY}
+        initialSelected={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    for (const day of [...WINTER_DAYS, "2027-01-04"]) {
+      expect(dayButton(day), day).toBeEnabled();
+    }
+  });
+
   it("disables December 19–January 3 while December 18 and January 4 stay enabled", () => {
     render(
       <MonthCalendar
@@ -112,5 +126,24 @@ describe("winter blackout calendar", () => {
     expect(dayButton("2027-01-04")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("day selected", { exact: false })).toHaveTextContent("1 day selected");
     expect(screen.getByRole("button", { name: "Update availability" })).toBeEnabled();
+  });
+
+  it("keeps the November calendar horizon separate from blackout restrictions", () => {
+    render(
+      <MonthCalendar
+        today={new Date(2026, 10, 6, 12)}
+        initialSelected={[]}
+        onChange={() => {}}
+        blackoutPeriods={WINTER}
+      />,
+    );
+
+    for (const day of WINTER_DAYS.filter((day) => day.startsWith("2026-12"))) {
+      expect(dayButton(day), day).toBeDisabled();
+    }
+    expect(dayButton("2026-12-18")).toBeEnabled();
+    expect(screen.queryByRole("button", {
+      name: new Date(2027, 0, 4).toDateString(),
+    })).not.toBeInTheDocument();
   });
 });
