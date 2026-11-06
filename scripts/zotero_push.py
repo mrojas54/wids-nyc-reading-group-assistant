@@ -36,7 +36,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, LiteralString, Optional
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -319,8 +319,11 @@ def record_failure(
     are appended only when supplied, so callers (and existing rows) that don't
     care about them are unaffected.
     """
-    columns = ["source", "name", "status", "error"]
-    placeholders = ["'slash_command'", "%s", "'failure'", "%s"]
+    # LiteralString lists keep the composed statement a LiteralString, so the
+    # type checker can see only hard-coded SQL reaches cur.execute; values go
+    # through `params`.
+    columns: list[LiteralString] = ["source", "name", "status", "error"]
+    placeholders: list[LiteralString] = ["'slash_command'", "%s", "'failure'", "%s"]
     params: list[object] = [name, error]
 
     if actor is not None:
@@ -345,10 +348,7 @@ def record_failure(
         f"VALUES ({', '.join(placeholders)})"
     )
     with conn.cursor() as cur:
-        # sql is composed solely from hard-coded column/placeholder literals
-        # (values are parameterized via `params`), so it is injection-safe even
-        # though it is not a LiteralString to the type checker.
-        cur.execute(sql, tuple(params))  # ty: ignore[invalid-argument-type]
+        cur.execute(sql, tuple(params))
     conn.commit()
 
 
