@@ -7,9 +7,9 @@ Editor, or with the Supabase MCP `apply_migration` tool (omit the
 transaction).
 
 Filenames define apply order. MCP `apply_migration` also writes a row
-to `supabase_migrations.schema_migrations`. A SQL Editor paste does
-not. Do not treat a missing history row as "not applied" — check the
-object itself (see post-migration verification).
+to `supabase_migrations.schema_migrations`. A SQL Editor paste or a direct
+Data API insert does not. Do not treat a missing history row as "not applied" —
+check the object itself (see post-migration verification).
 
 The live project is through `034` as of 2026-09-21 (MCP history names
 `031_members_column_grants`, `032_replace_my_availability`,
@@ -62,7 +62,47 @@ unapplied migration you have not yet run anywhere is fine.
 | `036_paper_passage_access_and_keywords.sql` | Follow-up to 035 (applied, so not edited). Limits RSVP-based passage access to `attending` RSVPs on meetings that are still `scheduled` and started no more than 24 hours ago, since members write their own RSVPs. Adds `match_paper_passage_keywords`, which ranks keyword candidates by `ts_rank_cd` instead of page order. Tested with every migration by `tests/paper_passage_search_run.sh` in CI. **Applied 2026-10-12** via Supabase MCP `apply_migration` (records a migration-history row); verified by function definition, grant, and keyword-RPC readback. |
 | `037_papers_url_scheme.sql` | Pins `papers.url` and `papers.pdf_drive_url` to `^https?://`, and `papers.companion_url` to that or a site-relative `/<path>` (not `//host`, `/\host`, `/<tab>/host`, or anything with a `.`/`..` segment — each reads as, or collapses to, a protocol-relative path once an href parser is done with it). All three are rendered into an `href` by the portal — `PaperHero` on the operator-only `/admin/schedule` rail among them — so any other scheme is stored XSS. The render sites validate the scheme too (`web/lib/safeUrl.ts`), but the live write path for `papers.url` is the raw `INSERT` that `/wids-find-paper` runs, with no application guard in front of it. Additive: three CHECKs, no row rewrite; the violation preview was empty on the live project. **Not yet applied.** |
 | `038_explicit_data_api_grants.sql` | Makes table, sequence, schema, and service-only RPC grants explicit. Preserves existing RLS policies and enables RLS where fresh installs lacked the custom trigger. **Applied 2026-10-22** to production via `supabase db query --linked --project-ref dmyulakudbdegwkqgelx`; verified by live grant/RLS checks and member-session hosted REST checks. This path does not add a migration-history row. See the production verification record below. |
-| `039_winter_break_2026.sql` | Adds the 2026 winter break to `blackout_periods`: Sat Dec 19, 2026 through Sun Jan 3, 2027 inclusive (ET), `range_end` `2027-01-04 00:00 America/New_York`. Same shape as the `021` summer windows. Data only, one `INSERT` guarded by `NOT EXISTS`, so it is re-runnable. No confirmation needed. **Not yet applied.** |
+| `039_winter_break_2026.sql` | Adds the 2026 winter break to `blackout_periods`: Sat Dec 19, 2026 through Sun Jan 3, 2027 inclusive (ET), `range_end` `2027-01-04 00:00 America/New_York`. Data only, one `INSERT` guarded by `NOT EXISTS`. **Production data change completed 2026-11-06** through the Data API, with row `id=5` verified by a fresh GET. This insert did not create a migration-history entry. See the [production record](#winter-break-production-insert-2026-11-06). |
+
+## Winter break production insert (2026-11-06)
+
+The data change defined by `039_winter_break_2026.sql` was completed in production
+project `dmyulakudbdegwkqgelx` through the Data API. A pre-insert GET returned only
+the two summer windows and no matching winter window. One POST to
+`/rest/v1/blackout_periods` returned **201 Created** with row **5**. The insert used
+the existing service-role credential in memory; it was not printed or saved.
+
+A separate GET at **2026-11-06 00:00:26 America/New_York**
+(`2026-11-06T05:00:26Z`) returned the complete table (`Content-Range: 0-2/3`):
+
+| Field | Verified value |
+|---|---|
+| `id` | `5` |
+| `range_start` | `2026-12-19T05:00:00+00:00` — December 19 at midnight EST |
+| `range_end` (exclusive) | `2027-01-04T05:00:00+00:00` — January 4 at midnight EST |
+| `reason` | `Winter break (Dec 19, 2026 – Jan 3, 2027)` |
+
+The readback contained exactly one matching winter window. All 16 dates from
+December 19 through January 3 overlapped it; December 18 and January 4 did not.
+The two summer rows were unchanged.
+
+**Migration history remains unreconciled.** The earlier migration API attempt
+returned HTTP 544 while initializing the history table. SQL and migration-history
+reads also timed out. The successful Data API insert does not write
+`supabase_migrations.schema_migrations`, so that operation created no history
+entry. A separate read confirming the history table's contents was unavailable.
+The verified production row establishes the data change; the migration runner
+did not report a successful application.
+
+The member portal's `/availability` page subsequently displayed its empty state
+("Nothing to schedule right now"), with no calendar to inspect. Local render
+coverage is retained in
+[`MonthCalendar.winter.test.tsx`](../web/components/__tests__/MonthCalendar.winter.test.tsx):
+all 16 dates are disabled, January 4 is selectable, blocked prefill is removed,
+and the form does not submit. The December/January fixture fixes today at
+December 1 so January is within the normal horizon; a separate November fixture
+checks that January is not rendered yet. These tests do not establish live
+browser rendering or a completed availability submission.
 
 ## `ensure_rls` event trigger
 
