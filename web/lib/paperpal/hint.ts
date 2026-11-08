@@ -17,7 +17,7 @@ export type FetchHintInput = {
 
 export async function fetchHint(
   input: FetchHintInput,
-  { accessToken }: { accessToken: string },
+  { accessToken, signal }: { accessToken: string; signal?: AbortSignal },
 ): Promise<AnalyzeHintResponse> {
   const body: Record<string, unknown> = {
     paper_id: input.paperId,
@@ -32,5 +32,6 @@ export async function fetchHint(
     "/functions/v1/analyze-hint",
     body,
     accessToken,
+    signal,
   );
 }
