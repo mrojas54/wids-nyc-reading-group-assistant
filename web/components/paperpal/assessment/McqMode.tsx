@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AssessmentQuiz, Lens, QuizQuestion } from "@/lib/paperpal/types";
 import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
 import { fetchHint } from "@/lib/paperpal/hint";
@@ -18,7 +18,7 @@ import {
   submitAnswer,
   type McqState,
 } from "@/lib/paperpal/mcq";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { withPaperPalSession } from "@/lib/paperpal/request";
 import type { AnalyzeHintResponse } from "@/lib/paperpal/wire";
 import { AiHintNote, type AiHintState } from "./AiHintNote";
 import { McqResults } from "./McqResults";
@@ -45,6 +45,8 @@ export function McqMode({
     "assessment:mcq",
     MCQ_INITIAL,
   );
+  const controllers = useRef(new Set<AbortController>());
+  useEffect(() => { const active = controllers.current; return () => { for (const c of active) c.abort(); }; }, []);
   const [aiHint, setAiHint] = useState<Record<number, AiHintState>>({});
 
   const idx = currentIndex(state, questions.length);
@@ -79,20 +81,18 @@ export function McqMode({
     if (selected == null || showFeedback) return;
     if (aiHint[idx]?.status === "loading") return;
     setAiHint((s) => ({ ...s, [idx]: { status: "loading" } }));
+    const controller = new AbortController();
+    controllers.current.add(controller);
     try {
-      const sb = createSupabaseBrowserClient();
-      const { data } = await sb.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error("not_signed_in");
-      const result: AnalyzeHintResponse = await fetchHint(
+      const result: AnalyzeHintResponse = await withPaperPalSession((token, signal, timeoutMs) => fetchHint(
         {
           paperId: Number.parseInt(paperId, 10),
           questionText: current.question,
           questionOptions: current.options,
           userAnswer: current.options[selected],
         },
-        { accessToken: token },
-      );
+        { accessToken: token, signal, timeoutMs },
+      ), controller.signal);
       setAiHint((s) => ({
         ...s,
         [idx]: { status: "ready", hint: result.hint, confidence: result.confidence },
@@ -100,12 +100,13 @@ export function McqMode({
       if (current.sectionRef) recordHint(paperId, current.sectionRef);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      if (message === "request_cancelled") return;
       const friendly =
         message === "not_attending_meeting_for_paper"
           ? "RSVP to a meeting using this paper to unlock written hints."
           : "Couldn't fetch a hint. Try again in a moment.";
       setAiHint((s) => ({ ...s, [idx]: { status: "error", message: friendly } }));
-    }
+    } finally { controllers.current.delete(controller); }
   };
 
   const submit = () => apply(submitAnswer(state, idx));

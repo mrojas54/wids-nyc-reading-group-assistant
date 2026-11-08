@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
 import { usePaperLocalState } from "@/lib/paperpal/hooks";
 import { fetchSocratic } from "@/lib/paperpal/socratic";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { withPaperPalSession } from "@/lib/paperpal/request";
 import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
 import "./assessment.css";
 
@@ -54,6 +54,9 @@ export function SocraticMode({
     false,
   );
 
+  const activeRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => activeRequest.current?.abort(), []);
+
   const [input, setInput] = useState("");
   const [pulse, setPulse] = useState(false);
   const [sending, setSending] = useState(false);
@@ -99,19 +102,17 @@ export function SocraticMode({
 
   const send = async () => {
     const text = input.trim();
-    if (!text || synthesized || sending) return;
+    if (!text || synthesized || activeRequest.current) return;
     setInput("");
     setNetworkError(null);
     const learnerMsg: Message = { role: "learner", body: text, ts: Date.now() };
+    const controller = new AbortController();
+    activeRequest.current = controller;
     setSending(true);
     let probe: string | null = null;
     let summaryOut: string | null = null;
     try {
-      const sb = createSupabaseBrowserClient();
-      const { data } = await sb.auth.getSession();
-      const token = data?.session?.access_token;
-      if (!token) throw new Error("not_signed_in");
-      const result = await fetchSocratic(
+      const result = await withPaperPalSession((token, signal, timeoutMs) => fetchSocratic(
         {
           paperId: Number.parseInt(paperId, 10),
           promptId: prompt.id,
@@ -122,8 +123,8 @@ export function SocraticMode({
           userResponse: text,
           turnNumber: learnerTurns + 1,
         },
-        { accessToken: token },
-      );
+        { accessToken: token, signal, timeoutMs },
+      ), controller.signal);
       probe = result.next_question;
       summaryOut = result.summary;
     } catch (e) {
@@ -132,6 +133,7 @@ export function SocraticMode({
       // can decide whether to retry; the scripted fallback keeps the
       // session usable offline.
       const message = e instanceof Error ? e.message : String(e);
+      if (message === "request_cancelled") return;
       setNetworkError(
         message === "not_attending_meeting_for_paper"
           ? "RSVP to a meeting using this paper to use the AI tutor."
@@ -143,7 +145,10 @@ export function SocraticMode({
       );
       probe = prompt.scriptedProbes?.[probeIdx] ?? "Say more about that.";
     } finally {
-      setSending(false);
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+        setSending(false);
+      }
     }
 
     const tutorMsg: Message = {
@@ -215,6 +220,10 @@ export function SocraticMode({
   }, [input, hintsLeft, synthesized, thread.length]);
 
   const reset = () => {
+    activeRequest.current?.abort();
+    activeRequest.current = null;
+    setSending(false);
+    setNetworkError(null);
     setThread([]);
     setHintsUsed(0);
     setSynthesized(false);

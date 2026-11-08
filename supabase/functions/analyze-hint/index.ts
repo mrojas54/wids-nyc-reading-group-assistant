@@ -8,6 +8,7 @@
 //
 // Side effects: NONE. Pure response. We do NOT log hints to the DB; if a
 // future audit need arises, add it as a new table in a later migration.
+import { requestDeadline, withDeadline } from "../../../web/lib/paperpal/edge_helpers/request-deadline.ts";
 import { handlePreflight } from "../_shared/cors.ts";
 import { authClient, extractBearer } from "../_shared/supabase.ts";
 import { canRequestHint, currentMemberId } from "../_shared/gate.ts";
@@ -28,6 +29,7 @@ Deno.serve(async (req) => {
   const preflight = handlePreflight(req);
   if (preflight) return preflight;
   const origin = req.headers.get("origin");
+  const deadline = requestDeadline(req);
 
   if (req.method !== "POST") return errorResponse(origin, 405, "method_not_allowed");
 
@@ -84,20 +86,22 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const result = await generateHint(
-      {
-        paperTitle: paperRow?.title ?? "this paper",
-        questionText,
-        questionOptions,
-        userAnswer,
-      },
-      { provider },
-    );
-    return jsonResponse(origin, {
-      hint: result.hint,
-      confidence: result.confidence,
-      provider: result.meta.provider,
-      model: result.meta.model,
+    return await withDeadline(deadline, req.signal, async (signal) => {
+      const result = await generateHint(
+        {
+          paperTitle: paperRow?.title ?? "this paper",
+          questionText,
+          questionOptions,
+          userAnswer,
+        },
+        { provider, signal },
+      );
+      return jsonResponse(origin, {
+        hint: result.hint,
+        confidence: result.confidence,
+        provider: result.meta.provider,
+        model: result.meta.model,
+      });
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

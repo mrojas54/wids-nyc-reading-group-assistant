@@ -44,7 +44,7 @@ type GeminiResponse = {
 
 async function callGemini(
   parts: GeminiPart[],
-  opts: { apiKey: string; model: string; responseMimeType?: string },
+  opts: { apiKey: string; model: string; responseMimeType?: string; signal?: AbortSignal },
 ): Promise<{ text: string; meta: ProviderMeta }> {
   const url = `${ENDPOINT}/${opts.model}:generateContent?key=${encodeURIComponent(opts.apiKey)}`;
   const body = {
@@ -59,6 +59,7 @@ async function callGemini(
   const startedAt = Date.now();
   const res = await fetch(url, {
     method: "POST",
+    signal: opts.signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -124,6 +125,7 @@ export async function geminiHint(input: HintInput, opts: SynthesizeOpts): Promis
   const { text, meta } = await callGemini([{ text: buildHintPrompt(input) }], {
     apiKey,
     model,
+    signal: opts.signal,
   });
   const obj = parseProviderJson<{ hint?: string; confidence?: string }>(text, "geminiHint");
   if (!obj.hint) throw new Error("gemini hint missing 'hint' field");
@@ -145,6 +147,7 @@ export async function geminiSocratic(
   const { text, meta } = await callGemini([{ text: buildSocraticPrompt(input) }], {
     apiKey,
     model,
+    signal: opts.signal,
   });
   const obj = parseProviderJson<{ nextQuestion?: string; summary?: string }>(
     text,
