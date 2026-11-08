@@ -127,3 +127,86 @@ it("control: different paper IDs keep quiz progress separate", () => {
   expect(saved(keys.quiz).answers).toEqual({0:1});
   expect(saved("paperpal:v1:900008:assessment:mcq").answers).toEqual({0:0});
 });
+
+it("saves the pending learner message before reload and ignores the cancelled response", async () => {
+  requestMode = "deferred";
+  const view = tutor(); await send(view, "Keep this pending reasoning.");
+  expect(saved().filter((m: {role:string}) => m.role === "learner")).toHaveLength(1);
+  view.unmount();
+  const reloaded = tutor();
+  expect(within(reloaded.container).getByText("Keep this pending reasoning.")).toBeVisible();
+  await act(async () => { requests[0].pending!.resolve(success("late cancelled reply")); });
+  expect(within(reloaded.container).queryByText("Mock reply to late cancelled reply")).not.toBeInTheDocument();
+  expect(within(reloaded.container).getByRole("textbox")).toBeEnabled();
+});
+
+it("a timed-out tutor request cannot append a second reply when it eventually resolves", async () => {
+  vi.useFakeTimers(); requestMode = "deferred";
+  const view = tutor(); await send(view, "A bounded request.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
+  expect(within(view.container).queryByRole("alert")).not.toBeInTheDocument();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(within(view.container).getByRole("alert")).toHaveTextContent("falling back");
+  await act(async () => { requests[0].pending!.resolve(success("too late")); });
+  expect(saved().map((m: {body:string}) => m.body)).not.toContain("Mock reply to too late");
+  expect(saved()).toHaveLength(3);
+  requestMode = "success"; await send(view, "Retry as the next turn.");
+  expect(saved()).toHaveLength(5);
+});
+
+it("a hint timeout permits retry and a late old hint cannot replace the retry", async () => {
+  vi.useFakeTimers(); requestMode = "deferred";
+  const view = mcq(); const ui = within(view.container);
+  fireEvent.click(option(view, "A score alone"));
+  await act(async () => { fireEvent.click(ui.getByRole("button", {name:"Ask AI"})); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(ui.getByText("Couldn't fetch a hint. Try again in a moment.")).toBeVisible();
+  requestMode = "success";
+  await act(async () => { fireEvent.click(ui.getByRole("button", {name:"Ask AI"})); });
+  expect(ui.getByText("Mock hint")).toBeVisible();
+  await act(async () => { requests[0].pending!.resolve(Response.json({hint:"Stale hint",confidence:"high"})); });
+  expect(ui.queryByText("Stale hint")).not.toBeInTheDocument();
+  expect(saved(keys.flags).method.count).toBe(1);
+});
+
+it("a reply started before another tab resets cannot resurrect the old thread", async () => {
+  requestMode = "deferred";
+  const a = tutor(); const b = tutor();
+  await send(a, "Old request before reset.");
+  fireEvent.click(within(b.container).getByRole("button", {name:"I've got it"}));
+  fireEvent.click(within(b.container).getByRole("button", {name:"Reset conversation"}));
+  await act(async () => { requests[0].pending!.resolve(success("Old request before reset.")); });
+  expect(saved().map((m: {body:string}) => m.body)).toEqual([prompt.openingQuestion]);
+  expect(saved(keys.synthesis)).toBe(false);
+});
+
+it("preserves hints requested while a tutor reply is pending", async () => {
+  requestMode = "deferred";
+  const view = tutor(); await send(view, "A message with a concurrent hint.");
+  fireEvent.click(within(view.container).getByRole("button", {name:"Hint"}));
+  await act(async () => { requests[0].pending!.resolve(success("A message with a concurrent hint.")); });
+  expect(saved().filter((m: {kind?:string}) => m.kind === "hint")).toHaveLength(1);
+  expect(saved(keys.hints)).toBe(1);
+});
+
+it("replays independent concurrent quiz writes even when both tabs used the same starting clock", () => {
+  const records = () => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith("paperpal:v2:")).map(k => [k, localStorage.getItem(k)!]));
+  const a = mcq();
+  fireEvent.click(option(a, "Code and execution traces"));
+  fireEvent.click(within(a.container).getByRole("button", {name:"Submit answer"}));
+  const aRecords = records(); cleanup(); localStorage.clear();
+  const b = mcq();
+  fireEvent.click(within(b.container).getByRole("button", {name:/Q02/}));
+  fireEvent.click(option(b, "The harness code"));
+  fireEvent.click(within(b.container).getByRole("button", {name:"Submit answer"}));
+  const bRecords = records(); cleanup(); localStorage.clear();
+  // Merge independently produced writes in reverse arrival order.
+  for (const [k,v] of Object.entries({...bRecords,...aRecords})) localStorage.setItem(k,v);
+  const combined = mcq(); const ui = within(combined.container);
+  fireEvent.click(ui.getByRole("button", {name:/Q01/}));
+  expect(ui.getByText("Correct.")).toBeVisible();
+  fireEvent.click(ui.getByRole("button", {name:/Q02/}));
+  expect(ui.getByText("Correct.")).toBeVisible();
+  expect(saved(keys.quiz).answers).toEqual({0:1,1:0});
+  expect(saved(keys.quiz).submitted).toEqual({0:true,1:true});
+});
