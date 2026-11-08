@@ -37,7 +37,7 @@ type ClaudeResponse = {
 
 async function callClaude(
   content: ClaudeContentBlock[],
-  opts: { apiKey: string; model: string; maxTokens: number; system: string },
+  opts: { apiKey: string; model: string; maxTokens: number; system: string; signal?: AbortSignal },
 ): Promise<{ text: string; meta: ProviderMeta }> {
   const body = {
     model: opts.model,
@@ -52,6 +52,7 @@ async function callClaude(
   const startedAt = Date.now();
   const res = await fetch(ENDPOINT, {
     method: "POST",
+    signal: opts.signal,
     headers: {
       "x-api-key": opts.apiKey,
       "anthropic-version": "2023-06-01",
@@ -124,7 +125,7 @@ export async function claudeHint(input: HintInput, opts: SynthesizeOpts): Promis
   const model = opts.model ?? "claude-haiku-4-5-20251001";
   const { text, meta } = await callClaude(
     [{ type: "text", text: buildHintPrompt(input) }],
-    { apiKey, model, maxTokens: 512, system: SYSTEM_PROMPT },
+    { apiKey, model, maxTokens: 512, system: SYSTEM_PROMPT, signal: opts.signal },
   );
   const obj = parseProviderJson<{ hint?: string; confidence?: string }>(text, "claudeHint");
   if (!obj.hint) throw new Error("claude hint missing 'hint' field");
@@ -145,7 +146,7 @@ export async function claudeSocratic(
   const model = opts.model ?? "claude-haiku-4-5-20251001";
   const { text, meta } = await callClaude(
     [{ type: "text", text: buildSocraticPrompt(input) }],
-    { apiKey, model, maxTokens: 1024, system: SYSTEM_PROMPT },
+    { apiKey, model, maxTokens: 1024, system: SYSTEM_PROMPT, signal: opts.signal },
   );
   const obj = parseProviderJson<{ nextQuestion?: string; summary?: string }>(
     text,

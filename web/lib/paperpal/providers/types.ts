@@ -88,6 +88,7 @@ export type SocraticResult = {
 export type SynthesizeOpts = {
   provider: Provider;
   model?: string;
+  signal?: AbortSignal;
   // API keys are read from env in the provider implementations themselves
   // (Deno.env or process.env), so this object stays free of secrets.
 };

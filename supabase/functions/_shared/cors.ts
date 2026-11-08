@@ -10,6 +10,7 @@ const ALLOWED_HEADERS = [
   "content-type",
   "x-client-info",
   "apikey",
+  "x-paperpal-timeout-ms",
 ].join(", ");
 
 export function corsHeaders(origin: string | null): Record<string, string> {

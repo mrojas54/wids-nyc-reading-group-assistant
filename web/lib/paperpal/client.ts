@@ -14,12 +14,16 @@ export async function postPaperPalJson<T>(
   path: string,
   body: Record<string, unknown>,
   accessToken: string,
+  signal?: AbortSignal,
+  timeoutMs?: number,
 ): Promise<T> {
   const res = await fetch(path, {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
+      ...(timeoutMs === undefined ? {} : { "x-paperpal-timeout-ms": String(timeoutMs) }),
     },
     body: JSON.stringify(body),
   });
