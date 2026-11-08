@@ -10,7 +10,7 @@ describe("preview harness boundary", () => {
   it.each(["production", "development", ""])("returns 404 in %s before looking up a session", async environment => {
     vi.stubEnv("VERCEL_ENV", environment);
     vi.stubEnv("VERCEL_URL", "fixture-deployment.vercel.app");
-    const result = await proxy(new NextRequest("https://fixture-deployment.vercel.app/preview/paperpal"));
+    const result = await proxy(new NextRequest("https://fixture-deployment.vercel.app/preview/paperpal", { headers: { host: "fixture-deployment.vercel.app" } }));
     expect(result.status).toBe(404);
     expect(createClient).not.toHaveBeenCalled();
   });
@@ -19,7 +19,7 @@ describe("preview harness boundary", () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("VERCEL_URL", "fixture-deployment.vercel.app");
     vi.stubEnv("VERCEL_BRANCH_URL", "fixture-git-storage.vercel.app");
-    const result = await proxy(new NextRequest(`https://${host}/preview/paperpal`));
+    const result = await proxy(new NextRequest(`https://${host}/preview/paperpal`, { headers: { host } }));
     expect(result.status).toBe(404);
     expect(createClient).not.toHaveBeenCalled();
   });
@@ -28,7 +28,7 @@ describe("preview harness boundary", () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv("VERCEL_URL", "fixture-deployment.vercel.app");
     vi.stubEnv("VERCEL_BRANCH_URL", "fixture-git-storage.vercel.app");
-    const result = await proxy(new NextRequest(`https://${host}/preview/paperpal`));
+    const result = await proxy(new NextRequest(`https://${host}/preview/paperpal`, { headers: { host } }));
     expect(result.status).toBe(200);
     expect(result.headers.get("Content-Security-Policy")).toContain("connect-src 'none'");
     expect(result.headers.get("Cache-Control")).toContain("no-store");

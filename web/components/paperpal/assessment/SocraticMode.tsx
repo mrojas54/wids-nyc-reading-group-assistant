@@ -5,8 +5,7 @@ import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
 import { readSaved, useAssessmentStore } from "@/lib/paperpal/assessment-store";
 import { hasTutorReply, reduceTutor, TUTOR_INITIAL, type TutorMessage } from "@/lib/paperpal/assessment-state";
 import { tutorActionSchema, tutorStateSchema } from "@/lib/paperpal/assessment-schema";
-import { fetchSocratic } from "@/lib/paperpal/socratic";
-import { withPaperPalSession } from "@/lib/paperpal/request";
+import { requestAssessmentTutor } from "@/lib/paperpal/assessment-services";
 import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
 import "./assessment.css";
 
@@ -22,10 +21,12 @@ export function SocraticMode({
   paperId,
   prompt,
   lens,
+  requestTutor = requestAssessmentTutor,
 }: {
   paperId: string;
   prompt: SocraticPrompt;
   lens: Lens;
+  requestTutor?: typeof requestAssessmentTutor;
 }) {
   const ns = `paperpal:v1:${paperId}:socratic:`;
   const threadKey = `${ns}thread:${prompt.id}`;
@@ -88,11 +89,11 @@ export function SocraticMode({
       .map(m => ({ role: m.role === "tutor" ? "ai" : "user", text: m.body }));
     const turnNumber = current.thread.filter(m => hasTutorReply(current.thread, m)).length + 1;
     try {
-      const result = await withPaperPalSession((token, signal, timeoutMs) => fetchSocratic({
+      const result = await requestTutor({
         paperId: Number.parseInt(paperId, 10), promptId: prompt.id,
         promptTopic: prompt.topic, openingQuestion: prompt.openingQuestion,
         scriptedProbes: prompt.scriptedProbes, history, userResponse: text, turnNumber,
-      }, { accessToken: token, signal, timeoutMs }), controller.signal);
+      }, controller.signal);
       dispatch({ type: "reply", epoch, turnId, text: result.next_question,
         summary: result.summary, ts: Date.now() });
     } catch (e) {

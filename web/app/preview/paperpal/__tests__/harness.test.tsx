@@ -20,7 +20,7 @@ const mount = (mode: "quiz" | "tutor") => render(<PreviewHarness run="1001" mode
 async function send(text: string) {
   await act(async () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
-    fireEvent.click(screen.getByRole("button", { name: "Send", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
   });
 }
 
