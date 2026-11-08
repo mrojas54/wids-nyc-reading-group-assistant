@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, within } from "@testing-library/react"
 import { SocraticMode } from "@/components/paperpal/assessment/SocraticMode";
 import { McqMode } from "@/components/paperpal/assessment/McqMode";
 import { keys, paperId, prompt, quiz } from "./request-fixtures";
-const ASSESSMENT_STORAGE_VERSION = "v3";
+import { ASSESSMENT_STORAGE_VERSION } from "@/lib/paperpal/assessment-store";
 
 const auth = vi.hoisted(() => ({ pending: false }));
 vi.mock("@/lib/supabase/browser", () => ({ createSupabaseBrowserClient: () => ({ auth: {

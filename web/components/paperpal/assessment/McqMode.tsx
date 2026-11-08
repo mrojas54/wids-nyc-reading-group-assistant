@@ -2,23 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AssessmentQuiz, Lens, QuizQuestion } from "@/lib/paperpal/types";
-import { usePaperLocalState, recordHint } from "@/lib/paperpal/hooks";
+import { recordHint } from "@/lib/paperpal/hooks";
 import { fetchHint } from "@/lib/paperpal/hint";
 import {
   MCQ_INITIAL,
-  applyHint,
   currentIndex,
   eliminatedAt,
-  goToQuestion,
   hintCap,
-  nextQuestion,
-  prevQuestion,
   scoreQuiz,
-  selectAnswer,
-  submitAnswer,
   type McqState,
 } from "@/lib/paperpal/mcq";
 import { withPaperPalSession } from "@/lib/paperpal/request";
+import { readSaved, useAssessmentStore } from "@/lib/paperpal/assessment-store";
+import { reduceQuiz } from "@/lib/paperpal/assessment-state";
+import { quizActionSchema, quizStateSchema } from "@/lib/paperpal/assessment-schema";
 import type { AnalyzeHintResponse } from "@/lib/paperpal/wire";
 import { AiHintNote, type AiHintState } from "./AiHintNote";
 import { McqResults } from "./McqResults";
@@ -40,10 +37,12 @@ export function McqMode({
   lens: Lens;
 }) {
   const questions = quiz.questions;
-  const [state, setState] = usePaperLocalState<McqState>(
-    paperId,
-    "assessment:mcq",
-    MCQ_INITIAL,
+  const storageKey = `paperpal:v1:${paperId}:assessment:mcq`;
+  const [state, dispatch] = useAssessmentStore(
+    `${paperId}:assessment:mcq`, MCQ_INITIAL,
+    () => readSaved<McqState>(storageKey, MCQ_INITIAL), reduceQuiz,
+    (next) => localStorage.setItem(storageKey, JSON.stringify(next)),
+    { state: quizStateSchema, action: quizActionSchema },
   );
   const controllers = useRef(new Set<AbortController>());
   useEffect(() => { const active = controllers.current; return () => { for (const c of active) c.abort(); }; }, []);
@@ -64,17 +63,10 @@ export function McqMode({
     );
   }
 
-  const apply = (next: McqState) => {
-    if (next !== state) setState(next);
-  };
-
-  const setAnswer = (i: number) => apply(selectAnswer(state, idx, i));
-
+  const setAnswer = (i: number) => dispatch({ type: "answer", idx, option: i });
   const useHint = () => {
-    const next = applyHint(state, idx, current, HINT_CAP);
-    if (next === state) return;
-    setState(next);
-    if (current.sectionRef) recordHint(paperId, current.sectionRef);
+    const next = dispatch({ type: "hint", idx, question: current, cap: HINT_CAP });
+    if (next.hints[idx]?.length !== state.hints[idx]?.length && current.sectionRef) recordHint(paperId, current.sectionRef);
   };
 
   const askAiHint = async () => {
@@ -109,11 +101,11 @@ export function McqMode({
     } finally { controllers.current.delete(controller); }
   };
 
-  const submit = () => apply(submitAnswer(state, idx));
-  const next = () => apply(nextQuestion(state, idx, questions.length));
-  const prev = () => apply(prevQuestion(state, idx));
-  const goToQ = (i: number) => setState(goToQuestion(state, i));
-  const reset = () => setState(MCQ_INITIAL);
+  const submit = () => dispatch({ type: "submit", idx });
+  const next = () => dispatch({ type: "next", idx, count: questions.length });
+  const prev = () => dispatch({ type: "prev", idx });
+  const goToQ = (i: number) => dispatch({ type: "go", idx: i });
+  const reset = () => dispatch({ type: "reset" });
 
   const score = scoreQuiz(state, questions);
   const done = state.done;

@@ -2,21 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
-import { usePaperLocalState } from "@/lib/paperpal/hooks";
+import { readSaved, useAssessmentStore } from "@/lib/paperpal/assessment-store";
+import { hasTutorReply, reduceTutor, TUTOR_INITIAL, type TutorMessage } from "@/lib/paperpal/assessment-state";
+import { tutorActionSchema, tutorStateSchema } from "@/lib/paperpal/assessment-schema";
 import { fetchSocratic } from "@/lib/paperpal/socratic";
 import { withPaperPalSession } from "@/lib/paperpal/request";
 import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
 import "./assessment.css";
-
-type Role = "tutor" | "learner";
-
-interface Message {
-  role: Role;
-  body: string;
-  ts: number;
-  kind?: "hint" | "synthesis";
-  hintIndex?: number;
-}
 
 const LENS_HINT_BUDGET: Record<Lens, number> = {
   beginner: 4,
@@ -35,50 +27,37 @@ export function SocraticMode({
   prompt: SocraticPrompt;
   lens: Lens;
 }) {
-  const persistKey = `socratic:thread:${prompt.id}`;
+  const ns = `paperpal:v1:${paperId}:socratic:`;
+  const threadKey = `${ns}thread:${prompt.id}`;
+  const hintKey = `${ns}hints:${prompt.id}`;
+  const synthKey = `${ns}synth:${prompt.id}`;
   const hintBudget = prompt.hintBudgetByLens?.[lens] ?? LENS_HINT_BUDGET[lens];
-
-  const [thread, setThread] = usePaperLocalState<Message[]>(
-    paperId,
-    persistKey,
-    [],
+  const [saved, dispatch] = useAssessmentStore(
+    `${paperId}:socratic:${prompt.id}`, TUTOR_INITIAL,
+    () => {
+      const thread = readSaved<TutorMessage[]>(threadKey, []);
+      return {
+        thread: thread.length ? thread : [{ role: "tutor" as const, body: prompt.openingQuestion, ts: 0 }],
+        hintsUsed: readSaved(hintKey, 0), synthesized: readSaved(synthKey, false), epoch: "legacy",
+      };
+    }, reduceTutor,
+    (next) => {
+      localStorage.setItem(threadKey, JSON.stringify(next.thread));
+      localStorage.setItem(hintKey, JSON.stringify(next.hintsUsed));
+      localStorage.setItem(synthKey, JSON.stringify(next.synthesized));
+    },
+    { state: tutorStateSchema, action: tutorActionSchema },
   );
-  const [hintsUsed, setHintsUsed] = usePaperLocalState<number>(
-    paperId,
-    `socratic:hints:${prompt.id}`,
-    0,
-  );
-  const [synthesized, setSynthesized] = usePaperLocalState<boolean>(
-    paperId,
-    `socratic:synth:${prompt.id}`,
-    false,
-  );
-
+  const { thread, hintsUsed, synthesized } = saved;
   const activeRequest = useRef<AbortController | null>(null);
   useEffect(() => () => activeRequest.current?.abort(), []);
 
   const [input, setInput] = useState("");
   const [pulse, setPulse] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pendingTurn, setPendingTurn] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
-
-  // Hydration shows an empty thread first; preserve any saved conversation.
-  useEffect(() => {
-    if (thread.length === 0) {
-      setThread((saved) => {
-        if (saved.length > 0) return saved;
-        return [
-          {
-            role: "tutor",
-            body: prompt.openingQuestion,
-            ts: Date.now(),
-          },
-        ];
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prompt.id]);
 
   useEffect(() => {
     const el = threadRef.current;
@@ -86,116 +65,63 @@ export function SocraticMode({
   }, [thread.length]);
 
   const hintsLeft = Math.max(0, hintBudget - hintsUsed);
-  const learnerTurns = thread.filter((m) => m.role === "learner").length;
+  const learnerTurns = thread.filter(m => hasTutorReply(thread, m)).length;
   const minFloor = 3 + hintsUsed;
-
-  const append = (msg: Message) => setThread([...thread, msg]);
-
-  function buildHistory(): SocraticHistoryEntry[] {
-    return thread
-      .filter((m) => m.kind !== "hint" && m.kind !== "synthesis")
-      .map<SocraticHistoryEntry>((m) => ({
-        role: m.role === "tutor" ? "ai" : "user",
-        text: m.body,
-      }));
-  }
 
   const send = async () => {
     const text = input.trim();
     if (!text || synthesized || activeRequest.current) return;
+    const turnId = crypto.randomUUID();
+    const epoch = saved.epoch;
+    const current = dispatch({ type: "send", epoch, message: { id: turnId, role: "learner", body: text, ts: Date.now() } });
+    if (!current.thread.some(m => m.id === turnId)) return;
     setInput("");
     setNetworkError(null);
-    const learnerMsg: Message = { role: "learner", body: text, ts: Date.now() };
+    if (current.synthesized) return;
     const controller = new AbortController();
     activeRequest.current = controller;
     setSending(true);
-    let probe: string | null = null;
-    let summaryOut: string | null = null;
+    setPendingTurn(turnId);
+    const history: SocraticHistoryEntry[] = current.thread
+      .filter(m => m.id !== turnId && m.kind !== "hint" && m.kind !== "synthesis")
+      .filter(m => m.role !== "learner" || hasTutorReply(current.thread, m))
+      .map(m => ({ role: m.role === "tutor" ? "ai" : "user", text: m.body }));
+    const turnNumber = current.thread.filter(m => hasTutorReply(current.thread, m)).length + 1;
     try {
-      const result = await withPaperPalSession((token, signal, timeoutMs) => fetchSocratic(
-        {
-          paperId: Number.parseInt(paperId, 10),
-          promptId: prompt.id,
-          promptTopic: prompt.topic,
-          openingQuestion: prompt.openingQuestion,
-          scriptedProbes: prompt.scriptedProbes,
-          history: buildHistory(),
-          userResponse: text,
-          turnNumber: learnerTurns + 1,
-        },
-        { accessToken: token, signal, timeoutMs },
-      ), controller.signal);
-      probe = result.next_question;
-      summaryOut = result.summary;
+      const result = await withPaperPalSession((token, signal, timeoutMs) => fetchSocratic({
+        paperId: Number.parseInt(paperId, 10), promptId: prompt.id,
+        promptTopic: prompt.topic, openingQuestion: prompt.openingQuestion,
+        scriptedProbes: prompt.scriptedProbes, history, userResponse: text, turnNumber,
+      }, { accessToken: token, signal, timeoutMs }), controller.signal);
+      dispatch({ type: "reply", epoch, turnId, text: result.next_question,
+        summary: result.summary, ts: Date.now() });
     } catch (e) {
-      // Fall back to the scripted probe so the conversation continues
-      // when the LLM is unreachable. Surface the error so the learner
-      // can decide whether to retry; the scripted fallback keeps the
-      // session usable offline.
       const message = e instanceof Error ? e.message : String(e);
       if (message === "request_cancelled") return;
-      setNetworkError(
-        message === "not_attending_meeting_for_paper"
-          ? "RSVP to a meeting using this paper to use the AI tutor."
-          : "Tutor call failed — falling back to a scripted probe.",
-      );
-      const probeIdx = Math.min(
-        learnerTurns,
-        (prompt.scriptedProbes?.length ?? 1) - 1,
-      );
-      probe = prompt.scriptedProbes?.[probeIdx] ?? "Say more about that.";
+      setNetworkError(message === "not_attending_meeting_for_paper"
+        ? "RSVP to a meeting using this paper to use the AI tutor."
+        : "Tutor call failed — falling back to a scripted probe.");
+      const probeIdx = Math.min(turnNumber - 1, (prompt.scriptedProbes?.length ?? 1) - 1);
+      dispatch({ type: "reply", epoch, turnId,
+        text: prompt.scriptedProbes?.[probeIdx] ?? "Say more about that.", summary: null, ts: Date.now() });
     } finally {
       if (activeRequest.current === controller) {
         activeRequest.current = null;
         setSending(false);
+        setPendingTurn(null);
       }
     }
-
-    const tutorMsg: Message = {
-      role: "tutor",
-      body: probe ?? "Say more about that.",
-      ts: Date.now() + 1,
-    };
-    const next: Message[] = [...thread, learnerMsg, tutorMsg];
-    if (summaryOut) {
-      next.push({
-        role: "tutor",
-        body: summaryOut,
-        ts: Date.now() + 2,
-        kind: "synthesis",
-      });
-      setSynthesized(true);
-    }
-    setThread(next);
   };
 
   const askHint = () => {
-    if (hintsLeft <= 0 || synthesized) return;
-    const probes = prompt.scriptedProbes ?? [];
-    const hintText =
-      probes[hintsUsed] ??
-      `Think about what "${prompt.topic}" hinges on — what would break if we removed it?`;
-    append({
-      role: "tutor",
-      body: hintText,
-      ts: Date.now(),
-      kind: "hint",
-      hintIndex: hintsUsed + 1,
-    });
-    setHintsUsed(hintsUsed + 1);
+    dispatch({ type: "hint", probes: prompt.scriptedProbes ?? [],
+      fallback: `Think about what "${prompt.topic}" hinges on — what would break if we removed it?`,
+      budget: hintBudget, ts: Date.now() });
     setPulse(false);
   };
-
   const wrapUp = (override = false) => {
-    if (synthesized) return;
     if (!override && learnerTurns < minFloor) return;
-    append({
-      role: "tutor",
-      body: prompt.goalInsight,
-      ts: Date.now(),
-      kind: "synthesis",
-    });
-    setSynthesized(true);
+    dispatch({ type: "synthesize", text: prompt.goalInsight, ts: Date.now() });
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -223,11 +149,10 @@ export function SocraticMode({
     activeRequest.current?.abort();
     activeRequest.current = null;
     setSending(false);
-    setNetworkError(null);
-    setThread([]);
-    setHintsUsed(0);
-    setSynthesized(false);
+    setPendingTurn(null);
+    dispatch({ type: "reset", epoch: crypto.randomUUID(), opening: prompt.openingQuestion, ts: Date.now() });
     setInput("");
+    setNetworkError(null);
   };
 
   return (
@@ -283,6 +208,9 @@ export function SocraticMode({
                   : "You"}
               </div>
               <div>{m.body}</div>
+              {m.role === "learner" && !hasTutorReply(thread, m) && (
+                <small>{m.id === pendingTurn ? "Waiting for a reply…" : "No reply saved. You can send this message again."}</small>
+              )}
             </div>
           ))}
         </div>
