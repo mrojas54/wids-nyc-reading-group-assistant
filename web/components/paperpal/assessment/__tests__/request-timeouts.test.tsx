@@ -1,0 +1,107 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { act, cleanup, fireEvent, render, within } from "@testing-library/react";
+import { SocraticMode } from "@/components/paperpal/assessment/SocraticMode";
+import { McqMode } from "@/components/paperpal/assessment/McqMode";
+import { keys, paperId, prompt, quiz } from "./request-fixtures";
+
+const auth = vi.hoisted(() => ({ pending: false }));
+vi.mock("@/lib/supabase/browser", () => ({ createSupabaseBrowserClient: () => ({ auth: {
+  getSession: () => auth.pending ? new Promise(() => {}) : Promise.resolve({ data: { session: { access_token: "local-only" } } }),
+} }) }));
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(r => { resolve = r; });
+  return { promise, resolve };
+};
+const success = (text: string) => Response.json({ next_question: `Mock reply to ${text}`, summary: null, provider: "local", model: "fixture" });
+const saved = (key = keys.thread) => JSON.parse(localStorage.getItem(key) ?? "null");
+let requestMode: "success" | "fetch-pending" | "body-pending" | "deferred";
+let requests: { body: { user_response: string }; signal: boolean; pending?: ReturnType<typeof deferred<Response>> }[];
+let errorSpy: ReturnType<typeof vi.spyOn>;
+beforeEach(() => {
+  localStorage.clear(); auth.pending = false; requestMode = "success"; requests = [];
+  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    if (!["/functions/v1/analyze-socratic", "/functions/v1/analyze-hint"].includes(String(input))) throw new Error("Unmocked request blocked");
+    const entry = { body: JSON.parse(String(init?.body)), signal: !!init?.signal } as typeof requests[number];
+    requests.push(entry);
+    if (requestMode === "fetch-pending") return new Promise(() => {});
+    if (requestMode === "body-pending") return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('{"partial":')); } }));
+    if (requestMode === "deferred") { entry.pending = deferred<Response>(); return entry.pending.promise; }
+    if (String(input).endsWith("analyze-hint")) return Response.json({ hint: "Mock hint", confidence: "high", provider: "local", model: "fixture" });
+    return success(entry.body.user_response);
+  });
+});
+afterEach(() => {
+  cleanup(); vi.clearAllTimers(); vi.useRealTimers();
+  expect(errorSpy.mock.calls, "unexpected React errors").toEqual([]);
+  vi.restoreAllMocks(); localStorage.clear();
+});
+const tutor = (id = paperId) => render(<SocraticMode paperId={id} prompt={prompt} lens="engineer" />);
+const mcq = (id = paperId) => render(<McqMode paperId={id} quiz={quiz} lens="engineer" />);
+async function send(view: ReturnType<typeof render>, text: string) {
+  await act(async () => {
+    fireEvent.change(within(view.container).getByRole("textbox"), { target: { value: text } });
+    fireEvent.click(within(view.container).getByRole("button", { name: "Send" }));
+  });
+}
+function option(view: ReturnType<typeof render>, label: string) { return within(view.container).getByText(label).closest("button")!; }
+
+
+describe.each(["session", "fetch", "body"] as const)("never-settling %s", stage => {
+  it("tutor should release the pending state and retain the submitted message", async () => {
+    vi.useFakeTimers(); auth.pending = stage === "session";
+    requestMode = stage === "body" ? "body-pending" : "fetch-pending";
+    const view = tutor(); const ui = within(view.container);
+    await send(view, "This reasoning must not disappear.");
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60 * 1000); });
+    fireEvent.change(ui.getByRole("textbox"), { target: { value: "A second draft" } });
+    expect.soft(ui.getByRole("button", {name:"Send"}), "pending request must have a recovery path").toBeEnabled();
+    expect.soft(saved().some((m: { body: string; role: string; kind?: string }) => m.body === "This reasoning must not disappear."), "sent reasoning must be saved before waiting indefinitely").toBe(true);
+  });
+  it("hint should leave loading and allow retry while retaining the answer", async () => {
+    vi.useFakeTimers(); auth.pending = stage === "session";
+    requestMode = stage === "body" ? "body-pending" : "fetch-pending";
+    const view = mcq(); const ui = within(view.container);
+    fireEvent.click(option(view, "A score alone"));
+    await act(async () => { fireEvent.click(ui.getByRole("button", {name:"Ask AI"})); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60 * 1000); });
+    const requestButton = ui.getByRole("button", {name:/Thinking|Ask AI/});
+    expect(saved(keys.quiz).answers).toEqual({0:0});
+    expect(saved(keys.flags)).toBeNull();
+    expect.soft(requestButton, "hint must recover from a request that never settles").toBeEnabled();
+    expect.soft(ui.queryByText("Asking the AI for a hint…")).not.toBeInTheDocument();
+  });
+});
+
+it("a timed-out tutor request cannot append a second reply when it eventually resolves", async () => {
+  vi.useFakeTimers(); requestMode = "deferred";
+  const view = tutor(); await send(view, "A bounded request.");
+  await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
+  expect(within(view.container).queryByRole("alert")).not.toBeInTheDocument();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(within(view.container).getByRole("alert")).toHaveTextContent("falling back");
+  await act(async () => { requests[0].pending!.resolve(success("too late")); });
+  expect(saved().map((m: {body:string}) => m.body)).not.toContain("Mock reply to too late");
+  expect(saved()).toHaveLength(3);
+  requestMode = "success"; await send(view, "Retry as the next turn.");
+  expect(saved()).toHaveLength(5);
+});
+
+it("a hint timeout permits retry and a late old hint cannot replace the retry", async () => {
+  vi.useFakeTimers(); requestMode = "deferred";
+  const view = mcq(); const ui = within(view.container);
+  fireEvent.click(option(view, "A score alone"));
+  await act(async () => { fireEvent.click(ui.getByRole("button", {name:"Ask AI"})); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+  expect(ui.getByText("Couldn't fetch a hint. Try again in a moment.")).toBeVisible();
+  requestMode = "success";
+  await act(async () => { fireEvent.click(ui.getByRole("button", {name:"Ask AI"})); });
+  expect(ui.getByText("Mock hint")).toBeVisible();
+  await act(async () => { requests[0].pending!.resolve(Response.json({hint:"Stale hint",confidence:"high"})); });
+  expect(ui.queryByText("Stale hint")).not.toBeInTheDocument();
+  expect(saved(keys.flags).method.count).toBe(1);
+});
+
