@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, within } from "@testing-library/react"
 import { SocraticMode } from "@/components/paperpal/assessment/SocraticMode";
 import { McqMode } from "@/components/paperpal/assessment/McqMode";
 import { keys, paperId, prompt, quiz } from "./request-fixtures";
+import { ASSESSMENT_STORAGE_VERSION } from "@/lib/paperpal/assessment-store";
 
 const auth = vi.hoisted(() => ({ pending: false }));
 vi.mock("@/lib/supabase/browser", () => ({ createSupabaseBrowserClient: () => ({ auth: {
@@ -173,6 +174,8 @@ it("a reply started before another tab resets cannot resurrect the old thread", 
   requestMode = "deferred";
   const a = tutor(); const b = tutor();
   await send(a, "Old request before reset.");
+  requestMode = "success";
+  await send(b, "A completed exchange before reset.");
   fireEvent.click(within(b.container).getByRole("button", {name:"I've got it"}));
   fireEvent.click(within(b.container).getByRole("button", {name:"Reset conversation"}));
   await act(async () => { requests[0].pending!.resolve(success("Old request before reset.")); });
@@ -190,7 +193,7 @@ it("preserves hints requested while a tutor reply is pending", async () => {
 });
 
 it("replays independent concurrent quiz writes even when both tabs used the same starting clock", () => {
-  const records = () => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith("paperpal:v2:")).map(k => [k, localStorage.getItem(k)!]));
+  const records = () => Object.fromEntries(Object.keys(localStorage).filter(k => k.startsWith(`paperpal:${ASSESSMENT_STORAGE_VERSION}:`)).map(k => [k, localStorage.getItem(k)!]));
   const a = mcq();
   fireEvent.click(option(a, "Code and execution traces"));
   fireEvent.click(within(a.container).getByRole("button", {name:"Submit answer"}));

@@ -8,6 +8,7 @@
 // Side effect: append a row to paper_socratic_turns capturing the user's
 // response + the AI's next_question + provider/model. RLS blocks direct
 // member-context inserts; we use the service-role client.
+import { requestDeadline, withDeadline } from "../../../web/lib/paperpal/edge_helpers/request-deadline.ts";
 import { handlePreflight } from "../_shared/cors.ts";
 import { authClient, serviceClient, extractBearer } from "../_shared/supabase.ts";
 import { canRequestHint, currentMemberId } from "../_shared/gate.ts";
@@ -45,6 +46,7 @@ Deno.serve(async (req) => {
   const preflight = handlePreflight(req);
   if (preflight) return preflight;
   const origin = req.headers.get("origin");
+  const deadline = requestDeadline(req);
 
   if (req.method !== "POST") return errorResponse(origin, 405, "method_not_allowed");
 
@@ -108,46 +110,49 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const result = await nextSocraticTurn(
-      {
-        paperTitle: paperRow?.title ?? "this paper",
-        promptTopic,
-        openingQuestion,
-        scriptedProbes,
-        history,
-        userResponse,
-        turnNumber,
-      },
-      { provider },
-    );
+    return await withDeadline(deadline, req.signal, async (signal) => {
+      const result = await nextSocraticTurn(
+        {
+          paperTitle: paperRow?.title ?? "this paper",
+          promptTopic,
+          openingQuestion,
+          scriptedProbes,
+          history,
+          userResponse,
+          turnNumber,
+        },
+        { provider, signal },
+      );
 
-    // Append transcript row via service-role (RLS blocks member inserts).
-    const { error: insErr } = await sbSvc.from("paper_socratic_turns").insert({
-      paper_id: paperId,
-      member_id: memberId,
-      prompt_id: promptId,
-      turn_number: turnNumber,
-      user_response: userResponse,
-      ai_next_question: result.nextQuestion,
-      ai_summary: result.summary ?? null,
-      provider: result.meta.provider,
-      model: result.meta.model,
-    });
-    if (insErr) {
-      // Don't fail the user-facing response over a transcript log miss —
-      // log to stderr and still return the next question. Pass the full
-      // error object (not just .message) so on-call can distinguish a
-      // constraint violation (duplicate turn_number) from an RLS deny
-      // from a network timeout — only the full object carries `code`,
-      // `details`, and `hint`.
-      console.error("[analyze-socratic] transcript insert failed:", insErr);
-    }
+      signal.throwIfAborted();
+      // Append transcript row via service-role (RLS blocks member inserts).
+      const { error: insErr } = await sbSvc.from("paper_socratic_turns").insert({
+        paper_id: paperId,
+        member_id: memberId,
+        prompt_id: promptId,
+        turn_number: turnNumber,
+        user_response: userResponse,
+        ai_next_question: result.nextQuestion,
+        ai_summary: result.summary ?? null,
+        provider: result.meta.provider,
+        model: result.meta.model,
+      }).abortSignal(signal);
+      if (insErr) {
+        // Don't fail the user-facing response over a transcript log miss —
+        // log to stderr and still return the next question. Pass the full
+        // error object (not just .message) so on-call can distinguish a
+        // constraint violation (duplicate turn_number) from an RLS deny
+        // from a network timeout — only the full object carries `code`,
+        // `details`, and `hint`.
+        console.error("[analyze-socratic] transcript insert failed:", insErr);
+      }
 
-    return jsonResponse(origin, {
-      next_question: result.nextQuestion,
-      summary: result.summary ?? null,
-      provider: result.meta.provider,
-      model: result.meta.model,
+      return jsonResponse(origin, {
+        next_question: result.nextQuestion,
+        summary: result.summary ?? null,
+        provider: result.meta.provider,
+        model: result.meta.model,
+      });
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -4,7 +4,7 @@ import type { QuizQuestion } from "./types";
 export type QuizAction =
   | { type: "answer"; idx: number; option: number }
   | { type: "submit"; idx: number }
-  | { type: "hint"; idx: number; question: QuizQuestion; cap: number }
+  | { type: "hint"; idx: number; question: Pick<QuizQuestion, "options" | "correctAnswerIndex">; cap: number }
   | { type: "next"; idx: number; count: number }
   | { type: "prev" | "go"; idx: number }
   | { type: "reset" };
@@ -37,6 +37,12 @@ export interface TutorState {
   epoch: string;
 }
 export const TUTOR_INITIAL: TutorState = { thread: [], hintsUsed: 0, synthesized: false, epoch: "legacy" };
+export function hasTutorReply(thread: TutorMessage[], message: TutorMessage): boolean {
+  if (message.role !== "learner") return false;
+  if (message.id) return thread.some(reply => reply.replyTo === message.id);
+  const next = thread[thread.indexOf(message) + 1];
+  return next?.role === "tutor" && !next.kind;
+}
 export type TutorAction =
   | { type: "send"; epoch: string; message: TutorMessage }
   | { type: "reply"; epoch: string; turnId: string; text: string; summary: string | null; ts: number }

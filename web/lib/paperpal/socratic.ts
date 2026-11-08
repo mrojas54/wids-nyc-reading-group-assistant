@@ -26,7 +26,7 @@ export type FetchSocraticInput = {
 
 export async function fetchSocratic(
   input: FetchSocraticInput,
-  { accessToken, signal }: { accessToken: string; signal?: AbortSignal },
+  { accessToken, signal, timeoutMs }: { accessToken: string; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<AnalyzeSocraticResponse> {
   const body: Record<string, unknown> = {
     paper_id: input.paperId,
@@ -44,5 +44,6 @@ export async function fetchSocratic(
     body,
     accessToken,
     signal,
+    timeoutMs,
   );
 }

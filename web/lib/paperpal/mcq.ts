@@ -69,7 +69,7 @@ export function selectAnswer(
 export function applyHint(
   state: McqState,
   idx: number,
-  question: QuizQuestion,
+  question: Pick<QuizQuestion, "options" | "correctAnswerIndex">,
   cap: number,
 ): McqState {
   const eliminated = eliminatedAt(state, idx);

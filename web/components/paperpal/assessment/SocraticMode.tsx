@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Lens, SocraticPrompt } from "@/lib/paperpal/types";
 import { readSaved, useAssessmentStore } from "@/lib/paperpal/assessment-store";
-import { reduceTutor, TUTOR_INITIAL, type TutorMessage } from "@/lib/paperpal/assessment-state";
+import { hasTutorReply, reduceTutor, TUTOR_INITIAL, type TutorMessage } from "@/lib/paperpal/assessment-state";
+import { tutorActionSchema, tutorStateSchema } from "@/lib/paperpal/assessment-schema";
 import { fetchSocratic } from "@/lib/paperpal/socratic";
 import { withPaperPalSession } from "@/lib/paperpal/request";
 import type { SocraticHistoryEntry } from "@/lib/paperpal/wire";
@@ -45,6 +46,7 @@ export function SocraticMode({
       localStorage.setItem(hintKey, JSON.stringify(next.hintsUsed));
       localStorage.setItem(synthKey, JSON.stringify(next.synthesized));
     },
+    { state: tutorStateSchema, action: tutorActionSchema },
   );
   const { thread, hintsUsed, synthesized } = saved;
   const activeRequest = useRef<AbortController | null>(null);
@@ -53,6 +55,7 @@ export function SocraticMode({
   const [input, setInput] = useState("");
   const [pulse, setPulse] = useState(false);
   const [sending, setSending] = useState(false);
+  const [pendingTurn, setPendingTurn] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
 
@@ -62,7 +65,7 @@ export function SocraticMode({
   }, [thread.length]);
 
   const hintsLeft = Math.max(0, hintBudget - hintsUsed);
-  const learnerTurns = thread.filter((m) => m.role === "learner").length;
+  const learnerTurns = thread.filter(m => hasTutorReply(thread, m)).length;
   const minFloor = 3 + hintsUsed;
 
   const send = async () => {
@@ -78,16 +81,18 @@ export function SocraticMode({
     const controller = new AbortController();
     activeRequest.current = controller;
     setSending(true);
+    setPendingTurn(turnId);
     const history: SocraticHistoryEntry[] = current.thread
       .filter(m => m.id !== turnId && m.kind !== "hint" && m.kind !== "synthesis")
+      .filter(m => m.role !== "learner" || hasTutorReply(current.thread, m))
       .map(m => ({ role: m.role === "tutor" ? "ai" : "user", text: m.body }));
-    const turnNumber = current.thread.filter(m => m.role === "learner").length;
+    const turnNumber = current.thread.filter(m => hasTutorReply(current.thread, m)).length + 1;
     try {
-      const result = await withPaperPalSession((token, signal) => fetchSocratic({
+      const result = await withPaperPalSession((token, signal, timeoutMs) => fetchSocratic({
         paperId: Number.parseInt(paperId, 10), promptId: prompt.id,
         promptTopic: prompt.topic, openingQuestion: prompt.openingQuestion,
         scriptedProbes: prompt.scriptedProbes, history, userResponse: text, turnNumber,
-      }, { accessToken: token, signal }), controller.signal);
+      }, { accessToken: token, signal, timeoutMs }), controller.signal);
       dispatch({ type: "reply", epoch, turnId, text: result.next_question,
         summary: result.summary, ts: Date.now() });
     } catch (e) {
@@ -103,6 +108,7 @@ export function SocraticMode({
       if (activeRequest.current === controller) {
         activeRequest.current = null;
         setSending(false);
+        setPendingTurn(null);
       }
     }
   };
@@ -143,6 +149,7 @@ export function SocraticMode({
     activeRequest.current?.abort();
     activeRequest.current = null;
     setSending(false);
+    setPendingTurn(null);
     dispatch({ type: "reset", epoch: crypto.randomUUID(), opening: prompt.openingQuestion, ts: Date.now() });
     setInput("");
     setNetworkError(null);
@@ -201,6 +208,9 @@ export function SocraticMode({
                   : "You"}
               </div>
               <div>{m.body}</div>
+              {m.role === "learner" && !hasTutorReply(thread, m) && (
+                <small>{m.id === pendingTurn ? "Waiting for a reply…" : "No reply saved. You can send this message again."}</small>
+              )}
             </div>
           ))}
         </div>

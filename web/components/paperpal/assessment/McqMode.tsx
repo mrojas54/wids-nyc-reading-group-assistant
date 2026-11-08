@@ -15,6 +15,7 @@ import {
 import { withPaperPalSession } from "@/lib/paperpal/request";
 import { readSaved, useAssessmentStore } from "@/lib/paperpal/assessment-store";
 import { reduceQuiz } from "@/lib/paperpal/assessment-state";
+import { quizActionSchema, quizStateSchema } from "@/lib/paperpal/assessment-schema";
 import type { AnalyzeHintResponse } from "@/lib/paperpal/wire";
 import { AiHintNote, type AiHintState } from "./AiHintNote";
 import { McqResults } from "./McqResults";
@@ -41,6 +42,7 @@ export function McqMode({
     `${paperId}:assessment:mcq`, MCQ_INITIAL,
     () => readSaved<McqState>(storageKey, MCQ_INITIAL), reduceQuiz,
     (next) => localStorage.setItem(storageKey, JSON.stringify(next)),
+    { state: quizStateSchema, action: quizActionSchema },
   );
   const controllers = useRef(new Set<AbortController>());
   useEffect(() => { const active = controllers.current; return () => { for (const c of active) c.abort(); }; }, []);
@@ -74,14 +76,14 @@ export function McqMode({
     const controller = new AbortController();
     controllers.current.add(controller);
     try {
-      const result: AnalyzeHintResponse = await withPaperPalSession((token, signal) => fetchHint(
+      const result: AnalyzeHintResponse = await withPaperPalSession((token, signal, timeoutMs) => fetchHint(
         {
           paperId: Number.parseInt(paperId, 10),
           questionText: current.question,
           questionOptions: current.options,
           userAnswer: current.options[selected],
         },
-        { accessToken: token, signal },
+        { accessToken: token, signal, timeoutMs },
       ), controller.signal);
       setAiHint((s) => ({
         ...s,
