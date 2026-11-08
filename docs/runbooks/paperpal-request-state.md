@@ -60,7 +60,9 @@ receipts and screenshots were retained locally. The browser run used the combine
 implementation at `f3baacb`; the split branches reproduce the same application
 and edge-function source. No live AI requests or production data writes were used.
 
-The Vercel preview two-tab check remains open. Local fixtures do not establish
-preview or production behavior. Production latency sampling, provider billing
+The [preview harness](paperpal-preview-checks.md) supports the same sequences on
+Vercel without live AI or database requests. See PR #230 for deployment-specific
+browser results. Local fixtures do not establish preview or production behavior.
+Production latency sampling, provider billing
 after cancellation, and authorized deployment of the two edge functions also
 remain open. The optional model-parity test was not rerun.
