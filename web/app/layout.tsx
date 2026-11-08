@@ -1,7 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+import { PortalSpeedInsights } from "@/components/PortalSpeedInsights";
 
 const geistSans = localFont({
   src: [{ path: "./fonts/GeistVF.woff", weight: "100 900", style: "normal" }],
@@ -44,7 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body>
         {children}
-        <SpeedInsights />
+        <PortalSpeedInsights />
       </body>
     </html>
   );

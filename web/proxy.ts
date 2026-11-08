@@ -1,8 +1,19 @@
 // web/proxy.ts
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isPreviewHarnessPath, previewHarnessAllowed } from "@/lib/paperpal/preview-guard";
 
 export async function proxy(request: NextRequest) {
+  if (isPreviewHarnessPath(request.nextUrl.pathname)) {
+    if (!previewHarnessAllowed(request.headers.get("host"))) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+    const preview = NextResponse.next();
+    preview.headers.set("Content-Security-Policy", "connect-src 'none'; form-action 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'");
+    preview.headers.set("Cache-Control", "private, no-store");
+    preview.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return preview;
+  }
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(
