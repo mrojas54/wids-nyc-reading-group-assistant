@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
 import { orchestrate, type OrchestratorDeps } from "@/lib/suggest/orchestrator";
 import { getCached, cacheMany } from "@/lib/suggest/embedding-cache";
-import { fetchPaperWithEmbedding } from "@/lib/suggest/s2-client";
+import { fetchPaperWithEmbedding, s2ApiKey } from "@/lib/suggest/s2-client";
 import { embedBatch, ensureModelLoaded, isModelWarm, prewarmModel } from "@/lib/suggest/specter2-wasm";
 import {
   SuggestRequestSchema,
@@ -81,13 +81,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     parsed = SuggestRequestSchema.parse(body);
 
-    const apiKey = process.env.S2_API_KEY ?? null;
-    if (!apiKey) {
-      console.warn(JSON.stringify({
-        event: "s2_api_key_absent",
-        message: "S2_API_KEY env var not set; calling S2 unauthenticated. Set it for higher rate limits.",
-      }));
-    }
+    const apiKey = s2ApiKey();
 
     // Lazy-import the service-role client so we don't pull in @supabase/* at the route module
     // load time; this is fine because the function is dynamic-only.

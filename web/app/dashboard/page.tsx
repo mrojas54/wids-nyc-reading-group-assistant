@@ -1,76 +1,29 @@
 import Link from "next/link";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  currentMemberId,
-  myAvailabilitySubmitted,
-  myHistory,
-  myRsvp,
-  myStats,
-  nextMeeting,
-} from "@/lib/queries";
+import { loadDashboard } from "@/lib/dashboard";
 import { Brandmark, Icon } from "@/components/ui";
-import { NextMeetingCard, type AvailabilityStatus } from "@/components/NextMeetingCard";
+import { NextMeetingCard } from "@/components/NextMeetingCard";
 import { QuoteCard } from "@/components/QuoteCard";
 import { YourStats } from "@/components/YourStats";
 import { YourHistory } from "@/components/YourHistory";
-import { canFindPaper, canScheduleMeeting } from "@/lib/roles";
-import { safeHref } from "@/lib/safeUrl";
 import { signOut } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const sb = await createSupabaseServerClient();
-
-  // members.id is SERIAL INT; user.id is UUID — bridge is members.auth_user_id.
-  // Role values are constrained in migrations/014_members_role_leader_admin.sql.
-  const [meeting, history, memberId, userResult] = await Promise.all([
-    nextMeeting(sb),
-    myHistory(sb, 10),
-    currentMemberId(sb),
-    sb.auth.getUser(),
-  ]);
-  // nextMeeting() falls back to the most recent prep meeting when nothing is
-  // scheduled, so derive the prep meeting from that result instead of issuing
-  // a second, overlapping query.
-  const prepMeeting = meeting?.status === "prep" ? meeting : null;
-  const user = userResult.data.user;
-
-  const [submitted, rsvp, memberResult] = await Promise.all([
-    prepMeeting
-      ? myAvailabilitySubmitted(sb, prepMeeting.id, memberId)
-      : Promise.resolve(true),
-    meeting?.status === "scheduled" ? myRsvp(sb, meeting.id) : Promise.resolve(null),
-    user
-      ? sb.from("members").select("name, role").eq("auth_user_id", user.id).single()
-      : Promise.resolve({ data: null }),
-  ]);
-  const member = memberResult.data;
-
-  const stats = await myStats(sb, submitted, memberId);
-  // The banner is a prompt to *choose* a paper, so it stops once the next meeting
-  // has one — permission alone would keep nagging leaders to pick a paper that is
-  // already picked. No meeting (or no paper on it) still shows it. Only
-  // reading_group meetings ever have a paper, so an admin meeting or vibe
-  // session in prep must not trigger this — neither one is waiting on a pick.
-  const showFindPaper =
-    canFindPaper(member?.role) && meeting?.type === "reading_group" && !meeting?.paper_id;
-  // The operator's way into /admin/schedule: shown only while a reading group
-  // is collecting availability, and never to members (see canScheduleMeeting).
-  const showSchedule =
-    canScheduleMeeting(member?.role) && prepMeeting?.type === "reading_group";
-
-  const firstName = member?.name ? String(member.name).split(/\s+/)[0] : null;
-
-  const availabilityStatus: AvailabilityStatus = prepMeeting
-    ? submitted
-      ? "submitted"
-      : "needed"
-    : null;
-
-  // papers.companion_url is operator-written and holds either a site-relative
-  // path or an absolute URL, so it gets the href check before it is rendered.
-  const companionHref = safeHref(meeting?.companion_url);
+  const {
+    meeting,
+    rsvp,
+    availabilityStatus,
+    prepMeetingId,
+    companionHref,
+    showFindPaper,
+    showSchedule,
+    firstName,
+    stats,
+    history,
+  } = await loadDashboard(sb);
 
   return (
     <div className="shell">
@@ -94,7 +47,7 @@ export default async function DashboardPage() {
           meeting={meeting}
           myRsvp={rsvp}
           availabilityStatus={availabilityStatus}
-          prepMeetingId={prepMeeting?.id ?? null}
+          prepMeetingId={prepMeetingId}
         />
 
         <QuoteCard />

@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { setupServer } from "msw/node";
 import { http, HttpResponse } from "msw";
-import { fetchPaperWithEmbedding } from "@/lib/suggest/s2-client";
+import { fetchPaperWithEmbedding, fetchS2Metadata, s2ApiKey } from "@/lib/suggest/s2-client";
 import { S2AuthError, S2RequestError } from "@/lib/suggest/types";
 
 const S2 = "https://api.semanticscholar.org/graph/v1";
@@ -104,5 +104,39 @@ describe("fetchPaperWithEmbedding", () => {
     const r = await fetchPaperWithEmbedding("p8", null);
     expect(r.kind).toBe("hit");
     expect(receivedKey).toBeNull();
+  });
+});
+
+describe("s2ApiKey", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("returns the key without a warning when it is set", () => {
+    vi.stubEnv("S2_API_KEY", "k");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(s2ApiKey()).toBe("k");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("returns null and logs s2_api_key_absent when it is missing or empty", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("S2_API_KEY", "");
+    expect(s2ApiKey()).toBeNull();
+    expect(JSON.parse(warn.mock.calls[0][0] as string)).toMatchObject({ event: "s2_api_key_absent" });
+  });
+});
+
+describe("fetchS2Metadata", () => {
+  it("returns title and abstract, null on a miss, and throws on an auth failure", async () => {
+    server.use(
+      http.get(`${S2}/paper/hit`, () => HttpResponse.json({ paperId: "hit", title: "T", abstract: "A" })),
+      http.get(`${S2}/paper/miss`, () => new HttpResponse(null, { status: 404 })),
+      http.get(`${S2}/paper/denied`, () => new HttpResponse(null, { status: 401 })),
+    );
+    expect(await fetchS2Metadata("hit", null)).toEqual({ paperId: "hit", title: "T", abstract: "A" });
+    expect(await fetchS2Metadata("miss", null)).toBeNull();
+    await expect(fetchS2Metadata("denied", "k")).rejects.toBeInstanceOf(S2AuthError);
   });
 });

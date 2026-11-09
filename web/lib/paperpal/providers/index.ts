@@ -10,7 +10,7 @@
 //
 // Keep this file (and everything it transitively imports) free of
 // Node-specific APIs (fs, path, Buffer, process.*). The cross-runtime
-// env shim in gemini.ts / claude.ts handles process.env vs Deno.env.
+// env shim in shared.ts handles process.env vs Deno.env.
 //
 // Relative imports MUST carry the explicit `.ts` extension — Deno
 // requires it; the Node/bundler side tolerates it via

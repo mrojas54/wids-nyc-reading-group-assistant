@@ -7,10 +7,15 @@
 // Prompt caching is enabled on the system prompt via cache_control, per
 // the claude-api skill recommendation — synthesis re-runs on the same
 // paper hit the cache for ~90% input-token cost savings.
-import { researchPaperAnalysisSchema } from "./schema.ts";
 import { buildSynthesisPrompt, buildHintPrompt, buildSocraticPrompt } from "./prompts.ts";
-import { parseProviderJson } from "./parse.ts";
 import { fetchPdfAsBase64 } from "./pdf.ts";
+import {
+  postJson,
+  requireEnvKey,
+  toHintResult,
+  toSocraticResult,
+  toSynthesisResult,
+} from "./shared.ts";
 import type {
   HintInput,
   HintResult,
@@ -49,22 +54,15 @@ async function callClaude(
     ],
     messages: [{ role: "user", content }],
   };
-  const startedAt = Date.now();
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
+  const { json, durationMs } = await postJson<ClaudeResponse>("claude", ENDPOINT, {
     signal: opts.signal,
     headers: {
       "x-api-key": opts.apiKey,
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify(body),
+    body,
   });
-  const durationMs = Date.now() - startedAt;
-  const json = (await res.json()) as ClaudeResponse;
-  if (!res.ok || json.error) {
-    throw new Error(`claude ${res.status}: ${json.error?.message ?? res.statusText}`);
-  }
   const text = json.content?.find((b) => b.type === "text")?.text ?? "";
   if (!text) throw new Error("claude returned no text block");
   return {
@@ -79,23 +77,13 @@ async function callClaude(
   };
 }
 
-function requireApiKey(): string {
-  const denoKey = (globalThis as { Deno?: { env: { get(k: string): string | undefined } } })
-    .Deno?.env.get("ANTHROPIC_API_KEY");
-  const nodeKey = (globalThis as { process?: { env: Record<string, string | undefined> } })
-    .process?.env?.ANTHROPIC_API_KEY;
-  const key = denoKey ?? nodeKey;
-  if (!key) throw new Error("ANTHROPIC_API_KEY not set");
-  return key;
-}
-
 const SYSTEM_PROMPT = `You are Paper Pal, a study companion that converts a research paper PDF into a structured ResearchPaperAnalysis JSON object. You must respond with valid JSON only — no markdown fences, no preamble, no trailing commentary. Schema validation is enforced server-side, so a malformed response is discarded.`;
 
 export async function claudeSynthesize(
   input: SynthesizePaperInput,
   opts: SynthesizeOpts,
 ): Promise<SynthesizePaperResult> {
-  const apiKey = requireApiKey();
+  const apiKey = requireEnvKey("ANTHROPIC_API_KEY");
   const model = opts.model ?? DEFAULT_MODEL;
   // Download the PDF ourselves and pass it inline as base64. Anthropic's
   // url-source document fetcher runs server-side and can race past the
@@ -114,44 +102,28 @@ export async function claudeSynthesize(
     ],
     { apiKey, model, maxTokens: 16000, system: SYSTEM_PROMPT },
   );
-  const parsed = researchPaperAnalysisSchema.parse(
-    parseProviderJson(text, "claudeSynthesize"),
-  );
-  return { payload: parsed, meta };
+  return toSynthesisResult(text, meta, "claudeSynthesize");
 }
 
 export async function claudeHint(input: HintInput, opts: SynthesizeOpts): Promise<HintResult> {
-  const apiKey = requireApiKey();
+  const apiKey = requireEnvKey("ANTHROPIC_API_KEY");
   const model = opts.model ?? "claude-haiku-4-5-20251001";
   const { text, meta } = await callClaude(
     [{ type: "text", text: buildHintPrompt(input) }],
     { apiKey, model, maxTokens: 512, system: SYSTEM_PROMPT, signal: opts.signal },
   );
-  const obj = parseProviderJson<{ hint?: string; confidence?: string }>(text, "claudeHint");
-  if (!obj.hint) throw new Error("claude hint missing 'hint' field");
-  return {
-    hint: obj.hint,
-    confidence: (obj.confidence === "low" || obj.confidence === "high")
-      ? obj.confidence
-      : "medium",
-    meta,
-  };
+  return toHintResult(text, meta, "claudeHint");
 }
 
 export async function claudeSocratic(
   input: SocraticInput,
   opts: SynthesizeOpts,
 ): Promise<SocraticResult> {
-  const apiKey = requireApiKey();
+  const apiKey = requireEnvKey("ANTHROPIC_API_KEY");
   const model = opts.model ?? "claude-haiku-4-5-20251001";
   const { text, meta } = await callClaude(
     [{ type: "text", text: buildSocraticPrompt(input) }],
     { apiKey, model, maxTokens: 1024, system: SYSTEM_PROMPT, signal: opts.signal },
   );
-  const obj = parseProviderJson<{ nextQuestion?: string; summary?: string }>(
-    text,
-    "claudeSocratic",
-  );
-  if (!obj.nextQuestion) throw new Error("claude socratic missing 'nextQuestion'");
-  return { nextQuestion: obj.nextQuestion, summary: obj.summary, meta };
+  return toSocraticResult(text, meta, "claudeSocratic");
 }

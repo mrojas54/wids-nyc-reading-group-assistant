@@ -7,8 +7,8 @@ import {
   S2AuthError,
   S2RequestError,
 } from "@/lib/suggest/types";
-import { toS2PaperId, fetchArxivBatch } from "@/lib/suggest/resolve-helpers";
-import type { Tables } from "@/lib/database.types";
+import { s2ApiKey } from "@/lib/suggest/s2-client";
+import { resolvePapers } from "@/lib/suggest/resolve-papers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,62 +17,17 @@ const ResolveRequestSchema = z.object({
   urls: z.array(z.string().min(1)).min(1).max(10),
 });
 
-const S2_BASE = "https://api.semanticscholar.org/graph/v1";
-
-async function fetchS2Metadata(
-  s2Id: string,
-  apiKey: string | null,
-): Promise<{ paperId: string; title: string; abstract: string } | null> {
-  const url = `${S2_BASE}/paper/${encodeURIComponent(s2Id)}?fields=paperId,title,abstract`;
-  const headers: Record<string, string> = {};
-  if (apiKey) headers["x-api-key"] = apiKey;
-  const res = await fetch(url, {
-    headers,
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (res.status === 401 || res.status === 403) throw new S2AuthError(`s2 ${res.status}`);
-  if (!res.ok) return null;
-  const data = (await res.json()) as { paperId: string; title: string; abstract: string };
-  return data;
-}
-
-type DbPaperRow = {
-  id: number;
-  s2_paper_id: string;
-  title: string;
-  abstract: string;
-};
-
-// Both selects below flow into toDbPaperRow, whose parameter is built from the
-// generated Row type, so a renamed column is a compile error instead of a
-// silent `undefined`. (Not `.returns<T>()` — see lib/queries.ts for why that
-// is a cast that would hide exactly this.)
-type PaperSelectRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
-
-function toDbPaperRow(r: PaperSelectRow): DbPaperRow | null {
-  // Every row here was matched or upserted by s2_paper_id, so a NULL is a
-  // data invariant violation, not a value to coerce to "".
-  if (r.s2_paper_id === null) return null;
-  return {
-    id: r.id,
-    s2_paper_id: r.s2_paper_id,
-    title: r.title ?? "",
-    abstract: r.abstract ?? "",
-  };
-}
-
 export async function POST(req: Request) {
   try {
     await requireLeaderRole();
     const body = await req.json();
     const { urls } = ResolveRequestSchema.parse(body);
 
-    // 1. Parse all inputs to s2_paper_ids
-    const parsed = urls.map(u => ({ input: u, s2Id: toS2PaperId(u) }));
-    const validIds = Array.from(
-      new Set(parsed.filter(x => x.s2Id !== null).map(x => x.s2Id as string)),
-    );
-    if (validIds.length === 0) {
+    const apiKey = s2ApiKey();
+    const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
+    const result = await resolvePapers(createSupabaseServiceClient(), urls, apiKey);
+
+    if (result.kind === "no_valid_urls") {
       return NextResponse.json(
         {
           error: "no_valid_urls",
@@ -81,77 +36,7 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
-
-    const apiKey = process.env.S2_API_KEY ?? null;
-    if (!apiKey) {
-      console.warn(JSON.stringify({
-        event: "s2_api_key_absent",
-        message: "S2_API_KEY env var not set; calling S2 unauthenticated.",
-      }));
-    }
-
-    const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
-    const client = createSupabaseServiceClient();
-
-    // 2. Lookup existing papers
-    const { data: existing, error: existingErr } = await client
-      .from("papers")
-      .select("id, s2_paper_id, title, abstract")
-      .in("s2_paper_id", validIds);
-    if (existingErr) throw existingErr;
-
-    const resolvedMap = new Map<string, DbPaperRow>();
-    for (const r of existing ?? []) {
-      const row = toDbPaperRow(r);
-      if (row) resolvedMap.set(row.s2_paper_id, row);
-    }
-
-    // 3. Fetch S2 metadata for misses, then UPSERT into papers
-    const missingIds = validIds.filter(id => !resolvedMap.has(id));
-    if (missingIds.length > 0) {
-      const s2Results = await Promise.all(missingIds.map(id => fetchS2Metadata(id, apiKey)));
-
-      // Collect ARXIV: IDs that S2 didn't have — batch-fetch from arXiv export API
-      const s2Misses = missingIds.filter((id, i) => !s2Results[i] && id.startsWith("ARXIV:"));
-      const arxivFallback = s2Misses.length > 0 ? await fetchArxivBatch(s2Misses) : new Map();
-
-      const insertRows: Array<{ s2_paper_id: string; title: string; abstract: string }> = [];
-      for (let i = 0; i < missingIds.length; i++) {
-        const meta = s2Results[i] ?? arxivFallback.get(missingIds[i]) ?? null;
-        if (!meta) continue; // neither S2 nor arXiv had it; drop
-        insertRows.push({
-          s2_paper_id: meta.paperId,
-          title: meta.title || "(untitled)",
-          abstract: meta.abstract || "",
-        });
-      }
-      if (insertRows.length > 0) {
-        const { data: inserted, error: insertErr } = await client
-          .from("papers")
-          .upsert(insertRows, { onConflict: "s2_paper_id" })
-          .select("id, s2_paper_id, title, abstract");
-        if (insertErr) throw insertErr;
-        for (const r of inserted ?? []) {
-          const row = toDbPaperRow(r);
-          if (row) resolvedMap.set(row.s2_paper_id, row);
-        }
-      }
-    }
-
-    // 4. Build response in input order, dropping unparseable/unresolvable entries
-    const resolved: DbPaperRow[] = [];
-    const seen = new Set<string>();
-    for (const p of parsed) {
-      if (!p.s2Id) continue;
-      if (seen.has(p.s2Id)) continue;
-      const r = resolvedMap.get(p.s2Id);
-      if (r) {
-        resolved.push(r);
-        seen.add(p.s2Id);
-      }
-    }
-
-    return NextResponse.json({ resolved });
+    return NextResponse.json({ resolved: result.resolved });
   } catch (e) {
     if (e instanceof UnauthorizedError) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
