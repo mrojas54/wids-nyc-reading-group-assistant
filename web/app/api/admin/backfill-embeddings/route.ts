@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
-import { fetchPaperWithEmbedding } from "@/lib/suggest/s2-client";
+import { fetchPaperWithEmbedding, s2ApiKey } from "@/lib/suggest/s2-client";
 import { embedBatch, prewarmModel } from "@/lib/suggest/specter2-wasm";
 import { cacheMany } from "@/lib/suggest/embedding-cache";
 import {
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     // parallel with the model load.
     prewarmModel();
 
-    const apiKey = process.env.S2_API_KEY ?? null;
+    const apiKey = s2ApiKey();
     const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
     const client = createSupabaseServiceClient();
 

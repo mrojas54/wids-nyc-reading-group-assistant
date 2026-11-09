@@ -3,6 +3,40 @@ import { S2AuthError, S2RequestError, type S2Result } from "./types";
 const S2_BASE = "https://api.semanticscholar.org/graph/v1";
 const FIELDS = "paperId,title,abstract,embedding.specter_v2";
 
+/**
+ * The Semantic Scholar API key, or null. Without one S2 still answers, just at
+ * a lower rate limit, so a missing key is logged rather than treated as an error.
+ */
+export function s2ApiKey(): string | null {
+  const apiKey = process.env.S2_API_KEY || null;
+  if (!apiKey) {
+    console.warn(JSON.stringify({
+      event: "s2_api_key_absent",
+      message: "S2_API_KEY env var not set; calling S2 unauthenticated. Set it for higher rate limits.",
+    }));
+  }
+  return apiKey;
+}
+
+export type S2Metadata = { paperId: string; title: string; abstract: string };
+
+/** Title and abstract for one paper; null when S2 doesn't have it. */
+export async function fetchS2Metadata(
+  s2Id: string,
+  apiKey: string | null,
+): Promise<S2Metadata | null> {
+  const url = `${S2_BASE}/paper/${encodeURIComponent(s2Id)}?fields=paperId,title,abstract`;
+  const headers: Record<string, string> = {};
+  if (apiKey) headers["x-api-key"] = apiKey;
+  const res = await fetch(url, {
+    headers,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (res.status === 401 || res.status === 403) throw new S2AuthError(`s2 ${res.status}`);
+  if (!res.ok) return null;
+  return (await res.json()) as S2Metadata;
+}
+
 async function fetchOnce(paperId: string, apiKey: string | null): Promise<Response> {
   const url = `${S2_BASE}/paper/${encodeURIComponent(paperId)}?fields=${FIELDS}`;
   const headers: Record<string, string> = {};
