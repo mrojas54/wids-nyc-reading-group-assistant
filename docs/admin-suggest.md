@@ -165,7 +165,9 @@ request:
 2. `POST /api/admin/resolve-papers` parses pasted IDs/URLs, fetches title and
    abstract metadata from Semantic Scholar, falls back to the arXiv export API
    for arXiv papers S2 does not know yet, and upserts resolvable papers into
-   `papers`.
+   `papers`. The route only checks the role, parses the request and maps
+   errors to status codes; the work is `resolvePapers` in
+   `lib/suggest/resolve-papers.ts`.
 3. `GET /api/admin/past-picks?window=all|last6m` loads the comparison set from
    `papers` rows that have `s2_paper_id`.
 
@@ -348,8 +350,8 @@ Operational constraints:
 
 - `SPECTER2_MODEL_BLOB_URL` and `BLOB_READ_WRITE_TOKEN` must be present for WASM
   fallback or backfill to load the private ONNX model from Vercel Blob.
-- `S2_API_KEY` is optional. Without it, S2 requests are unauthenticated and the
-  route intentionally falls back to WASM immediately on 429 instead of retrying
+- `S2_API_KEY` is optional. Without it, S2 requests are unauthenticated, the
+  route logs `s2_api_key_absent`, and it intentionally falls back to WASM immediately on 429 instead of retrying
   inside the same rate-limit window.
 - The route uses the service-role Supabase client because it writes
   `paper_embeddings`. After `033` the table is service-role-only: RLS is on
@@ -443,7 +445,9 @@ add it to Vercel's env vars:
 S2_API_KEY = <your key>
 ```
 
-The deployed code reads it automatically via `process.env.S2_API_KEY`.
+The suggest, resolve-papers and backfill-embeddings routes all read it
+through `s2ApiKey()` in `lib/suggest/s2-client.ts`. An empty value counts as
+unset, and each request without a key logs `s2_api_key_absent`.
 No code change, no redeploy needed beyond restarting the function
 (any push or env-var update triggers a redeploy on Vercel).
 
@@ -595,8 +599,9 @@ them somewhere durable when (not if) you hit them again.
 │   │   └── api/
 │   │       ├── suggest/route.ts                  ← the orchestrator endpoint
 │   │       └── admin/
+│   │           ├── backfill-embeddings/route.ts  ← "Warm embedding cache": embeds missing papers
 │   │           ├── past-picks/route.ts           ← returns ResolvedPaper[] for the past picks selector
-│   │           └── resolve-papers/route.ts       ← URL → canonical S2 ID + DB upsert
+│   │           └── resolve-papers/route.ts       ← auth + parse + status codes (work is in lib)
 │   ├── lib/
 │   │   ├── auth/requireLeaderRole.ts             ← role-gating helper
 │   │   ├── arxiv/
@@ -605,7 +610,8 @@ them somewhere durable when (not if) you hit them again.
 │   │   └── suggest/
 │   │       ├── types.ts                          ← zod schemas + error classes
 │   │       ├── mmr.ts                            ← ranking math (pure function)
-│   │       ├── s2-client.ts                      ← Semantic Scholar HTTP client
+│   │       ├── s2-client.ts                      ← Semantic Scholar HTTP client + s2ApiKey()
+│   │       ├── resolve-papers.ts                 ← URL → canonical S2 ID (arXiv fallback) + DB upsert
 │   │       ├── specter2-wasm.ts                  ← WASM model loader (singleton)
 │   │       ├── embedding-cache.ts                ← Supabase read/write
 │   │       └── orchestrator.ts                   ← cache → S2 → WASM → MMR

@@ -35,7 +35,9 @@ supabase/functions/
 ```
 
 Provider abstraction lives in `web/lib/paperpal/providers/` and is imported
-via relative path (`../../../web/lib/paperpal/providers/index.ts`). The
+via relative path (`../../../web/lib/paperpal/providers/index.ts`). Request
+plumbing shared by the Claude and Gemini providers lives in `shared.ts` there,
+so a change to it ships to these functions on their next deploy. The
 import map aliases `zod` to the npm specifier so both Node tests and Deno
 Edge Functions resolve the same package.
 
