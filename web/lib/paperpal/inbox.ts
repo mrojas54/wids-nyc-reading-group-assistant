@@ -10,7 +10,7 @@
 // so a renamed or dropped column in MEETING_SELECT fails to type-check at the
 // mapper call instead of surfacing as `undefined` at runtime.
 //
-// Deliberately NOT `.returns<T>()` — see the header of lib/queries.ts for
+// Deliberately NOT `.returns<T>()` — see the header of lib/queries/index.ts for
 // why that is a cast in postgrest-js 2.x and swallows the diagnostic.
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";

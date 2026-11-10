@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isAdmin } from "./roles.ts";
 
-// Discriminated union mirrors web/lib/queries.ts — makes the illegal
+// Discriminated union mirrors web/lib/queries/papers.ts — makes the illegal
 // state `{canSynthesize: true, reason: "none"}` a compile error.
 export type SynthesisGate =
   | { canSynthesize: true; reason: "owner" | "leader" }

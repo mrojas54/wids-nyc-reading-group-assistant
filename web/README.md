@@ -8,7 +8,7 @@ Next.js portal for the WiDS NYC AI Reading Group.
 | --- | --- |
 | `/` | Magic-link sign-in. Email field → Supabase sends a link → callback hands off to `/dashboard`. |
 | `/dashboard` | Authenticated home. Light `card-hero` shows the next meeting (eyebrow → paper title → time/place/leader → RSVP buttons). When a prep meeting is open and the member hasn't submitted availability yet, a sage `hero-nudge` folds into the hero — tapping it routes to `/availability?meeting=<id>`. Once submitted, the nudge flips to a confirmed "Tap to change availability" state. A promoted Paper Pal card sits below the hero when the paper has a `paper_companions` row; legacy papers can fall back to `papers.companion_url`. The secondary stack ("Since you joined" stats + history) is demoted. |
-| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via proxy (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries.ts`. |
+| `/me/rsvps` | "Manage your RSVPs" landing page for the `links.rsvpManage` footer token in transactional email. Auth-gated via proxy (`/me/*`); lists every upcoming `status='scheduled'` meeting (not just the dashboard hero's next one) with per-row `RsvpButtons`. Empty states cover: Auth session with no `members` row (`current_member_id` is NULL), and no upcoming meetings. Data path: `upcomingRsvps` in `lib/queries/member.ts`. |
 | `/availability` | 30-day month-grid date picker (`MonthCalendar`). Without a query param, it uses the first `meetings.status='prep'` row ordered by `created_at DESC`, `type DESC`, then `id DESC`; the type tie-break deliberately prefers `reading_group` over `admin` when bootstrap gave both rows the same timestamp. With `?meeting=<id>`, the id must be a positive integer for an existing prep meeting or the page 404s rather than silently falling back to another poll. Submitting replaces that member's rows for the meeting via the `replace_my_availability` RPC from migration `032` (one transaction; selected 6–9 PM ET windows; live as of 2026-08-15). When no prep poll is open, the page renders the shared `empty-state` "Sit tight." |
 | `/papers` | Paper Pal inbox. Shows reading now, upcoming lead picks, member-proposed "want to lead" suggestions, and recently discussed papers. Signed-in roster members can propose catalog papers or volunteer for proposed meetings. See [../docs/paper-pal-portal.md](../docs/paper-pal-portal.md). |
 | `/new` | Paper Pal synthesis upload page (`/new?paperId=<id>`). Gated by the `can_synthesize_paper_pal` RPC — only operator/admin or the paper's meeting leader sees the upload form. `NewPaperForm` uploads the PDF to the `papers-pdfs` bucket and POSTs `/functions/v1/analyze-paper`, streaming a 5-stage SSE progress flow. |
@@ -119,7 +119,7 @@ boundary. Without the generic, `tsc --noEmit` accepted `.from("meetingz")`
 
 Keep the generic on every accessor in:
 
-- `lib/queries.ts`
+- `lib/queries/` (`meetings.ts`, `member.ts`, `papers.ts`)
 - `lib/logs.ts`
 - `lib/paperpal/inbox.ts`
 - `lib/suggest/orchestrator.ts`
@@ -132,19 +132,22 @@ result type** as `SelectQueryError<…> | null`, not at the call site — so it
 only becomes a hard error when something consumes `data` in a type-checked
 way.
 
-### `queries.ts` pattern (post-#156)
+### `lib/queries/` pattern
 
-`lib/queries.ts` pins embedded selects with `.returns<T>()`, where `T` is built
-from `Tables<"…">` `Pick` types (`PaperCompanionEmbed`,
-`MeetingWithLeaderAndPaper`, `UpcomingMeetingRow`, and friends). That is what
-turns a renamed/dropped column into a real `tsc` error instead of a silent
-`undefined` at runtime. Do not reintroduce `any` row-mappers or `as any[]`
-casts on those embeds — they undo the generic.
+`lib/queries/` is split by subject: `meetings.ts` (the next and prep
+meetings), `member.ts` (the signed-in member's own rows) and `papers.ts`
+(catalog row and the Paper Pal gate), with shared pieces in `shared.ts`.
+Callers import from `@/lib/queries`, which re-exports all of them.
 
-Hand-rolled Supabase mocks in Vitest must implement a no-op `.returns()` on
-the thenable the builder returns (postgrest-js exposes it; at runtime it is a
-type-only identity). See `lib/__tests__/queries.test.ts` and
-`upcomingRsvps.test.ts` for the `p.returns = () => p` pattern.
+Embedded selects land in a mapper parameter or an annotated local typed from
+`Tables<"…">` `Pick` types (`PaperCompanionEmbed`,
+`MeetingWithLeaderAndPaper`, `UpcomingMeetingRow`, and friends), never a
+`.returns<T>()`. In postgrest-js 2.x `.returns<T>()` is a cast, so a
+select-string typo compiles clean under it; the typed assignment is what turns
+a renamed/dropped column into a real `tsc` error instead of a silent
+`undefined` at runtime. The header of `lib/queries/index.ts` has the details.
+Do not reintroduce `any` row-mappers or `as any[]` casts on those embeds;
+they undo the generic.
 
 ### Runtime query failures vs empty data
 
