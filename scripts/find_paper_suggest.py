@@ -213,18 +213,17 @@ async def fetch_specter_embeddings(
     """SPECTER2 vectors for the given S2 ids, from the Graph API batch endpoint.
 
     One request per 500 ids instead of one per paper. Ids S2 doesn't know, or
-    that have no embedding, are left out of the result, and so is every id in
-    a request that still fails after retries; callers warn about the gaps.
+    that have no embedding, are left out of the result; callers warn about the
+    gaps. A request that still fails after retries (429, 5xx or a transport
+    error) raises: one failed batch loses every vector, and an empty result
+    would read as a successful run with no suggestions.
     """
     ids = list(dict.fromkeys(s2_paper_ids))  # dedupe, keep order
     url = f"{S2_GRAPH_BASE}/paper/batch?fields=embedding.specter_v2"
     out: dict[str, list[float]] = {}
     for start in range(0, len(ids), S2_BATCH_MAX):
         chunk = ids[start:start + S2_BATCH_MAX]
-        try:
-            resp = await _request_with_retry(client, "POST", url, json={"ids": chunk})
-        except httpx.HTTPError:
-            continue
+        resp = await _request_with_retry(client, "POST", url, json={"ids": chunk})
         papers: Any = resp.json() if resp.status_code == 200 else None
         if not isinstance(papers, list):
             continue
@@ -381,9 +380,41 @@ def _emit(
     return 0
 
 
+async def _suggest(
+    client: httpx.AsyncClient,
+    inp: Input,
+    cached_int: dict[int, list[float]],
+    positive_ids: list[str],
+) -> int:
+    # The backfill and the recommendations don't depend on each other.
+    (full_past_embs, warnings), recs = await asyncio.gather(
+        backfill_missing_embeddings(client, inp.past_papers, cached_int),
+        fetch_recommendations(client, positive_ids, inp.limit),
+    )
+    embeddings_to_cache = [
+        EmbeddingToCache(paper_id=pid, model="specter_v2", vector=vec)
+        for pid, vec in full_past_embs.items()
+        if pid not in cached_int
+    ]
+
+    if not recs:
+        warnings.append("Semantic Scholar Recommendations returned 0 papers.")
+        return _emit([], embeddings_to_cache, warnings)
+
+    recs, enrich_warnings = await enrich_recommendations_with_embeddings(client, recs)
+    warnings.extend(enrich_warnings)
+    recs_with_emb = filter_recs_with_embeddings(recs)
+    if not recs_with_emb:
+        warnings.append("No recommendations had usable embeddings.")
+        return _emit([], embeddings_to_cache, warnings)
+
+    candidates = build_candidates(recs_with_emb, full_past_embs, inp.past_papers, inp.top)
+    return _emit(candidates, embeddings_to_cache, warnings)
+
+
 async def main() -> int:
     """Exit 0 on success (possibly with warnings or no candidates); 1 on bad
-    input or when the Recommendations API fails after retries."""
+    input or when any Semantic Scholar request fails after retries."""
     try:
         inp = Input.model_validate_json(sys.stdin.read())
     except Exception as exc:
@@ -393,37 +424,14 @@ async def main() -> int:
     cached_int = {int(k): v for k, v in inp.cached_embeddings.items()}
     positive_ids = [p.s2_paper_id for p in inp.past_papers]
 
-    async with s2_client(s2_api_key()) as client:
-        # The backfill and the recommendations don't depend on each other, and
-        # the backfill never raises an HTTPStatusError (it warns instead).
-        try:
-            (full_past_embs, warnings), recs = await asyncio.gather(
-                backfill_missing_embeddings(client, inp.past_papers, cached_int),
-                fetch_recommendations(client, positive_ids, inp.limit),
-            )
-        except httpx.HTTPStatusError as exc:
-            print(f"Semantic Scholar Recommendations API failed: {exc}", file=sys.stderr)
-            return 1
-
-        embeddings_to_cache = [
-            EmbeddingToCache(paper_id=pid, model="specter_v2", vector=vec)
-            for pid, vec in full_past_embs.items()
-            if pid not in cached_int
-        ]
-
-        if not recs:
-            warnings.append("Semantic Scholar Recommendations returned 0 papers.")
-            return _emit([], embeddings_to_cache, warnings)
-
-        recs, enrich_warnings = await enrich_recommendations_with_embeddings(client, recs)
-        warnings.extend(enrich_warnings)
-        recs_with_emb = filter_recs_with_embeddings(recs)
-        if not recs_with_emb:
-            warnings.append("No recommendations had usable embeddings.")
-            return _emit([], embeddings_to_cache, warnings)
-
-        candidates = build_candidates(recs_with_emb, full_past_embs, inp.past_papers, inp.top)
-        return _emit(candidates, embeddings_to_cache, warnings)
+    try:
+        async with s2_client(s2_api_key()) as client:
+            return await _suggest(client, inp, cached_int, positive_ids)
+    except httpx.HTTPError as exc:
+        # Exit 1 rather than an empty success: the command replaces the stored
+        # suggestions with whatever an exit-0 run returns.
+        print(f"Semantic Scholar request failed after retries: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

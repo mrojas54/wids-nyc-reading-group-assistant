@@ -425,11 +425,12 @@ async def test_fetch_specter_embeddings_failed_batch_is_empty_not_fatal():
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_specter_embeddings_retries_exhaust_is_empty_not_fatal():
+async def test_fetch_specter_embeddings_raises_once_retries_exhaust():
     from scripts.find_paper_suggest import fetch_specter_embeddings
     route = respx.post(BATCH_URL).mock(return_value=httpx.Response(503))
     async with httpx.AsyncClient() as client:
-        assert await fetch_specter_embeddings(client, ["x"]) == {}
+        with pytest.raises(httpx.HTTPStatusError):
+            await fetch_specter_embeddings(client, ["x"])
     assert route.call_count == 3
 
 
@@ -756,4 +757,32 @@ async def test_main_recommendations_failure_returns_1(monkeypatch, capsys):
     }
     monkeypatch.setattr("sys.stdin", _StdinStub(json.dumps(payload)))
     assert await main() == 1
-    assert "Recommendations API failed" in capsys.readouterr().err
+    assert "Semantic Scholar request failed" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_main_embedding_transport_failure_returns_1_not_empty_success(monkeypatch, capsys):
+    """Recs succeed but the candidate batch can't connect: exit 1, no output.
+
+    An exit-0 run with no candidates would replace the stored suggestions.
+    """
+    from scripts.find_paper_suggest import main
+    batch = respx.post(BATCH_URL).mock(side_effect=httpx.ConnectError("unreachable"))
+    respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(200, json={
+        "recommendedPapers": [{"paperId": "rec-a", "title": "A"}],
+    }))
+    payload = {
+        "past_papers": [{"paper_id": 1, "s2_paper_id": "ARXIV:1706.03762", "title": "t"}],
+        "cached_embeddings": {"1": [1.0, 0.0]},
+    }
+    monkeypatch.setattr("sys.stdin", _StdinStub(json.dumps(payload)))
+    assert await main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Semantic Scholar request failed" in captured.err
+    assert batch.call_count == 3
