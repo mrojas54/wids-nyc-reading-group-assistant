@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
-import {
-  UnauthorizedError,
-  ForbiddenError,
-  S2AuthError,
-  S2RequestError,
-} from "@/lib/suggest/types";
+import { knownErrorResponse } from "@/lib/suggest/route-errors";
 import { s2ApiKey } from "@/lib/suggest/s2-client";
 import { resolvePapers } from "@/lib/suggest/resolve-papers";
 
@@ -38,21 +33,8 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({ resolved: result.resolved });
   } catch (e) {
-    if (e instanceof UnauthorizedError) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
-    if (e instanceof ForbiddenError) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-    if (e instanceof z.ZodError) {
-      return NextResponse.json({ error: "invalid_request", issues: e.issues }, { status: 400 });
-    }
-    if (e instanceof S2AuthError) {
-      return NextResponse.json({ error: "s2_auth" }, { status: 502 });
-    }
-    if (e instanceof S2RequestError) {
-      return NextResponse.json({ error: "s2_request" }, { status: 502 });
-    }
+    const known = knownErrorResponse(e);
+    if (known) return NextResponse.json(known.body, { status: known.status });
     console.error(JSON.stringify({ event: "resolve_error", message: (e as Error).message }));
     return NextResponse.json({ error: "internal" }, { status: 500 });
   }

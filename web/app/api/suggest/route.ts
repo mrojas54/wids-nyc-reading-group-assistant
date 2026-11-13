@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { requireLeaderRole } from "@/lib/auth/requireLeaderRole";
 import { orchestrate, type OrchestratorDeps } from "@/lib/suggest/orchestrator";
 import { getCached, cacheMany } from "@/lib/suggest/embedding-cache";
 import { fetchPaperWithEmbedding, s2ApiKey } from "@/lib/suggest/s2-client";
 import { embedBatch, ensureModelLoaded, isModelWarm, prewarmModel } from "@/lib/suggest/specter2-wasm";
+import { knownErrorResponse } from "@/lib/suggest/route-errors";
 import {
   SuggestRequestSchema,
   UnauthorizedError,
   ForbiddenError,
-  S2AuthError,
-  S2RequestError,
-  ModelLoadError,
   TimeoutError,
 } from "@/lib/suggest/types";
 
@@ -135,12 +132,8 @@ export async function POST(req: Request) {
       }));
     };
 
-    if (e instanceof UnauthorizedError) { errorLog("unauthorized", 401); return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
-    if (e instanceof ForbiddenError) { errorLog("forbidden", 403); return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
-    if (e instanceof z.ZodError) { errorLog("invalid_request", 400); return NextResponse.json({ error: "invalid_request", issues: e.issues }, { status: 400 }); }
-    if (e instanceof S2AuthError) { errorLog("s2_auth", 502); return NextResponse.json({ error: "s2_auth" }, { status: 502 }); }
-    if (e instanceof S2RequestError) { errorLog("s2_request", 502); return NextResponse.json({ error: "s2_request" }, { status: 502 }); }
-    if (e instanceof ModelLoadError) { errorLog("wasm_model_load_failed", 502); return NextResponse.json({ error: "wasm_model_load_failed", detail: (e as Error).message }, { status: 502 }); }
+    const known = knownErrorResponse(e);
+    if (known) { errorLog(known.code, known.status); return NextResponse.json(known.body, { status: known.status }); }
     if (e instanceof TimeoutError) { errorLog("timeout", 504); return NextResponse.json({ error: "timeout", elapsed_ms: TIMEOUT_MS }, { status: 504 }); }
 
     errorLog("internal", 500);
