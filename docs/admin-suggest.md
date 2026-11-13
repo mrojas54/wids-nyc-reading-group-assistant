@@ -338,9 +338,9 @@ What happens behind the button:
 
 - The browser loops over `POST /api/admin/backfill-embeddings` with
   `{ "batch_size": 10 }`.
-- The route selects every `papers` row with `s2_paper_id`, subtracts existing
-  `paper_embeddings` rows where `model='specter_v2'`, and embeds the first
-  missing batch.
+- `backfillBatch` (`lib/suggest/backfill.ts`) selects every `papers` row with
+  `s2_paper_id`, subtracts existing `paper_embeddings` rows where
+  `model='specter_v2'`, and embeds the first missing batch.
 - For each batch, S2 hits are cached directly. S2 429s, missing embeddings,
   missing-corpus responses, and transient S2 failures fall through to WASM.
 - The loop stops when the route returns `remaining: 0`; if all eligible papers
@@ -599,7 +599,7 @@ them somewhere durable when (not if) you hit them again.
 │   │   └── api/
 │   │       ├── suggest/route.ts                  ← the orchestrator endpoint
 │   │       └── admin/
-│   │           ├── backfill-embeddings/route.ts  ← "Warm embedding cache": embeds missing papers
+│   │           ├── backfill-embeddings/route.ts  ← "Warm embedding cache": auth + parse + log (work is in lib)
 │   │           ├── past-picks/route.ts           ← returns ResolvedPaper[] for the past picks selector
 │   │           └── resolve-papers/route.ts       ← auth + parse + status codes (work is in lib)
 │   ├── lib/
@@ -612,6 +612,8 @@ them somewhere durable when (not if) you hit them again.
 │   │       ├── mmr.ts                            ← ranking math (pure function)
 │   │       ├── s2-client.ts                      ← Semantic Scholar HTTP client + s2ApiKey()
 │   │       ├── resolve-papers.ts                 ← URL → canonical S2 ID (arXiv fallback) + DB upsert
+│   │       ├── backfill.ts                       ← one cache-warmup batch: S2 first, WASM fallback
+│   │       ├── route-errors.ts                   ← shared error → status code mapping for the three routes
 │   │       ├── specter2-wasm.ts                  ← WASM model loader (singleton)
 │   │       ├── embedding-cache.ts                ← Supabase read/write
 │   │       └── orchestrator.ts                   ← cache → S2 → WASM → MMR
