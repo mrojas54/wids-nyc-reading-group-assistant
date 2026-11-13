@@ -315,6 +315,8 @@ uv run --with httpx --with numpy --with pydantic --with tenacity \
     scripts/find_paper_suggest.py
 ```
 
+The helper sends `S2_API_KEY` when it is set in the shell or in `web/.env.local`, and fetches every SPECTER2 vector it needs through the Graph API batch endpoint (one request per 500 papers).
+
 Expected: exit 0 with JSON on stdout (`Output` schema). Exit 1 indicates a hard failure; render the stderr message to the leader and write a `command_log` failure entry (5i).
 
 ### 5e — UPSERT new embeddings

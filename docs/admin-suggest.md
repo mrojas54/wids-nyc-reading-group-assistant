@@ -447,7 +447,9 @@ S2_API_KEY = <your key>
 
 The suggest, resolve-papers and backfill-embeddings routes all read it
 through `s2ApiKey()` in `lib/suggest/s2-client.ts`. An empty value counts as
-unset, and each request without a key logs `s2_api_key_absent`.
+unset, and each request without a key logs `s2_api_key_absent`. The
+`/wids-find-paper` CLI (`scripts/find_paper_suggest.py`) sends it too, reading
+the shell environment first and `web/.env.local` second.
 No code change, no redeploy needed beyond restarting the function
 (any push or env-var update triggers a redeploy on Vercel).
 

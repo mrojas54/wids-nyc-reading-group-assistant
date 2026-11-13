@@ -1,13 +1,13 @@
-"""Helper for /wids-find-paper suggest sub-mode.
+"""Helper for /wids-find-paper suggest: Input JSON on stdin, Output JSON on stdout.
 
-Reads JSON from stdin, calls Semantic Scholar APIs, computes MMR-diverse
-top-N candidates with display rationale, emits JSON to stdout.
-
-See: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
+Asks Semantic Scholar for recommendations seeded by past papers, ranks them
+with MMR on SPECTER2 embeddings, and names each one's closest past paper.
+Design: docs/superpowers/specs/2026-05-06-wids-find-paper-suggest-design.md
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sys
 from pathlib import Path
@@ -21,6 +21,7 @@ from pydantic import BaseModel
 # but not the repo root; the shared helpers live in the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from scripts.env_file import parse_env_file
 from scripts.paper_urls import extract_doi_from_url, has_refused_scheme
 from scripts.vecmath import cosine
 from tenacity import (
@@ -32,9 +33,11 @@ from tenacity import (
 
 S2_GRAPH_BASE = "https://api.semanticscholar.org/graph/v1"
 S2_RECS_BASE = "https://api.semanticscholar.org/recommendations/v1"
+# The Graph API's batch endpoint takes at most 500 ids per request.
+S2_BATCH_MAX = 500
+ENV_FILE = Path(__file__).resolve().parent.parent / "web" / ".env.local"
 
-# Status codes to retry. 429 (rate limit) and 5xx (server). 4xx other than 429
-# are not retryable; 200 and 404 are returned to caller for handling.
+# 429 and 5xx are retried; every other status goes back to the caller.
 _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
@@ -81,11 +84,7 @@ _ARXIV_RE = re.compile(
 )
 
 def extract_arxiv_id(url: str) -> str | None:
-    """Extract a modern arXiv ID (e.g., '2104.05234') from an arXiv URL.
-
-    Handles /abs/ and /pdf/ paths, version suffixes (v1, v2, ...), and
-    .pdf extensions. Returns None for non-arXiv URLs or empty input.
-    """
+    """Modern arXiv id ('2104.05234') from an /abs/ or /pdf/ URL, else None."""
     if not url or has_refused_scheme(url):
         return None
     m = _ARXIV_RE.search(url)
@@ -93,12 +92,10 @@ def extract_arxiv_id(url: str) -> str | None:
 
 
 def to_s2_paper_id(url: str) -> str | None:
-    """Convert a paper URL to a Semantic Scholar paper identifier.
+    """'ARXIV:<id>' or 'DOI:<doi>' for a paper URL, else None.
 
-    Returns 'ARXIV:<id>' if the URL is an arXiv URL, 'DOI:<doi>' if a
-    DOI is extractable from the URL, or None if neither — including when the
-    URL carries a scheme other than http(s), which the regexes below would
-    otherwise happily match inside (`javascript:…#arxiv.org/abs/1706.03762`).
+    A scheme other than http(s) gives None, since the regexes would otherwise
+    match inside `javascript:…#arxiv.org/abs/1706.03762`.
     """
     arxiv_id = extract_arxiv_id(url)
     if arxiv_id:
@@ -113,9 +110,7 @@ def max_cosine_match(
     cand_vec: np.ndarray,
     past_vecs: dict[int, np.ndarray],
 ) -> tuple[int | None, float]:
-    """Find the past paper most similar to `cand_vec` and return its
-    (paper_id, cosine_score). Returns (None, 0.0) when past_vecs is empty.
-    """
+    """(paper_id, cosine) of the closest past paper; (None, 0.0) when there are none."""
     if not past_vecs:
         return (None, 0.0)
     best_id: int | None = None
@@ -134,25 +129,17 @@ def mmr_select(
     top_n: int,
     lam: float = 0.6,
 ) -> list[int]:
-    """Greedy Maximal Marginal Relevance selection.
+    """Greedy Maximal Marginal Relevance: indices into `embeddings` in pick order.
 
-    Args:
-        embeddings: shape (N, D) candidate embeddings.
-        relevance: shape (N,) relevance scores; higher is better.
-        top_n: number of items to select.
-        lam: tradeoff weight in [0, 1]. lam=1 is pure relevance; lam=0 is
-            pure diversity-from-already-selected (after the first pick).
-
-    Returns:
-        list of indices into `embeddings`, in selection order. Length is
-        min(top_n, N).
+    `embeddings` is (N, D), `relevance` is (N,). lam=1 ranks by relevance
+    alone; lam=0 picks for diversity from what is already selected.
     """
     n = embeddings.shape[0]
     if n == 0:
         return []
     top_n = min(top_n, n)
 
-    # Pre-normalize for fast cosine via dot product.
+    # Normalised rows make cosine a dot product.
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     norms[norms == 0.0] = 1.0
     normalized = embeddings / norms
@@ -192,43 +179,61 @@ async def _request_with_retry(
     url: str,
     **kwargs: Any,
 ) -> httpx.Response:
-    """Issue an HTTP request with exponential-backoff retry on retryable
-    statuses (429, 5xx) and transport errors. Non-retryable statuses
-    (including 200 and 404) are returned to the caller without raising.
-    """
+    """Send a request, retrying 429, 5xx and transport errors with backoff."""
     resp = await client.request(method, url, **kwargs)
     if resp.status_code in _RETRYABLE_STATUS:
-        # Raise so tenacity retries.
-        resp.raise_for_status()
+        resp.raise_for_status()  # tenacity retries on the raise
     return resp
 
 
-async def fetch_specter_embedding(
-    client: httpx.AsyncClient,
-    s2_paper_id: str,
-) -> list[float] | None:
-    """Fetch the SPECTER2 embedding for a paper from the S2 Graph API.
+def s2_api_key() -> str | None:
+    """S2_API_KEY from the environment, else from web/.env.local; None if unset.
 
-    Returns None if the paper is not in the S2 corpus (404), the response
-    has no embedding field, or the embedding vector is empty.
+    Without a key S2 still answers, at a much lower rate limit.
     """
-    url = f"{S2_GRAPH_BASE}/paper/{s2_paper_id}?fields=embedding.specter_v2"
-    try:
-        resp = await _request_with_retry(client, "GET", url)
-    except httpx.HTTPStatusError:
-        return None
-    if resp.status_code == 404:
-        return None
-    if resp.status_code != 200:
-        return None
-    data = resp.json()
-    embedding = data.get("embedding")
-    if not embedding:
-        return None
-    vector = embedding.get("vector")
-    if not vector:
-        return None
-    return list(vector)
+    return os.environ.get("S2_API_KEY") or parse_env_file(ENV_FILE).get("S2_API_KEY") or None
+
+
+def s2_client(api_key: str | None) -> httpx.AsyncClient:
+    headers = {"x-api-key": api_key} if api_key else {}
+    return httpx.AsyncClient(timeout=30.0, headers=headers)
+
+
+def _specter_vector(paper: Any) -> list[float] | None:
+    """`embedding.vector` from one Graph API paper object, if it has one."""
+    embedding = paper.get("embedding") if isinstance(paper, dict) else None
+    vector = embedding.get("vector") if isinstance(embedding, dict) else None
+    return list(vector) if vector else None
+
+
+async def fetch_specter_embeddings(
+    client: httpx.AsyncClient,
+    s2_paper_ids: list[str],
+) -> dict[str, list[float]]:
+    """SPECTER2 vectors for the given S2 ids, from the Graph API batch endpoint.
+
+    One request per 500 ids instead of one per paper. Ids S2 doesn't know, or
+    that have no embedding, are left out of the result, and so is every id in
+    a request that still fails after retries; callers warn about the gaps.
+    """
+    ids = list(dict.fromkeys(s2_paper_ids))  # dedupe, keep order
+    url = f"{S2_GRAPH_BASE}/paper/batch?fields=embedding.specter_v2"
+    out: dict[str, list[float]] = {}
+    for start in range(0, len(ids), S2_BATCH_MAX):
+        chunk = ids[start:start + S2_BATCH_MAX]
+        try:
+            resp = await _request_with_retry(client, "POST", url, json={"ids": chunk})
+        except httpx.HTTPError:
+            continue
+        papers: Any = resp.json() if resp.status_code == 200 else None
+        if not isinstance(papers, list):
+            continue
+        # The response lists papers in request order, with null for unknown ids.
+        for s2_id, paper in zip(chunk, papers, strict=False):
+            vector = _specter_vector(paper)
+            if vector:
+                out[s2_id] = vector
+    return out
 
 
 async def fetch_recommendations(
@@ -236,10 +241,9 @@ async def fetch_recommendations(
     positive_ids: list[str],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """POST to the S2 Recommendations API and return the recommendedPapers list.
+    """S2 recommendations seeded by `positive_ids`; [] with no HTTP call when empty.
 
-    Returns [] if positive_ids is empty (short-circuits, no HTTP call).
-    Raises httpx.HTTPStatusError if all retries exhaust on 5xx/429.
+    Raises httpx.HTTPStatusError once retries on 429/5xx are used up.
     """
     if not positive_ids:
         return []
@@ -251,49 +255,38 @@ async def fetch_recommendations(
     body = {"positivePaperIds": list(positive_ids), "negativePaperIds": []}
     resp = await _request_with_retry(client, "POST", url, json=body)
     resp.raise_for_status()
-    data = resp.json()
-    return list(data.get("recommendedPapers", []))
+    return list(resp.json().get("recommendedPapers", []))
 
 
 async def enrich_recommendations_with_embeddings(
     client: httpx.AsyncClient,
     recs: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """For each recommendation, fetch its SPECTER2 embedding via the Graph API
-    and inject it as `rec['embedding'] = {'model': 'specter_v2', 'vector': [...]}`.
+    """Attach `embedding: {model, vector}` to each rec S2 has a vector for.
 
-    The SS Recommendations API does not expose embeddings in its response, so we
-    must round-trip each recommendation's S2 paperId through the Graph API to get
-    its specter_v2 vector. Recommendations whose embedding fetch fails (paper not
-    in corpus, missing field, or transient 4xx) keep no embedding key — caller
-    filters them out.
-
-    Returns (recs_with_embeddings, warnings).
+    The Recommendations API doesn't return embeddings, so they come from one
+    batch Graph API call. Recs without one are returned unchanged; the caller
+    filters them out. Returns (recs, warnings).
     """
     warnings: list[str] = []
     if not recs:
-        return (list(recs), warnings)
+        return ([], warnings)
 
-    async def _enrich(rec: dict[str, Any]) -> dict[str, Any]:
-        paper_id = rec.get("paperId")
-        if not paper_id:
-            return rec
-        emb = await fetch_specter_embedding(client, paper_id)
-        if emb is None:
-            return rec
-        return {**rec, "embedding": {"model": "specter_v2", "vector": emb}}
-
-    enriched = await asyncio.gather(*(_enrich(r) for r in recs))
-    missing = sum(
-        1 for r in enriched
-        if not (r.get("embedding") or {}).get("vector")
+    vectors = await fetch_specter_embeddings(
+        client, [r["paperId"] for r in recs if r.get("paperId")],
     )
+    enriched = [
+        {**r, "embedding": {"model": "specter_v2", "vector": vectors[r["paperId"]]}}
+        if r.get("paperId") in vectors else r
+        for r in recs
+    ]
+    missing = sum(1 for r in enriched if "embedding" not in r)
     if missing > 0:
         warnings.append(
             f"{missing} of {len(recs)} recommendations had no SPECTER2 "
             f"embedding available via the Graph API."
         )
-    return (list(enriched), warnings)
+    return (enriched, warnings)
 
 
 async def backfill_missing_embeddings(
@@ -301,45 +294,33 @@ async def backfill_missing_embeddings(
     past_papers: list[PastPaper],
     cached: dict[int, list[float]],
 ) -> tuple[dict[int, list[float]], list[str]]:
-    """Fetch SPECTER2 embeddings for past papers not present in `cached`.
+    """`cached` plus S2 vectors for past papers missing from it, and warnings.
 
-    Returns (full_embeddings, warnings) where:
-      - full_embeddings is `cached` plus any newly-fetched embeddings,
-        keyed by paper_id.
-      - warnings is a list of human-readable strings describing past
-        papers that returned no embedding (excluded from full).
+    A past paper S2 has no vector for gets a warning and is left out.
     """
     missing = [p for p in past_papers if p.paper_id not in cached]
     warnings: list[str] = []
-    if not missing:
-        return (dict(cached), warnings)
-
-    async def _fetch(paper: PastPaper) -> tuple[PastPaper, list[float] | None]:
-        emb = await fetch_specter_embedding(client, paper.s2_paper_id)
-        return (paper, emb)
-
-    results = await asyncio.gather(*(_fetch(p) for p in missing))
     full = dict(cached)
-    for paper, emb in results:
-        if emb is None:
+    if not missing:
+        return (full, warnings)
+
+    vectors = await fetch_specter_embeddings(client, [p.s2_paper_id for p in missing])
+    for paper in missing:
+        vec = vectors.get(paper.s2_paper_id)
+        if vec is None:
             warnings.append(
                 f"Past paper id={paper.paper_id} ({paper.s2_paper_id}) "
                 f"returned no embedding; excluded from rationale."
             )
             continue
-        full[paper.paper_id] = emb
+        full[paper.paper_id] = vec
     return (full, warnings)
 
 
 def filter_recs_with_embeddings(
     recs: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Keep only recommendations that carry a usable SPECTER2 vector.
-
-    The Recommendations API doesn't return embeddings, so each rec is enriched
-    via a separate Graph-API round-trip first; ones whose fetch failed have no
-    `embedding.vector` and are dropped here before ranking.
-    """
+    """Recs that carry a SPECTER2 vector after enrichment."""
     return [r for r in recs if (r.get("embedding") or {}).get("vector")]
 
 
@@ -349,12 +330,10 @@ def build_candidates(
     past_papers: list[PastPaper],
     top: int,
 ) -> list[Candidate]:
-    """Rank embedded recs by MMR and resolve each to its closest past paper.
+    """Pick a diverse top-N by MMR and attach each pick's closest past paper.
 
-    Pure (no I/O): given recs that each carry `embedding.vector`, picks a
-    diverse top-N via MMR (trusting S2's order for relevance) and attaches the
-    best-matching past paper by cosine similarity. Caller must filter recs
-    through `filter_recs_with_embeddings` first.
+    No I/O. Relevance follows S2's order. Every rec must carry
+    `embedding.vector` (see `filter_recs_with_embeddings`).
     """
     past_vecs_np: dict[int, np.ndarray] = {
         pid: np.array(v, dtype=float) for pid, v in past_embeddings.items()
@@ -390,90 +369,61 @@ def build_candidates(
     return candidates
 
 
-async def main() -> int:
-    """Entry point. Reads Input JSON from stdin, emits Output JSON to stdout.
+def _emit(
+    candidates: list[Candidate],
+    embeddings_to_cache: list[EmbeddingToCache],
+    warnings: list[str],
+) -> int:
+    output = Output(
+        candidates=candidates, embeddings_to_cache=embeddings_to_cache, warnings=warnings,
+    )
+    print(output.model_dump_json())
+    return 0
 
-    Thin orchestration: read+validate stdin, then run the async stages
-    (backfill → fetch → enrich) and the pure ranking stage (build_candidates),
-    emitting Output JSON. Exit codes:
-        0 — success (may include warnings, may include zero candidates)
-        1 — hard failure (input validation, network unreachable after retries)
-    """
-    raw = sys.stdin.read()
+
+async def main() -> int:
+    """Exit 0 on success (possibly with warnings or no candidates); 1 on bad
+    input or when the Recommendations API fails after retries."""
     try:
-        inp = Input.model_validate_json(raw)
+        inp = Input.model_validate_json(sys.stdin.read())
     except Exception as exc:
         print(f"Input validation error: {exc}", file=sys.stderr)
         return 1
 
-    cached_int: dict[int, list[float]] = {
-        int(k): v for k, v in inp.cached_embeddings.items()
-    }
+    cached_int = {int(k): v for k, v in inp.cached_embeddings.items()}
+    positive_ids = [p.s2_paper_id for p in inp.past_papers]
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        # Backfill any missing past-paper embeddings.
-        full_past_embs, warnings = await backfill_missing_embeddings(
-            client, inp.past_papers, cached_int,
-        )
+    async with s2_client(s2_api_key()) as client:
+        # The backfill and the recommendations don't depend on each other, and
+        # the backfill never raises an HTTPStatusError (it warns instead).
+        try:
+            (full_past_embs, warnings), recs = await asyncio.gather(
+                backfill_missing_embeddings(client, inp.past_papers, cached_int),
+                fetch_recommendations(client, positive_ids, inp.limit),
+            )
+        except httpx.HTTPStatusError as exc:
+            print(f"Semantic Scholar Recommendations API failed: {exc}", file=sys.stderr)
+            return 1
 
-        embeddings_to_cache: list[EmbeddingToCache] = [
+        embeddings_to_cache = [
             EmbeddingToCache(paper_id=pid, model="specter_v2", vector=vec)
             for pid, vec in full_past_embs.items()
             if pid not in cached_int
         ]
 
-        positive_ids = [p.s2_paper_id for p in inp.past_papers]
-        try:
-            recs = await fetch_recommendations(client, positive_ids, inp.limit)
-        except httpx.HTTPStatusError as exc:
-            print(
-                f"Semantic Scholar Recommendations API failed: {exc}",
-                file=sys.stderr,
-            )
-            return 1
-
         if not recs:
-            warnings.append(
-                "Semantic Scholar Recommendations returned 0 papers."
-            )
-            output = Output(
-                candidates=[],
-                embeddings_to_cache=embeddings_to_cache,
-                warnings=warnings,
-            )
-            print(output.model_dump_json())
-            return 0
+            warnings.append("Semantic Scholar Recommendations returned 0 papers.")
+            return _emit([], embeddings_to_cache, warnings)
 
-        # Enrich each rec with its SPECTER2 embedding (separate Graph API calls).
-        recs, enrich_warnings = await enrich_recommendations_with_embeddings(
-            client, recs,
-        )
+        recs, enrich_warnings = await enrich_recommendations_with_embeddings(client, recs)
         warnings.extend(enrich_warnings)
-
-        # Filter to recs with usable SPECTER2 embeddings.
         recs_with_emb = filter_recs_with_embeddings(recs)
-
         if not recs_with_emb:
             warnings.append("No recommendations had usable embeddings.")
-            output = Output(
-                candidates=[],
-                embeddings_to_cache=embeddings_to_cache,
-                warnings=warnings,
-            )
-            print(output.model_dump_json())
-            return 0
+            return _emit([], embeddings_to_cache, warnings)
 
-        candidates = build_candidates(
-            recs_with_emb, full_past_embs, inp.past_papers, inp.top,
-        )
-
-        output = Output(
-            candidates=candidates,
-            embeddings_to_cache=embeddings_to_cache,
-            warnings=warnings,
-        )
-        print(output.model_dump_json())
-        return 0
+        candidates = build_candidates(recs_with_emb, full_past_embs, inp.past_papers, inp.top)
+        return _emit(candidates, embeddings_to_cache, warnings)
 
 
 if __name__ == "__main__":
