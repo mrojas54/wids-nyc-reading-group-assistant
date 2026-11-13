@@ -273,7 +273,12 @@ Browser
 
 The shared provider code lives under `web/lib/paperpal/providers/` and is
 imported by the Deno functions with the repository import map so Node tests
-and Edge Functions use the same schemas and provider logic.
+and Edge Functions use the same schemas and provider logic. `claude.ts` and
+`gemini.ts` hold only what differs between the two APIs (endpoint, headers,
+request body, model defaults); the key lookup, the request call with its error
+handling, and the result parsing live once in `shared.ts`, so a fix there
+reaches both. Edge Functions pick up a change here only when they are
+redeployed.
 
 ---
 
@@ -305,6 +310,7 @@ supabase/functions/
 web/
   app/papers/page.tsx
   app/papers/[id]/page.tsx
+  lib/paper-page.ts            <- picks the /papers/<id> view (loadPaperPage)
   app/papers/[id]/present/page.tsx
   app/new/page.tsx
   app/new/NewPaperForm.tsx

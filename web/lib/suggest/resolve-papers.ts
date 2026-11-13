@@ -20,7 +20,7 @@ export type ResolveResult =
 
 // Both selects below flow into toResolvedPaper, whose parameter is built from
 // the generated Row type, so a renamed column is a compile error instead of a
-// silent `undefined`. (Not `.returns<T>()` — see lib/queries.ts for why that
+// silent `undefined`. (Not `.returns<T>()` — see lib/queries/index.ts for why that
 // is a cast that would hide exactly this.)
 type PaperSelectRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
 

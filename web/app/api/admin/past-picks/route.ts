@@ -4,7 +4,7 @@ import { UnauthorizedError, ForbiddenError } from "@/lib/suggest/types";
 import type { Tables } from "@/lib/database.types";
 
 // The inferred select result is assigned to this Row-derived shape below, so a
-// renamed column is a compile error — see lib/queries.ts for why that, and
+// renamed column is a compile error — see lib/queries/index.ts for why that, and
 // not `.returns<T>()`, is the guard.
 type PastPickRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
 

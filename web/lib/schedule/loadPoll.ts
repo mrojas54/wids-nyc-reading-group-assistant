@@ -41,7 +41,7 @@ export type SchedulePageData = {
   pollClosesAt: string | null;
 };
 
-// Same row shape trick as lib/queries.ts: land the embedded select in a typed
+// Same row shape trick as lib/queries/: land the embedded select in a typed
 // alias so a renamed column in the select string is a compile error here.
 type PrepMeetingRow = Pick<Tables<"meetings">, "id" | "created_at" | "leader_id" | "paper_id"> & {
   members: Pick<Tables<"members">, "name"> | null;

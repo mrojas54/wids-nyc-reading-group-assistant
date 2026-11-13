@@ -23,7 +23,7 @@ const BodySchema = z.object({
 
 // The inferred select results are assigned to these Row-derived shapes so a
 // renamed column fails here at compile time rather than as `undefined` in the
-// embed input. (Not `.returns<T>()` — see lib/queries.ts for why that is a
+// embed input. (Not `.returns<T>()` — see lib/queries/index.ts for why that is a
 // cast that would hide exactly this.)
 type EligibleRow = Pick<Tables<"papers">, "id" | "s2_paper_id" | "title" | "abstract">;
 type CachedRow = Pick<Tables<"paper_embeddings">, "paper_id">;
