@@ -340,70 +340,126 @@ import respx
 import httpx
 
 
+BATCH_URL = (
+    "https://api.semanticscholar.org/graph/v1/paper/batch"
+    "?fields=embedding.specter_v2"
+)
+
+
+def _batch_body(route, call: int = 0) -> list[str]:
+    return json.loads(route.calls[call].request.content)["ids"]
+
+
+def _batch_reply(vectors: dict[str, list[float] | None]):
+    """A respx side effect answering the batch endpoint in request order."""
+    def reply(request: httpx.Request) -> httpx.Response:
+        ids = json.loads(request.content)["ids"]
+        return httpx.Response(200, json=[
+            None if vectors.get(i, "absent") == "absent"
+            else {"paperId": i, "embedding": None if vectors[i] is None else {"vector": vectors[i]}}
+            for i in ids
+        ])
+    return reply
+
+
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_specter_embedding_200():
-    from scripts.find_paper_suggest import fetch_specter_embedding
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200,
-        json={
-            "paperId": "abc123",
-            "embedding": {"model": "specter_v2", "vector": [0.1, 0.2, 0.3]},
-        },
-    ))
+async def test_fetch_specter_embeddings_one_batch_request():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
+    route = respx.post(BATCH_URL).mock(side_effect=_batch_reply({
+        "ARXIV:1706.03762": [0.1, 0.2],
+        "ARXIV:1234.56789": None,  # in the corpus, no embedding yet
+    }))
     async with httpx.AsyncClient() as client:
-        vec = await fetch_specter_embedding(client, "ARXIV:1706.03762")
-    assert vec == [0.1, 0.2, 0.3]
+        vecs = await fetch_specter_embeddings(
+            client, ["ARXIV:1706.03762", "ARXIV:1234.56789", "ARXIV:9999.99999", "ARXIV:1706.03762"],
+        )
+    assert vecs == {"ARXIV:1706.03762": [0.1, 0.2]}
+    assert route.call_count == 1
+    # Duplicates are sent once, in first-seen order.
+    assert _batch_body(route) == ["ARXIV:1706.03762", "ARXIV:1234.56789", "ARXIV:9999.99999"]
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_specter_embedding_404_returns_none():
-    """Paper not in S2 corpus — return None, do not retry."""
-    from scripts.find_paper_suggest import fetch_specter_embedding
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:9999.99999"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(404, json={"error": "Paper not found"}))
+async def test_fetch_specter_embeddings_splits_at_500_ids():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
+    ids = [f"P{i}" for i in range(501)]
+    route = respx.post(BATCH_URL).mock(side_effect=_batch_reply({i: [1.0] for i in ids}))
     async with httpx.AsyncClient() as client:
-        vec = await fetch_specter_embedding(client, "ARXIV:9999.99999")
-    assert vec is None
+        vecs = await fetch_specter_embeddings(client, ids)
+    assert len(vecs) == 501
+    assert [len(_batch_body(route, c)) for c in range(route.call_count)] == [500, 1]
 
 
 @pytest.mark.asyncio
-@respx.mock
-async def test_fetch_specter_embedding_no_embedding_field():
-    """200 OK but the paper has no embedding indexed yet — return None."""
-    from scripts.find_paper_suggest import fetch_specter_embedding
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1234.56789"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(200, json={"paperId": "xyz", "embedding": None}))
+async def test_fetch_specter_embeddings_no_ids_makes_no_request():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
     async with httpx.AsyncClient() as client:
-        vec = await fetch_specter_embedding(client, "ARXIV:1234.56789")
-    assert vec is None
+        assert await fetch_specter_embeddings(client, []) == {}
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_fetch_specter_embedding_429_retries_then_succeeds():
-    """One 429, then 200 — tenacity retry path exercises."""
-    from scripts.find_paper_suggest import fetch_specter_embedding
-    route = respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:1706.03762"
-        "?fields=embedding.specter_v2"
-    )
+async def test_fetch_specter_embeddings_429_retries_then_succeeds():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
+    route = respx.post(BATCH_URL)
     route.side_effect = [
         httpx.Response(429, json={"error": "rate limited"}),
-        httpx.Response(200, json={"embedding": {"vector": [0.5, 0.5]}}),
+        httpx.Response(200, json=[{"embedding": {"vector": [0.5, 0.5]}}]),
     ]
     async with httpx.AsyncClient() as client:
-        vec = await fetch_specter_embedding(client, "ARXIV:1706.03762")
-    assert vec == [0.5, 0.5]
+        vecs = await fetch_specter_embeddings(client, ["ARXIV:1706.03762"])
+    assert vecs == {"ARXIV:1706.03762": [0.5, 0.5]}
     assert route.call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embeddings_failed_batch_is_empty_not_fatal():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
+    respx.post(BATCH_URL).mock(return_value=httpx.Response(400, json={"error": "bad ids"}))
+    async with httpx.AsyncClient() as client:
+        assert await fetch_specter_embeddings(client, ["x"]) == {}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_fetch_specter_embeddings_raises_once_retries_exhaust():
+    from scripts.find_paper_suggest import fetch_specter_embeddings
+    route = respx.post(BATCH_URL).mock(return_value=httpx.Response(503))
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await fetch_specter_embeddings(client, ["x"])
+    assert route.call_count == 3
+
+
+# ---------------------- API key ----------------------
+
+def test_s2_api_key_prefers_the_environment(monkeypatch, tmp_path):
+    import scripts.find_paper_suggest as fps
+    env_file = tmp_path / ".env.local"
+    env_file.write_text("S2_API_KEY=from-file\n")
+    monkeypatch.setattr(fps, "ENV_FILE", env_file)
+    monkeypatch.setenv("S2_API_KEY", "from-env")
+    assert fps.s2_api_key() == "from-env"
+    monkeypatch.delenv("S2_API_KEY")
+    assert fps.s2_api_key() == "from-file"
+    monkeypatch.setattr(fps, "ENV_FILE", tmp_path / "missing")
+    assert fps.s2_api_key() is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_s2_client_sends_the_key_only_when_set():
+    from scripts.find_paper_suggest import s2_client
+    route = respx.get("https://api.semanticscholar.org/x").mock(return_value=httpx.Response(200))
+    async with s2_client("secret") as client:
+        await client.get("https://api.semanticscholar.org/x")
+    async with s2_client(None) as client:
+        await client.get("https://api.semanticscholar.org/x")
+    assert route.calls[0].request.headers.get("x-api-key") == "secret"
+    assert "x-api-key" not in route.calls[1].request.headers
 
 
 # ---------------------- SS recommendations ----------------------
@@ -508,12 +564,9 @@ async def test_backfill_fetches_only_missing():
     from scripts.find_paper_suggest import (
         PastPaper, backfill_missing_embeddings,
     )
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:2211.14730"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [0.7, 0.8]}}
-    ))
+    route = respx.post(BATCH_URL).mock(side_effect=_batch_reply({
+        "ARXIV:2211.14730": [0.7, 0.8],
+    }))
     past = [
         PastPaper(paper_id=1, s2_paper_id="ARXIV:1706.03762", title="t1"),
         PastPaper(paper_id=2, s2_paper_id="ARXIV:2211.14730", title="t2"),
@@ -524,6 +577,7 @@ async def test_backfill_fetches_only_missing():
     assert full[1] == [0.1, 0.2]
     assert full[2] == [0.7, 0.8]
     assert warnings == []
+    assert _batch_body(route) == ["ARXIV:2211.14730"]  # only the uncached one
 
 
 @pytest.mark.asyncio
@@ -533,10 +587,7 @@ async def test_backfill_warns_on_missing():
     from scripts.find_paper_suggest import (
         PastPaper, backfill_missing_embeddings,
     )
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1080/foo"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(404))
+    respx.post(BATCH_URL).mock(side_effect=_batch_reply({}))
     past = [PastPaper(paper_id=99, s2_paper_id="DOI:10.1080/foo", title="missing")]
     async with httpx.AsyncClient() as client:
         full, warnings = await backfill_missing_embeddings(client, past, {})
@@ -552,11 +603,7 @@ async def test_backfill_warns_on_missing():
 @respx.mock
 async def test_enrich_recommendations_happy_path():
     from scripts.find_paper_suggest import enrich_recommendations_with_embeddings
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/abc?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [0.1, 0.2]}}
-    ))
+    respx.post(BATCH_URL).mock(side_effect=_batch_reply({"abc": [0.1, 0.2]}))
     recs = [{"paperId": "abc", "title": "Rec A"}]
     async with httpx.AsyncClient() as client:
         enriched, warnings = await enrich_recommendations_with_embeddings(client, recs)
@@ -569,14 +616,7 @@ async def test_enrich_recommendations_happy_path():
 @respx.mock
 async def test_enrich_recommendations_some_missing():
     from scripts.find_paper_suggest import enrich_recommendations_with_embeddings
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/found?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [0.5]}}
-    ))
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/missing?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(404))
+    route = respx.post(BATCH_URL).mock(side_effect=_batch_reply({"found": [0.5]}))
     recs = [
         {"paperId": "found", "title": "Found"},
         {"paperId": "missing", "title": "Missing"},
@@ -587,6 +627,7 @@ async def test_enrich_recommendations_some_missing():
     assert "embedding" not in enriched[1]
     assert len(warnings) == 1
     assert "1 of 2" in warnings[0]
+    assert route.call_count == 1  # both recs in one request
 
 
 @pytest.mark.asyncio
@@ -607,12 +648,12 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
     from scripts.find_paper_suggest import main
 
     # Past paper 12 already cached; past paper 17 needs backfill.
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/ARXIV:2211.14730"
-        "?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [1.0, 0.0]}}
-    ))
+    # One batch endpoint serves both the past-paper backfill and the recs.
+    batch = respx.post(BATCH_URL).mock(side_effect=_batch_reply({
+        "ARXIV:2211.14730": [1.0, 0.0],
+        "rec-a": [0.99, 0.01],
+        "rec-b": [0.0, 1.0],
+    }))
 
     # Recommendations: two candidates without embeddings (recs API doesn't return them).
     respx.post(
@@ -639,18 +680,6 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
             },
         ],
     }))
-    # Per-rec embedding fetches via Graph API
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/rec-a?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [0.99, 0.01]}}
-    ))
-    respx.get(
-        "https://api.semanticscholar.org/graph/v1/paper/rec-b?fields=embedding.specter_v2"
-    ).mock(return_value=httpx.Response(
-        200, json={"embedding": {"vector": [0.0, 1.0]}}
-    ))
-
     input_payload = {
         "past_papers": [
             {"paper_id": 12, "s2_paper_id": "ARXIV:1706.03762", "title": "Attention"},
@@ -688,6 +717,9 @@ async def test_main_e2e_happy_path(monkeypatch, capsys):
     # No warnings on the happy path
     assert output["warnings"] == []
 
+    # Two batch calls in all (past-paper backfill, then the recs), not one per paper.
+    assert batch.call_count == 2
+
 
 class _StdinStub:
     """Minimal stdin replacement for monkeypatching."""
@@ -707,3 +739,50 @@ async def test_main_invalid_input_returns_1(monkeypatch, capsys):
     assert rc == 1
     captured = capsys.readouterr()
     assert "Input validation error" in captured.err
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_main_recommendations_failure_returns_1(monkeypatch, capsys):
+    from scripts.find_paper_suggest import main
+    respx.post(BATCH_URL).mock(side_effect=_batch_reply({}))
+    respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(503))
+    payload = {
+        "past_papers": [{"paper_id": 1, "s2_paper_id": "ARXIV:1706.03762", "title": "t"}],
+        "cached_embeddings": {},
+    }
+    monkeypatch.setattr("sys.stdin", _StdinStub(json.dumps(payload)))
+    assert await main() == 1
+    assert "Semantic Scholar request failed" in capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_main_embedding_transport_failure_returns_1_not_empty_success(monkeypatch, capsys):
+    """Recs succeed but the candidate batch can't connect: exit 1, no output.
+
+    An exit-0 run with no candidates would replace the stored suggestions.
+    """
+    from scripts.find_paper_suggest import main
+    batch = respx.post(BATCH_URL).mock(side_effect=httpx.ConnectError("unreachable"))
+    respx.post(
+        "https://api.semanticscholar.org/recommendations/v1/papers"
+        "?fields=title,abstract,authors,year,externalIds"
+        "&limit=50"
+    ).mock(return_value=httpx.Response(200, json={
+        "recommendedPapers": [{"paperId": "rec-a", "title": "A"}],
+    }))
+    payload = {
+        "past_papers": [{"paper_id": 1, "s2_paper_id": "ARXIV:1706.03762", "title": "t"}],
+        "cached_embeddings": {"1": [1.0, 0.0]},
+    }
+    monkeypatch.setattr("sys.stdin", _StdinStub(json.dumps(payload)))
+    assert await main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Semantic Scholar request failed" in captured.err
+    assert batch.call_count == 3
