@@ -5,19 +5,30 @@
 // Q&A per discussion slide is persisted via usePaperLocalState.
 // Ported from design_handoff/design/ideas-screens.jsx · PresenterScreen.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { usePaperLocalState } from "@/lib/paperpal/hooks";
-import type { Slide } from "@/lib/paperpal/presenter";
+import {
+  clampSlideIndex,
+  DEFAULT_SLIDE_SECONDS,
+  formatClock,
+  presenterKeyAction,
+  qaNoteKey,
+  slideHeadline,
+  slidePace,
+  type Slide,
+} from "@/lib/paperpal/presenter";
+import { SlideBody, type QaMap } from "./SlideBody";
 import "./presenter.css";
 
-type QaMap = Record<string, string>;
-
-function fmt(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const r = sec % 60;
-  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
-}
+const timerButtonStyle: CSSProperties = {
+  background: "transparent",
+  border: 0,
+  color: "inherit",
+  cursor: "pointer",
+  fontFamily: "var(--font-mono)",
+  fontSize: 11,
+};
 
 export type PresenterScreenProps = {
   paperId: string;
@@ -34,7 +45,8 @@ export default function PresenterScreen({
 }: PresenterScreenProps) {
   const router = useRouter();
 
-  const [i, setI] = usePaperLocalState<number>(paperId, "presenter:idx", 0);
+  const [storedIdx, setI] = usePaperLocalState<number>(paperId, "presenter:idx", 0);
+  const i = clampSlideIndex(storedIdx, slides.length);
   const [qaNotes, setQaNotes] = usePaperLocalState<QaMap>(
     paperId,
     "presenter:qa",
@@ -71,16 +83,11 @@ export default function PresenterScreen({
   }, []);
 
   const goTo = useCallback(
-    (n: number) => {
-      setI(Math.max(0, Math.min(slides.length - 1, n)));
-    },
+    (n: number) => setI(clampSlideIndex(n, slides.length)),
     [slides.length, setI],
   );
-  const next = useCallback(
-    () => setI((cur) => Math.min(slides.length - 1, cur + 1)),
-    [slides.length, setI],
-  );
-  const prev = useCallback(() => setI((cur) => Math.max(0, cur - 1)), [setI]);
+  const next = useCallback(() => goTo(i + 1), [goTo, i]);
+  const prev = useCallback(() => goTo(i - 1), [goTo, i]);
 
   const exit = useCallback(() => {
     if (onExit) onExit();
@@ -114,21 +121,27 @@ export default function PresenterScreen({
       ) {
         return;
       }
-      const k = e.key.toLowerCase();
-      if (e.key === "ArrowRight" || e.key === " ") {
-        e.preventDefault();
-        next();
-      } else if (e.key === "ArrowLeft") {
-        prev();
-      } else if (k === "f") {
-        toggleFullscreen();
-      } else if (k === "t") {
-        resetTimers();
-      } else if (k === "o" || k === "g") {
-        setOverviewOpen((v) => !v);
-      } else if (e.key === "Escape") {
-        if (overviewOpen) setOverviewOpen(false);
-        else exit();
+      switch (presenterKeyAction(e.key)) {
+        case "next":
+          e.preventDefault();
+          next();
+          break;
+        case "prev":
+          prev();
+          break;
+        case "fullscreen":
+          toggleFullscreen();
+          break;
+        case "reset":
+          resetTimers();
+          break;
+        case "overview":
+          setOverviewOpen((v) => !v);
+          break;
+        case "escape":
+          if (overviewOpen) setOverviewOpen(false);
+          else exit();
+          break;
       }
     };
     document.addEventListener("keydown", onKey);
@@ -143,14 +156,14 @@ export default function PresenterScreen({
     );
   }
 
-  const s = slides[Math.max(0, Math.min(i, slides.length - 1))];
+  const s = slides[i];
   const totalElapsed = Math.floor((now - totalStart) / 1000);
   const slideElapsed = Math.floor((now - slideStart) / 1000);
-  const targetSec = s.targetSeconds || 90;
-  const pacePct = Math.min(1.2, slideElapsed / targetSec);
+  const targetSec = s.targetSeconds || DEFAULT_SLIDE_SECONDS;
+  const pace = slidePace(slideElapsed, targetSec);
 
   const setQa = (qIdx: number, text: string) => {
-    setQaNotes((prev) => ({ ...prev, [`${i}:${qIdx}`]: text }));
+    setQaNotes((prev) => ({ ...prev, [qaNoteKey(i, qIdx)]: text }));
   };
 
   return (
@@ -164,26 +177,17 @@ export default function PresenterScreen({
         </div>
         <div className="center">
           <div className="presenter-timers">
-            <span className="timer total">{fmt(totalElapsed)}</span>
+            <span className="timer total">{formatClock(totalElapsed)}</span>
             <span
-              className={`timer slide${
-                pacePct >= 1 ? " is-over" : pacePct >= 0.85 ? " is-near" : ""
-              }`}
+              className={`timer slide${pace === "ok" ? "" : ` is-${pace}`}`}
             >
-              <span className="dot" /> {fmt(slideElapsed)}{" "}
-              <span className="muted">/ {fmt(targetSec)}</span>
+              <span className="dot" /> {formatClock(slideElapsed)}{" "}
+              <span className="muted">/ {formatClock(targetSec)}</span>
             </span>
             <button
               type="button"
               onClick={() => setPaused((p) => !p)}
-              style={{
-                background: "transparent",
-                border: 0,
-                color: "inherit",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-              }}
+              style={timerButtonStyle}
             >
               {paused ? "play" : "pause"}
             </button>
@@ -191,14 +195,7 @@ export default function PresenterScreen({
               type="button"
               onClick={resetTimers}
               title="Reset timers (T)"
-              style={{
-                background: "transparent",
-                border: 0,
-                color: "inherit",
-                cursor: "pointer",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-              }}
+              style={timerButtonStyle}
             >
               reset
             </button>
@@ -268,7 +265,7 @@ export default function PresenterScreen({
                 <div className="po-meta">
                   <span>{String(idx + 1).padStart(2, "0")}</span>
                   <span>{sl.kind}</span>
-                  {sl.targetSeconds ? <span>{fmt(sl.targetSeconds)}</span> : null}
+                  {sl.targetSeconds ? <span>{formatClock(sl.targetSeconds)}</span> : null}
                 </div>
               </button>
             ))}
@@ -279,134 +276,3 @@ export default function PresenterScreen({
   );
 }
 
-function slideHeadline(s: Slide): string {
-  switch (s.kind) {
-    case "title":
-    case "claim":
-    case "diagram":
-    case "end":
-      return s.title;
-    case "math":
-      return s.formula;
-    case "callout":
-      return s.title;
-    case "stats":
-      return s.rows.map((r) => `${r.v} ${r.l}`).join(" · ");
-    case "discussion":
-      return s.items[0] ?? "Discussion";
-  }
-}
-
-function SlideBody({
-  slide: s,
-  idx,
-  qaNotes,
-  setQa,
-}: {
-  slide: Slide;
-  idx: number;
-  qaNotes: QaMap;
-  setQa: (qIdx: number, text: string) => void;
-}) {
-  if (s.kind === "title") {
-    return (
-      <div
-        className="presenter-slide indigo"
-        data-screen-label={`P${String(idx + 1).padStart(2, "0")} Title`}
-      >
-        <div className="eyebrow-slide">Paper companion</div>
-        <h1>{s.title}</h1>
-        <p>{s.sub}</p>
-        <div className="lead-line">{s.lead}</div>
-      </div>
-    );
-  }
-  if (s.kind === "claim") {
-    return (
-      <div className="presenter-slide">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <h1>{s.title}</h1>
-        <p>{s.body}</p>
-      </div>
-    );
-  }
-  if (s.kind === "math") {
-    return (
-      <div className="presenter-slide">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <div className="big-formula">{s.formula}</div>
-        {s.cap && <div className="cap">{s.cap}</div>}
-      </div>
-    );
-  }
-  if (s.kind === "diagram") {
-    return (
-      <div className="presenter-slide">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <h2>{s.title}</h2>
-        <p>{s.body}</p>
-      </div>
-    );
-  }
-  if (s.kind === "callout") {
-    return (
-      <div className="presenter-slide dark">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <h1>{s.title}</h1>
-        <p>{s.body}</p>
-      </div>
-    );
-  }
-  if (s.kind === "stats") {
-    return (
-      <div className="presenter-slide dark">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <div className="stats-grid">
-          {s.rows.map((r, j) => (
-            <div key={j}>
-              <div className="v">{r.v}</div>
-              <div className="l">{r.l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  if (s.kind === "discussion") {
-    return (
-      <div className="presenter-slide">
-        <div className="eyebrow-slide">{s.eyebrow}</div>
-        <h2>Open the floor.</h2>
-        <ol className="discussion">
-          {s.items.map((q, j) => {
-            const noteVal = qaNotes[`${idx}:${j}`] ?? "";
-            return (
-              <li key={j}>
-                <div>
-                  <div className="q-text">{q}</div>
-                  <div className="q-capture">
-                    <textarea
-                      placeholder="Capture what came up…"
-                      value={noteVal}
-                      onChange={(e) => setQa(j, e.target.value)}
-                      rows={2}
-                    />
-                    {noteVal && <span className="q-capture-tag">Saved</span>}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-    );
-  }
-  // end
-  return (
-    <div className="presenter-slide indigo">
-      <div className="eyebrow-slide">Fin</div>
-      <h1>{s.title}</h1>
-      <p>{s.body}</p>
-    </div>
-  );
-}

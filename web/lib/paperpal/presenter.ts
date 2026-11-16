@@ -1,5 +1,5 @@
-// Pure function: derive an 8-12 slide deck from a ResearchPaperAnalysis payload.
-// Used by PresenterScreen. No side effects, no React imports.
+// Pure function: derive a 4 to 9 slide deck from a ResearchPaperAnalysis payload.
+// Also the presenter screen's pure helpers. No side effects, no React imports.
 
 import type { ResearchPaperAnalysis } from "./types";
 
@@ -86,7 +86,7 @@ function trimToSentences(text: string | undefined, max = 2, fallback = ""): stri
   if (!text) return fallback;
   const sentences = text.match(/[^.!?]+[.!?]+/g);
   if (!sentences) return text;
-  return sentences.slice(0, max).join(" ").trim();
+  return sentences.slice(0, max).map((x) => x.trim()).join(" ");
 }
 
 export function derivSlides(payload: ResearchPaperAnalysis): Slide[] {
@@ -205,4 +205,75 @@ export function derivSlides(payload: ResearchPaperAnalysis): Slide[] {
   });
 
   return slides.slice(0, 12);
+}
+
+// ---------- Presenter screen helpers ----------
+
+/** Seconds as MM:SS. */
+export function formatClock(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const r = sec % 60;
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+}
+
+/**
+ * A saved slide index brought inside the deck. The index is kept in local
+ * storage, so it can point past the end after the companion is regenerated
+ * with fewer slides.
+ */
+export function clampSlideIndex(i: number, count: number): number {
+  return Math.max(0, Math.min(count - 1, i));
+}
+
+export const DEFAULT_SLIDE_SECONDS = 90;
+
+/** "near" from 85% of the slide's target time, "over" from 100%. */
+export function slidePace(elapsedSec: number, targetSec: number): "ok" | "near" | "over" {
+  const pct = elapsedSec / targetSec;
+  if (pct >= 1) return "over";
+  if (pct >= 0.85) return "near";
+  return "ok";
+}
+
+/** The one line that stands for a slide in the overview grid. */
+export function slideHeadline(s: Slide): string {
+  switch (s.kind) {
+    case "title":
+    case "claim":
+    case "diagram":
+    case "callout":
+    case "end":
+      return s.title;
+    case "math":
+      return s.formula;
+    case "stats":
+      return s.rows.map((r) => `${r.v} ${r.l}`).join(" · ");
+    case "discussion":
+      return s.items[0] ?? "Discussion";
+  }
+}
+
+export type PresenterKeyAction = "next" | "prev" | "fullscreen" | "reset" | "overview" | "escape";
+
+/** The presenter's keyboard shortcuts; null for any other key. */
+export function presenterKeyAction(key: string): PresenterKeyAction | null {
+  if (key === "ArrowRight" || key === " ") return "next";
+  if (key === "ArrowLeft") return "prev";
+  if (key === "Escape") return "escape";
+  switch (key.toLowerCase()) {
+    case "f":
+      return "fullscreen";
+    case "t":
+      return "reset";
+    case "o":
+    case "g":
+      return "overview";
+    default:
+      return null;
+  }
+}
+
+/** Storage key of one Q&A note: the slide's position and the question's. */
+export function qaNoteKey(slideIdx: number, questionIdx: number): string {
+  return `${slideIdx}:${questionIdx}`;
 }
