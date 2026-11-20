@@ -21,12 +21,10 @@ export function SocraticMode({
   paperId,
   prompt,
   lens,
-  requestTutor = requestAssessmentTutor,
 }: {
   paperId: string;
   prompt: SocraticPrompt;
   lens: Lens;
-  requestTutor?: typeof requestAssessmentTutor;
 }) {
   const ns = `paperpal:v1:${paperId}:socratic:`;
   const threadKey = `${ns}thread:${prompt.id}`;
@@ -89,7 +87,7 @@ export function SocraticMode({
       .map(m => ({ role: m.role === "tutor" ? "ai" : "user", text: m.body }));
     const turnNumber = current.thread.filter(m => hasTutorReply(current.thread, m)).length + 1;
     try {
-      const result = await requestTutor({
+      const result = await requestAssessmentTutor({
         paperId: Number.parseInt(paperId, 10), promptId: prompt.id,
         promptTopic: prompt.topic, openingQuestion: prompt.openingQuestion,
         scriptedProbes: prompt.scriptedProbes, history, userResponse: text, turnNumber,
