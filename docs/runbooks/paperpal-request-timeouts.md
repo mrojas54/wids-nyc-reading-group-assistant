@@ -35,5 +35,6 @@ combined timeout and storage changes, not this branch alone.
 Merging deploys the web app, not the Supabase edge functions. Deploying
 `analyze-hint` and `analyze-socratic` requires separate production authorization.
 The old functions can ignore the new budget header until then. Production
-latency, billing after cancellation, and the preview two-tab check remain open.
+latency and billing after cancellation remain open. The `/preview/paperpal`
+two-tab harness has been retired; see PR #230 for its browser results.
 No live AI requests or production writes were used for validation.

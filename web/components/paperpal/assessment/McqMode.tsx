@@ -30,12 +30,10 @@ export function McqMode({
   paperId,
   quiz,
   lens,
-  requestHint = requestAssessmentHint,
 }: {
   paperId: string;
   quiz: AssessmentQuiz;
   lens: Lens;
-  requestHint?: typeof requestAssessmentHint;
 }) {
   const questions = quiz.questions;
   const storageKey = `paperpal:v1:${paperId}:assessment:mcq`;
@@ -77,7 +75,7 @@ export function McqMode({
     const controller = new AbortController();
     controllers.current.add(controller);
     try {
-      const result: AnalyzeHintResponse = await requestHint(
+      const result: AnalyzeHintResponse = await requestAssessmentHint(
         {
           paperId: Number.parseInt(paperId, 10),
           questionText: current.question,
