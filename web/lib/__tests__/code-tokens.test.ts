@@ -67,3 +67,34 @@ describe("tokenizePython", () => {
     expect(line('elif x: buf = "a"')).toEqual(["kw:elif", "var:x", "pun::", "var:buf", "op:=", 'str:"a"']);
   });
 });
+
+describe("review fixes", () => {
+  const kinds = (row: Token[]) => row.filter((t) => t.text.trim()).map((t) => `${t.kind}:${t.text}`);
+
+  it("keeps .5 one number right after an operator", () => {
+    expect(line("scale(x, alpha=.5)")).toEqual([
+      "fn:scale", "pun:(", "var:x", "pun:,", "var:alpha", "op:=", "num:.5", "pun:)",
+    ]);
+    expect(line("y = x*.25")).toEqual(["var:y", "op:=", "var:x", "op:*", "num:.25"]);
+  });
+
+  it("reads @ on a continuation line as matrix multiply", () => {
+    const rows = tokenizePython("scores = (\n    q\n    @ k.transpose(-2, -1)\n)\n@cache\ndef f(): pass");
+    expect(kinds(rows[2])[0]).toBe("op:@");
+    expect(kinds(rows[4])).toEqual(["deco:@cache"]);
+  });
+
+  it("reads @ after a backslash continuation as matrix multiply", () => {
+    const rows = tokenizePython("y = a \\\n    @ b");
+    expect(kinds(rows[1])[0]).toBe("op:@");
+  });
+
+  it("keeps quotes inside f-string replacement fields from ending or opening strings", () => {
+    const rows = tokenizePython('message = f"{"""label"""}"\nprint(message)');
+    expect(kinds(rows[0])).toEqual(["var:message", "op:=", 'str:f"{"""label"""}"']);
+    expect(kinds(rows[1])).toEqual(["fn:print", "pun:(", "var:message", "pun:)"]);
+    expect(line(`f"{d['k']}" + f"{{literal}}" + x`)).toEqual([
+      `str:f"{d['k']}"`, "op:+", 'str:f"{{literal}}"', "op:+", "var:x",
+    ]);
+  });
+});
